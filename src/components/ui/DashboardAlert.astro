@@ -1,0 +1,8 @@
+---
+const params = Astro.url.searchParams;
+const error = params.get('error');
+const success = params.get('success');
+---
+
+{error && <div class="alert-error mb-6" role="alert">{error}</div>}
+{success && <div class="alert-success mb-6" role="status">{success === '1' ? 'تم تنفيذ العملية بنجاح.' : success}</div>}

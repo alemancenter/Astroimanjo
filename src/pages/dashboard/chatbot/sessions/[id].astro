@@ -1,0 +1,37 @@
+---
+import DashboardLayout from '../../../../layouts/DashboardLayout.astro';
+import { requireDashboard } from '../../../../lib/auth';
+import { apiFetch } from '../../../../lib/api';
+
+const guard = await requireDashboard(Astro, 'manage settings');
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+
+const { id } = Astro.params;
+const result = await apiFetch<any>(`/dashboard/chatbot/sessions/${id}`, {
+	countryId: Astro.locals.countryId,
+	cookieHeader: `token=${Astro.cookies.get('token')?.value}`,
+});
+const session = result.data;
+const messages: any[] = session?.messages ?? [];
+---
+
+<DashboardLayout title="محادثة الشاتبوت" user={user}>
+	{
+		!result.ok || !session ? (
+			<p class="text-red-600 dark:text-red-400">{result.ok ? 'المحادثة غير موجودة.' : result.message}</p>
+		) : (
+			<div class="mx-auto max-w-2xl space-y-4">
+				{messages.map((m: any) => (
+					<div class={`flex ${m.role === 'user' ? 'justify-start' : 'justify-end'}`}>
+						<div class={`max-w-[80%] rounded-2xl p-4 text-sm leading-6 ${m.role === 'user' ? 'surface-card' : 'bg-royal-600 text-white'}`}>
+							<p>{m.message}</p>
+							<p class={`mt-2 text-xs ${m.role === 'user' ? 'text-graphite-400' : 'text-royal-100'}`}>{new Date(m.created_at).toLocaleString('ar-EG')}</p>
+						</div>
+					</div>
+				))}
+				{messages.length === 0 && <p class="text-center text-graphite-400">لا توجد رسائل في هذه المحادثة.</p>}
+			</div>
+		)
+	}
+</DashboardLayout>

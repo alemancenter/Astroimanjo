@@ -1,0 +1,12 @@
+---
+import Layout from '../../../../layouts/Layout.astro';
+import '../../../../styles/content-pages.css';
+import KeywordResults from '../../../../components/KeywordResults.astro';
+
+const { keyword } = Astro.params;
+const countryCode = Astro.locals.countryCode!;
+---
+
+<Layout title={`نتائج الوسم: ${keyword}`} description={`مقالات ومنشورات مرتبطة بوسم ${keyword}.`} noindex>
+	<KeywordResults keyword={keyword ?? ''} countryCode={countryCode} />
+</Layout>

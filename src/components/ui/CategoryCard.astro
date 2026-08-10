@@ -1,0 +1,16 @@
+---
+import { assetUrl } from '../../lib/assets';
+import type { Category } from '../../types/api';
+interface Props { category: Category; href: string; index?: number; }
+const { category, href } = Astro.props;
+const iconSrc = assetUrl(category.icon_image || category.image, 56);
+---
+
+<a href={href} class="interactive-card group flex min-h-28 items-center gap-4 p-5 text-right">
+	<div class="relative flex size-12 flex-none items-center justify-center rounded-2xl bg-royal-50 text-royal-600 ring-1 ring-royal-100 transition group-hover:bg-royal-600 group-hover:text-white dark:bg-royal-950 dark:text-royal-300 dark:ring-royal-900">
+		<svg class="size-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.8 5.48 9.25 5 7.5 5S4.17 5.48 3 6.253v13C4.17 18.48 5.75 18 7.5 18s3.33.48 4.5 1.253m0-13C13.17 5.48 14.75 5 16.5 5s3.33.48 4.5 1.253v13C19.83 18.48 18.25 18 16.5 18s-3.33.48-4.5 1.253" /></svg>
+		{iconSrc && <img src={iconSrc} alt="" width="56" height="56" class="absolute inset-0 m-auto size-7 object-contain" loading="lazy" onerror="this.style.display='none'" />}
+	</div>
+	<h3 class="min-w-0 flex-1 text-sm font-bold leading-6 text-graphite-900 transition group-hover:text-royal-700 sm:text-[15px] dark:text-white dark:group-hover:text-royal-300">{category.name}</h3>
+	<svg class="size-5 flex-none text-graphite-300 transition group-hover:-translate-x-1 group-hover:text-royal-600 dark:text-graphite-600 dark:group-hover:text-royal-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m15 19-7-7 7-7" /></svg>
+</a>

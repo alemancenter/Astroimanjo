@@ -1,0 +1,47 @@
+---
+import Layout from '../layouts/Layout.astro';
+import '../styles/misc-pages.css';
+import Breadcrumbs from '../components/ui/Breadcrumbs.astro';
+import { apiFetch } from '../lib/api';
+const params = Astro.url.searchParams;
+const error = params.get('error');
+const sent = params.get('sent') === '1';
+const settings = await apiFetch<Record<string, string>>('/front/settings', { countryId: Astro.locals.countryId });
+const recaptchaSiteKey = settings.data?.recaptcha_site_key || '';
+const contactEmail = settings.data?.contact_email || `info@${Astro.site?.hostname ?? 'alemancenter.com'}`;
+const contactPhone = settings.data?.contact_phone || '';
+const contactAddress = settings.data?.contact_address || 'إربد، الأردن';
+---
+<Layout title="اتصل بنا" description="نحن هنا للإجابة على استفساراتك واقتراحاتك. أرسل لنا رسالة وسنرد عليك في أقرب وقت ممكن.">
+	<Breadcrumbs items={[{ label: 'اتصل بنا' }]} />
+	<div class="container-shell py-12 sm:py-16">
+		<div class="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[.75fr_1.25fr]">
+			<aside class="relative overflow-hidden rounded-[2rem] bg-graphite-950 p-7 text-white sm:p-10">
+				<div class="absolute -left-24 -top-24 size-64 rounded-full bg-royal-600/40 blur-3xl" aria-hidden="true"></div>
+				<div class="relative"><span class="page-eyebrow">نحن هنا للمساعدة</span><h1 class="text-3xl font-black sm:text-4xl">اتصل بنا</h1><p class="mt-4 leading-8 text-graphite-300">نحن هنا للإجابة على استفساراتك واقتراحاتك. أرسل لنا رسالة وسنرد عليك في أقرب وقت ممكن.</p></div>
+				<div class="relative mt-9 space-y-4 text-sm">
+					<h2 class="text-lg font-extrabold">معلومات التواصل</h2>
+					<div class="rounded-2xl border border-white/10 bg-white/[.06] p-4"><p class="text-xs font-bold text-sunset-300">البريد الإلكتروني</p><a class="mt-1 block break-all font-extrabold hover:text-sunset-200" href={`mailto:${contactEmail}`}>{contactEmail}</a></div>
+					{contactPhone && <div class="rounded-2xl border border-white/10 bg-white/[.06] p-4"><p class="text-xs font-bold text-sunset-300">رقم الهاتف</p><a class="mt-1 block font-extrabold hover:text-sunset-200" dir="ltr" href={`tel:${contactPhone}`}>{contactPhone}</a></div>}
+					<div class="rounded-2xl border border-white/10 bg-white/[.06] p-4"><p class="text-xs font-bold text-sunset-300">العنوان</p><p class="mt-1 font-extrabold">{contactAddress}</p></div>
+					<div class="rounded-2xl border border-white/10 bg-white/[.06] p-4"><p class="font-extrabold">استفسارات المحتوى والدعم</p><p class="mt-1 text-graphite-300">أرفق رابط الصفحة أو الملف واشرح الملاحظة بوضوح لنتمكن من مساعدتك.</p></div>
+				</div>
+			</aside>
+			<section class="surface-card p-6 sm:p-9">
+				<h2 class="mb-2 text-2xl font-extrabold text-graphite-950 dark:text-white">أرسل رسالة</h2><p class="mb-7 text-sm leading-6 text-graphite-500 dark:text-graphite-400">الحقول المعلّمة مطلوبة لإرسال النموذج.</p>
+				{sent && <div class="alert-success mb-6" role="status">تم إرسال رسالتك بنجاح، سنتواصل معك قريبًا.</div>}
+				{error && <div class="alert-error mb-6" role="alert">{error}</div>}
+				<form method="post" action="/api/contact" class="space-y-5">
+					<input type="hidden" name="page_url" value="/contact" />
+					<div class="grid gap-5 sm:grid-cols-2"><div><label for="name" class="form-label">الاسم</label><input id="name" type="text" name="name" required class="form-control" /></div><div><label for="email" class="form-label">البريد الإلكتروني</label><input id="email" type="email" name="email" required class="form-control" /></div></div>
+					<div><label for="phone" class="form-label">رقم الهاتف <span class="font-normal text-graphite-400">(اختياري)</span></label><input id="phone" type="tel" name="phone" class="form-control" /></div>
+					<div><label for="subject" class="form-label">الموضوع</label><input id="subject" type="text" name="subject" required class="form-control" /></div>
+					<div><label for="message" class="form-label">الرسالة</label><textarea id="message" name="message" rows="6" required class="form-control"></textarea></div>
+					{recaptchaSiteKey && <div class="g-recaptcha" data-sitekey={recaptchaSiteKey}></div>}
+					<button type="submit" class="btn-primary w-full py-3.5">إرسال الرسالة</button>
+				</form>
+			</section>
+		</div>
+	</div>
+	{recaptchaSiteKey && <script src="https://www.google.com/recaptcha/api.js" async defer></script>}
+</Layout>

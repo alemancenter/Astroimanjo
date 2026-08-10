@@ -1,0 +1,157 @@
+@import "tailwindcss/utilities" source(none);
+
+@reference "./global.css";
+
+@source "../pages/[countryCode]/articles";
+@source "../pages/[countryCode]/categories";
+@source "../pages/[countryCode]/posts";
+@source "../pages/[countryCode]/lesson/articles";
+@source "../pages/keywords";
+@source "../components/ArticleAttachments.astro";
+@source "../components/ArticleComments.astro";
+@source "../components/AdSensePlacement.astro";
+@source "../components/KeywordResults.astro";
+@source "../components/ui/ArticleCard.astro";
+@source "../components/ui/Breadcrumbs.astro";
+@source "../components/ui/CategoryCard.astro";
+@source "../components/ui/EmptyState.astro";
+@source "../components/ui/ErrorState.astro";
+@source "../components/ui/Pagination.astro";
+@source "../components/ui/PostCard.astro";
+
+@layer components {
+	.prose-edu {
+		@apply text-[1.05rem] leading-9 text-graphite-700 dark:text-graphite-200;
+	}
+
+	.prose-edu h2 {
+		@apply mt-10 mb-4 border-r-4 border-royal-600 pr-4 text-xl font-extrabold leading-9 text-graphite-950 sm:text-2xl dark:border-royal-400 dark:text-white;
+	}
+
+	.prose-edu h3 {
+		@apply mt-8 mb-3 text-xl font-bold text-graphite-900 dark:text-graphite-50;
+	}
+
+	.prose-edu p {
+		@apply mb-5;
+	}
+
+	.prose-edu strong {
+		@apply font-extrabold text-graphite-950 dark:text-white;
+	}
+
+	.prose-edu ul,
+	.prose-edu ol {
+		@apply mb-5 space-y-2 pr-6;
+	}
+
+	.prose-edu ul {
+		@apply list-disc;
+	}
+
+	.prose-edu ol {
+		@apply list-decimal;
+	}
+
+	.prose-edu a {
+		@apply font-semibold text-royal-600 underline decoration-royal-200 underline-offset-4 hover:text-royal-800 dark:text-royal-300;
+	}
+
+	.prose-edu img {
+		@apply my-8 rounded-2xl;
+	}
+
+	.prose-edu blockquote {
+		@apply my-6 rounded-xl border-r-4 border-emerald-brand-600 bg-emerald-brand-50 px-5 py-4 text-emerald-brand-900 dark:bg-emerald-brand-950/60 dark:text-emerald-brand-100;
+	}
+
+	.article-content {
+		@apply break-words text-[1rem] leading-9 text-graphite-700 sm:text-[1.06rem] sm:leading-10 dark:text-graphite-200;
+	}
+
+	.article-content > :first-child {
+		@apply mt-0;
+	}
+
+	.article-content > :last-child {
+		@apply mb-0;
+	}
+
+	.article-content p {
+		@apply mb-6;
+	}
+
+	.article-content h2 {
+		@apply mt-10 mb-5 border-r-4 border-royal-600 pr-4 text-2xl font-black leading-10 text-graphite-950 dark:border-royal-400 dark:text-white;
+	}
+
+	.article-content h3 {
+		@apply mt-9 mb-4 border-b border-graphite-200 pb-2 text-xl font-extrabold leading-9 text-graphite-950 dark:border-graphite-700 dark:text-white;
+	}
+
+	.article-content h4 {
+		@apply mt-7 mb-3 text-lg font-extrabold text-graphite-900 dark:text-graphite-50;
+	}
+
+	.article-content strong {
+		@apply font-extrabold text-graphite-950 dark:text-white;
+	}
+
+	.article-content ul,
+	.article-content ol {
+		@apply mb-7 space-y-3 pr-6;
+	}
+
+	.article-content ul {
+		@apply list-disc marker:text-royal-500;
+	}
+
+	.article-content ol {
+		@apply list-decimal marker:font-bold marker:text-royal-600;
+	}
+
+	.article-content li > p {
+		@apply mb-0;
+	}
+
+	.article-content a {
+		@apply font-bold text-royal-600 underline decoration-royal-200 underline-offset-4 hover:text-royal-800 dark:text-royal-300;
+	}
+
+	.article-content blockquote {
+		@apply my-7 rounded-l-xl border-r-4 border-royal-600 bg-royal-50 px-5 py-4 text-graphite-700 dark:bg-royal-950/60 dark:text-graphite-200;
+	}
+
+	.article-content img {
+		@apply mx-auto my-8 h-auto max-w-full rounded-2xl border border-graphite-100 shadow-soft dark:border-graphite-700;
+	}
+
+	.article-content hr {
+		@apply my-9 border-graphite-200 dark:border-graphite-700;
+	}
+
+	.article-content pre {
+		@apply my-7 overflow-x-auto rounded-xl bg-graphite-950 p-5 text-sm leading-7 text-graphite-100;
+	}
+
+	.article-content :not(pre) > code {
+		@apply rounded bg-graphite-100 px-1.5 py-0.5 text-sm text-royal-700 dark:bg-graphite-800 dark:text-royal-300;
+	}
+
+	.article-content iframe,
+	.article-content video {
+		@apply my-8 aspect-video h-auto w-full rounded-2xl border border-graphite-200 dark:border-graphite-700;
+	}
+
+	.article-content table {
+		@apply my-8 w-full overflow-hidden rounded-xl border border-graphite-200 text-sm dark:border-graphite-700;
+	}
+
+	.article-content th {
+		@apply bg-graphite-100 px-4 py-3 text-right font-extrabold text-graphite-900 dark:bg-graphite-800 dark:text-white;
+	}
+
+	.article-content td {
+		@apply border-t border-graphite-200 px-4 py-3 dark:border-graphite-700;
+	}
+}

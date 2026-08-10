@@ -1,0 +1,172 @@
+---
+import DashboardLayout from '../../../layouts/DashboardLayout.astro';
+import DashboardAlert from '../../../components/ui/DashboardAlert.astro';
+import Pagination from '../../../components/ui/Pagination.astro';
+import { requireDashboard } from '../../../lib/auth';
+import { apiFetchList } from '../../../lib/api';
+import { assetUrl } from '../../../lib/assets';
+import { COUNTRIES, getCountryById } from '../../../lib/countries';
+
+const guard = await requireDashboard(Astro, 'manage categories');
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+
+const search = (Astro.url.searchParams.get('search') || '').trim();
+const status = Astro.url.searchParams.get('is_active') || '';
+const isActive = status === 'true' || status === 'false' ? status : '';
+const requestedPage = Number.parseInt(Astro.url.searchParams.get('page') || '1', 10);
+const page = Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+const authOptions = {
+	countryId: Astro.locals.countryId,
+	cookieHeader: `token=${Astro.cookies.get('token')?.value}`,
+};
+
+const [listResult, allResult] = await Promise.all([
+	apiFetchList<any>('/dashboard/categories', {
+		...authOptions,
+		params: { search, is_active: isActive, page, per_page: 20 },
+	}),
+	apiFetchList<any>('/dashboard/categories', {
+		...authOptions,
+		params: { per_page: 200 },
+	}),
+]);
+
+const { items: categories, ok, message, meta } = listResult;
+const parentMap = new Map(allResult.items.map((item: any) => [String(item.id), item]));
+const currentCountry = getCountryById(Astro.locals.countryId);
+const total = meta?.total ?? categories.length;
+const currentUrl = `${Astro.url.pathname}${Astro.url.search}`;
+---
+
+<DashboardLayout title="إدارة التصنيفات" user={user}>
+	<DashboardAlert />
+
+	<div class="categories-page">
+		<header class="categories-page-header">
+			<div>
+				<span class="categories-eyebrow">تنظيم المحتوى</span>
+				<h1>التصنيفات</h1>
+				<p>نظّم المنشورات داخل أقسام واضحة وتحكم في ترتيبها وحالة ظهورها.</p>
+			</div>
+			<div class="categories-header-actions">
+				<label class="categories-country-control">
+					<span aria-hidden="true">{currentCountry.flag}</span>
+					<select id="categories-country-select" data-current={Astro.locals.countryId} aria-label="تبديل قاعدة البيانات">
+						{COUNTRIES.map((country) => <option value={country.id} selected={country.id === Astro.locals.countryId}>{country.name}</option>)}
+					</select>
+				</label>
+				<a href="/dashboard/categories/new" class="categories-create-button">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 5v14M5 12h14" /></svg>
+					تصنيف جديد
+				</a>
+			</div>
+		</header>
+
+		<section class="categories-filter-card" aria-label="تصفية التصنيفات">
+			<form method="get" class="categories-filter-form">
+				<label class="categories-search-field">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7" /><path stroke-linecap="round" stroke-width="1.8" d="m16.5 16.5 4 4" /></svg>
+					<input type="search" name="search" value={search} placeholder="ابحث بالاسم أو الرابط..." aria-label="البحث في التصنيفات" />
+				</label>
+				<label class="categories-select-field"><span>الحالة</span><select name="is_active"><option value="" selected={!isActive}>جميع الحالات</option><option value="true" selected={isActive === 'true'}>نشط</option><option value="false" selected={isActive === 'false'}>معطّل</option></select></label>
+				<button type="submit" class="categories-filter-button">تطبيق</button>
+				{(search || isActive) && <a href="/dashboard/categories" class="categories-clear-button">مسح التصفية</a>}
+			</form>
+			<div class="categories-result-count"><strong>{total.toLocaleString('ar-EG')}</strong><span>تصنيف</span></div>
+		</section>
+
+		{!ok ? (
+			<section class="categories-error"><strong>تعذّر تحميل التصنيفات</strong><p>{message}</p><a href={Astro.url.pathname}>إعادة المحاولة</a></section>
+		) : (
+			<>
+				<section class="categories-table-card categories-desktop">
+					<div class="categories-table-heading">
+						<div><h2>قائمة التصنيفات</h2><p>التصنيفات الرئيسية والفرعية في قاعدة بيانات {currentCountry.name}.</p></div>
+						<span>{categories.length} نتيجة في الصفحة</span>
+					</div>
+					<div class="categories-table-scroll">
+						<table>
+							<thead><tr><th>التصنيف</th><th>الموقع</th><th>الرابط المختصر</th><th>الحالة</th><th>آخر تحديث</th><th><span class="sr-only">الإجراءات</span></th></tr></thead>
+							<tbody>
+								{categories.map((category: any) => {
+									const parent = category.parent_id ? parentMap.get(String(category.parent_id)) : null;
+									const thumbnail = assetUrl(category.icon_image_url || category.icon_image || category.image_url || category.image, 100);
+									return (
+										<tr>
+											<td>
+												<div class="categories-title-cell">
+													{thumbnail ? <img src={thumbnail} alt="" loading="lazy" /> : <span class="categories-folder-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M3 6h7l2 2h9v11H3V6Z" /></svg></span>}
+													<div><a href={`/dashboard/categories/${category.id}/edit`}>{category.name}</a><small>رقم التصنيف: {category.id}</small></div>
+												</div>
+											</td>
+											<td>{parent ? <span class="categories-parent"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M6 4v5h8v7h4m-4 0h-4" /></svg>{parent.name}</span> : <span class="categories-root">تصنيف رئيسي</span>}</td>
+											<td><code dir="ltr">{category.slug || '—'}</code></td>
+											<td><span class={category.is_active ? 'categories-status is-active' : 'categories-status is-disabled'}><i></i>{category.is_active ? 'نشط' : 'معطّل'}</span></td>
+											<td><time datetime={category.updated_at}>{category.updated_at ? new Date(category.updated_at).toLocaleDateString('ar-EG') : '—'}</time></td>
+											<td>
+												<div class="categories-actions">
+													<a href={`/dashboard/categories/${category.id}/edit`} class="categories-action" aria-label={`تعديل ${category.name}`} title="تعديل"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m4 20 4.3-1 9.9-9.9a2.1 2.1 0 0 0-3-3L5.3 16 4 20Zm9.8-12.5 3 3" /></svg></a>
+													<form method="post" action={`/api/dashboard/categories/${category.id}/toggle`}><input type="hidden" name="redirect_to" value={currentUrl} /><button type="submit" class="categories-action" aria-label={category.is_active ? `تعطيل ${category.name}` : `تفعيل ${category.name}`} title={category.is_active ? 'تعطيل' : 'تفعيل'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d={category.is_active ? 'M4 4l16 16M10.6 6.3A9.8 9.8 0 0 1 12 6c6 0 9.5 6 9.5 6a14 14 0 0 1-2.1 2.8M6.2 6.2C3.8 8 2.5 12 2.5 12S6 18 12 18c1.4 0 2.6-.3 3.7-.8M9.9 9.9a3 3 0 0 0 4.2 4.2' : 'M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6ZM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z'} /></svg></button></form>
+													<form method="post" action={`/api/dashboard/categories/${category.id}/delete`} data-confirm-delete><input type="hidden" name="redirect_to" value={currentUrl} /><button type="submit" class="categories-action is-delete" aria-label={`حذف ${category.name}`} title="حذف"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 7h16m-10 4v6m4-6v6m-7-10 .8 13h8.4L17 7m-7-3h4l1 3H9l1-3Z" /></svg></button></form>
+												</div>
+											</td>
+										</tr>
+									);
+								})}
+							</tbody>
+						</table>
+					</div>
+					{categories.length === 0 && <div class="categories-empty"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M3 6h7l2 2h9v11H3V6Z" /></svg></span><h3>لا توجد تصنيفات مطابقة</h3><p>جرّب تعديل عبارة البحث أو حالة التصنيف.</p></div>}
+				</section>
+
+				<div class="categories-mobile">
+					{categories.map((category: any) => {
+						const parent = category.parent_id ? parentMap.get(String(category.parent_id)) : null;
+						const thumbnail = assetUrl(category.icon_image_url || category.icon_image || category.image_url || category.image, 100);
+						return (
+							<article class="categories-mobile-card">
+								<div class="categories-mobile-head">
+									{thumbnail ? <img src={thumbnail} alt="" loading="lazy" /> : <span class="categories-folder-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M3 6h7l2 2h9v11H3V6Z" /></svg></span>}
+									<div><h2>{category.name}</h2><p>{parent ? `فرعي تحت ${parent.name}` : 'تصنيف رئيسي'}</p></div>
+									<span class={category.is_active ? 'categories-status is-active' : 'categories-status is-disabled'}><i></i>{category.is_active ? 'نشط' : 'معطّل'}</span>
+								</div>
+								<div class="categories-mobile-meta"><span>الرابط<strong dir="ltr">{category.slug || '—'}</strong></span><span>آخر تحديث<strong>{category.updated_at ? new Date(category.updated_at).toLocaleDateString('ar-EG') : '—'}</strong></span></div>
+								<div class="categories-mobile-actions"><a href={`/dashboard/categories/${category.id}/edit`}>تعديل</a><form method="post" action={`/api/dashboard/categories/${category.id}/toggle`}><input type="hidden" name="redirect_to" value={currentUrl} /><button type="submit">{category.is_active ? 'تعطيل' : 'تفعيل'}</button></form><form method="post" action={`/api/dashboard/categories/${category.id}/delete`} data-confirm-delete><input type="hidden" name="redirect_to" value={currentUrl} /><button type="submit" class="is-delete">حذف</button></form></div>
+							</article>
+						);
+					})}
+					{categories.length === 0 && <div class="categories-empty"><h3>لا توجد تصنيفات مطابقة</h3><p>جرّب تعديل عبارة البحث أو حالة التصنيف.</p></div>}
+				</div>
+
+				{meta && <Pagination currentPage={meta.current_page} lastPage={meta.last_page} url={Astro.url} />}
+			</>
+		)}
+	</div>
+
+	<script>
+		document.querySelectorAll<HTMLFormElement>('[data-confirm-delete]').forEach((form) => {
+			form.addEventListener('submit', (event) => {
+				if (!window.confirm('هل أنت متأكد من حذف هذا التصنيف؟ قد تتأثر المنشورات المرتبطة به.')) event.preventDefault();
+			});
+		});
+		const countrySelect = document.getElementById('categories-country-select') as HTMLSelectElement | null;
+		countrySelect?.addEventListener('change', () => {
+			if (countrySelect.value === countrySelect.dataset.current) return;
+			const url = new URL(window.location.href);
+			url.searchParams.set('country', countrySelect.value);
+			url.searchParams.delete('page');
+			window.location.href = url.toString();
+		});
+	</script>
+
+	<style>
+		.categories-page{--c-ink:#102a43;--c-muted:#718096;--c-line:#dfe6ee;max-width:1360px;margin-inline:auto;padding-bottom:2rem}.categories-page-header{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;margin-bottom:1rem}.categories-eyebrow{display:block;margin-bottom:.25rem;color:#1a4d8f;font-size:.65rem;font-weight:850}.categories-page-header h1{margin:0;color:#061a3a;font-size:clamp(1.35rem,1.1rem + .65vw,1.85rem);font-weight:900;line-height:1.3}.categories-page-header p{margin:.28rem 0 0;color:var(--c-muted);font-size:.75rem}.categories-header-actions{display:flex;align-items:center;gap:.55rem}.categories-country-control{display:flex;min-height:2.6rem;align-items:center;gap:.4rem;border:1px solid var(--c-line);border-radius:.6rem;background:#fff;padding:.35rem .55rem}.categories-country-control>span{font-size:1rem}.categories-country-control select{border:0;background:transparent;color:var(--c-ink);font-family:inherit;font-size:.66rem;font-weight:750;outline:0}.categories-create-button{display:inline-flex;min-height:2.6rem;align-items:center;justify-content:center;gap:.4rem;border:1px solid #16427d;border-radius:.6rem;background:#1a4d8f;padding:.5rem .9rem;color:#fff;font-size:.73rem;font-weight:850;box-shadow:0 2px 4px rgb(26 77 143/.16)}.categories-create-button:hover{background:#153f76}.categories-create-button svg{width:1rem;height:1rem}
+		.categories-filter-card{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:1rem;border:1px solid var(--c-line);border-radius:.8rem;background:#fff;padding:.7rem;box-shadow:0 1px 2px rgb(15 23 42/.06)}.categories-filter-form{display:flex;min-width:0;flex:1;flex-wrap:wrap;align-items:center;gap:.55rem}.categories-search-field{position:relative;display:block;min-width:14rem;flex:1}.categories-search-field svg{position:absolute;top:50%;right:.7rem;width:.9rem;height:.9rem;color:#8796a8;transform:translateY(-50%)}.categories-search-field input,.categories-select-field select{width:100%;min-height:2.35rem;border:1px solid #d9e2ec;border-radius:.5rem;background:#fff;color:var(--c-ink);font-family:inherit;font-size:.7rem}.categories-search-field input{padding:.45rem 2rem .45rem .65rem}.categories-search-field input:focus,.categories-select-field select:focus{border-color:#81a7da;outline:0;box-shadow:0 0 0 3px rgb(26 77 143/.07)}.categories-select-field{display:flex;align-items:center;gap:.35rem}.categories-select-field>span{color:var(--c-muted);font-size:.62rem;font-weight:750}.categories-select-field select{width:8.5rem;padding:.4rem .5rem}.categories-filter-button,.categories-clear-button{display:inline-flex;min-height:2.35rem;align-items:center;justify-content:center;border-radius:.5rem;padding:.4rem .75rem;font-size:.66rem;font-weight:800}.categories-filter-button{border:1px solid #315f9f;background:#fff;color:#1a4d8f}.categories-filter-button:hover{background:#f7f9fc}.categories-clear-button{color:#64748b}.categories-clear-button:hover{color:#1a4d8f}.categories-result-count{display:flex;align-items:baseline;gap:.3rem;border-right:1px solid #e7ecf2;padding-inline:1rem .25rem;color:var(--c-muted);font-size:.65rem;white-space:nowrap}.categories-result-count strong{color:var(--c-ink);font-size:.9rem}
+		.categories-table-card{overflow:hidden;border:1px solid var(--c-line);border-radius:.85rem;background:#fff;box-shadow:0 1px 2px rgb(15 23 42/.06)}.categories-table-heading{display:flex;align-items:center;justify-content:space-between;gap:1rem;border-bottom:1px solid #edf1f5;padding:.9rem 1rem}.categories-table-heading h2{margin:0;color:var(--c-ink);font-size:.85rem;font-weight:850}.categories-table-heading p{margin:.18rem 0 0;color:var(--c-muted);font-size:.62rem}.categories-table-heading>span{border:1px solid #e1e7ee;border-radius:999px;background:#f8fafc;padding:.25rem .55rem;color:#64748b;font-size:.6rem;font-weight:750}.categories-table-scroll{overflow-x:auto}.categories-table-card table{width:100%;border-collapse:collapse}.categories-table-card th{padding:.72rem .85rem;background:#f8fafc;color:#718096;font-size:.6rem;font-weight:800;text-align:right;white-space:nowrap}.categories-table-card td{padding:.72rem .85rem;border-top:1px solid #edf1f5;color:#64748b;font-size:.68rem;vertical-align:middle}.categories-table-card tbody tr{transition:background-color 140ms ease}.categories-table-card tbody tr:hover{background:#fafcff}
+		.categories-title-cell{display:flex;max-width:22rem;align-items:center;gap:.6rem}.categories-title-cell img,.categories-mobile-head>img{width:2.4rem;height:2.4rem;flex:none;border-radius:.5rem;object-fit:cover}.categories-folder-icon{display:inline-grid;width:2.2rem;height:2.2rem;flex:none;place-items:center;border:1px solid #dce5ef;border-radius:.5rem;background:#f2f7fc;color:#4c6f99}.categories-folder-icon svg{width:1rem;height:1rem}.categories-title-cell>div{min-width:0}.categories-title-cell a{display:block;overflow:hidden;color:var(--c-ink);font-size:.71rem;font-weight:850;text-overflow:ellipsis;white-space:nowrap}.categories-title-cell a:hover{color:#1a4d8f}.categories-title-cell small{display:block;margin-top:.1rem;color:#9aa7b6;font-size:.55rem}.categories-parent{display:inline-flex;align-items:center;gap:.3rem;color:#52667e}.categories-parent svg{width:.82rem;height:.82rem;color:#94a3b8}.categories-root{border-radius:999px;background:#f1f5f9;padding:.23rem .45rem;color:#64748b;font-size:.58rem;font-weight:750}.categories-table-card code{display:inline-block;max-width:13rem;overflow:hidden;border-radius:.35rem;background:#f7f9fb;padding:.2rem .4rem;color:#60758a;font-size:.58rem;text-overflow:ellipsis;white-space:nowrap}.categories-status{display:inline-flex;align-items:center;gap:.3rem;border-radius:999px;padding:.24rem .48rem;font-size:.58rem;font-weight:800}.categories-status i{width:.31rem;height:.31rem;border-radius:50%}.categories-status.is-active{background:#ecfdf5;color:#08785d}.categories-status.is-active i{background:#10b981}.categories-status.is-disabled{background:#f1f5f9;color:#64748b}.categories-status.is-disabled i{background:#94a3b8}.categories-actions{display:flex;align-items:center;justify-content:flex-end;gap:.3rem}.categories-action{display:inline-grid;width:1.85rem;height:1.85rem;place-items:center;border:1px solid #dfe6ee;border-radius:.45rem;background:#fff;color:#52667e}.categories-action:hover{border-color:#a8bdd8;color:#1a4d8f}.categories-action.is-delete:hover{border-color:#fecaca;background:#fff7f7;color:#dc2626}.categories-action svg{width:.85rem;height:.85rem}
+		.categories-empty,.categories-error{display:flex;min-height:15rem;align-items:center;justify-content:center;flex-direction:column;padding:2rem;text-align:center}.categories-empty>span{display:grid;width:3rem;height:3rem;place-items:center;border-radius:.75rem;background:#f1f5f9;color:#718096}.categories-empty svg{width:1.35rem;height:1.35rem}.categories-empty h3,.categories-error strong{margin:.7rem 0 0;color:var(--c-ink);font-size:.8rem}.categories-empty p,.categories-error p{margin:.25rem 0 0;color:var(--c-muted);font-size:.65rem}.categories-error{border:1px solid #fecaca;border-radius:.8rem;background:#fff}.categories-error a{margin-top:.65rem;color:#1a4d8f;font-size:.65rem;font-weight:800}.categories-mobile{display:none}.categories-mobile-card{border:1px solid var(--c-line);border-radius:.75rem;background:#fff;padding:.85rem;box-shadow:0 1px 2px rgb(15 23 42/.06)}.categories-mobile-head{display:flex;align-items:flex-start;gap:.6rem}.categories-mobile-head>div{min-width:0;flex:1}.categories-mobile-head h2{margin:0;color:var(--c-ink);font-size:.75rem;line-height:1.65}.categories-mobile-head p{margin:.12rem 0 0;color:var(--c-muted);font-size:.59rem}.categories-mobile-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.45rem;margin-top:.75rem}.categories-mobile-meta span{border:1px solid #edf1f5;border-radius:.5rem;padding:.42rem;color:#8b98a8;font-size:.56rem}.categories-mobile-meta strong{display:block;overflow:hidden;margin-top:.12rem;color:var(--c-ink);font-size:.62rem;text-overflow:ellipsis;white-space:nowrap}.categories-mobile-actions{display:flex;gap:.4rem;margin-top:.75rem;border-top:1px solid #edf1f5;padding-top:.7rem}.categories-mobile-actions a,.categories-mobile-actions button{display:inline-flex;min-height:2.1rem;align-items:center;justify-content:center;border:1px solid #dce4ed;border-radius:.45rem;background:#fff;padding:.35rem .62rem;color:#42526a;font-size:.62rem;font-weight:750}.categories-mobile-actions .is-delete{color:#dc2626}
+		:global(.dark) .categories-page{--c-ink:#f8fafc;--c-muted:#94a3b8;--c-line:#334155}:global(.dark) .categories-page-header h1{color:#fff}:global(.dark) .categories-filter-card,:global(.dark) .categories-table-card,:global(.dark) .categories-mobile-card,:global(.dark) .categories-country-control,:global(.dark) .categories-search-field input,:global(.dark) .categories-select-field select,:global(.dark) .categories-action,:global(.dark) .categories-mobile-actions a,:global(.dark) .categories-mobile-actions button,:global(.dark) .categories-error{border-color:#334155;background:#0f2547;color:#cbd5e1}:global(.dark) .categories-table-card th,:global(.dark) .categories-table-heading>span{background:#0b1e38}:global(.dark) .categories-table-heading,:global(.dark) .categories-table-card td,:global(.dark) .categories-mobile-actions{border-color:#263b56}:global(.dark) .categories-table-card tbody tr:hover{background:#122b4c}:global(.dark) .categories-table-card code,:global(.dark) .categories-root{background:#172b45;color:#aebdce}
+		@media(max-width:767px){.categories-page-header{align-items:stretch;flex-direction:column}.categories-header-actions{display:grid;grid-template-columns:1fr 1fr}.categories-country-control,.categories-create-button{justify-content:center}.categories-filter-card{align-items:stretch;flex-direction:column}.categories-filter-form{align-items:stretch;flex-direction:column}.categories-search-field,.categories-select-field,.categories-select-field select{width:100%}.categories-select-field{align-items:stretch;flex-direction:column}.categories-result-count{border:0;border-top:1px solid #edf1f5;padding:.65rem .15rem 0}.categories-desktop{display:none}.categories-mobile{display:grid;gap:.7rem}}
+	</style>
+</DashboardLayout>

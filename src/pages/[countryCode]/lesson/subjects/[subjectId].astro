@@ -1,0 +1,34 @@
+---
+import Layout from '../../../../layouts/Layout.astro';
+import '../../../../styles/lesson-pages.css';
+import SubjectDetail from '../../../../components/SubjectDetail.astro';
+import { apiFetch, applyNotFoundStatus } from '../../../../lib/api';
+
+const { subjectId } = Astro.params;
+const countryCode = Astro.locals.countryCode!;
+const countryId = Astro.locals.countryId;
+const semestersResult = await apiFetch<any>(`/filter/semesters/${subjectId}`, { countryId });
+
+const subject = semestersResult.data?.subject;
+if (!semestersResult.ok || !subject) applyNotFoundStatus(Astro, semestersResult);
+// The classId-less canonical form derives its class from the semesters response
+// (class_id === subject.grade_level — see services/grade_service.go SemestersResponse).
+const derivedClassId = semestersResult.data?.class_id ? String(semestersResult.data.class_id) : '';
+const classResult = derivedClassId
+	? await apiFetch<any>(`/school-classes/${derivedClassId}`, { countryId })
+	: { ok: false, data: null, message: '', meta: null, status: 0 };
+---
+
+<Layout
+	title={subject?.subject_name || 'المادة الدراسية'}
+	description={subject ? `ملفات ومقالات مادة ${subject.subject_name}.` : undefined}
+>
+	<SubjectDetail
+		countryCode={countryCode}
+		subject={subject}
+		semesters={semestersResult.data?.semesters ?? []}
+		schoolClass={classResult.data}
+		semestersOk={semestersResult.ok}
+		semestersMessage={semestersResult.message}
+	/>
+</Layout>

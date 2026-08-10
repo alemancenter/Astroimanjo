@@ -1,0 +1,187 @@
+---
+import DashboardLayout from '../../../layouts/DashboardLayout.astro';
+import DashboardAlert from '../../../components/ui/DashboardAlert.astro';
+import Pagination from '../../../components/ui/Pagination.astro';
+import TeacherSubTabs from '../../../components/dashboard/TeacherSubTabs.astro';
+import { requireDashboard } from '../../../lib/auth';
+import { apiFetch } from '../../../lib/api';
+
+const guard = await requireDashboard(Astro, 'manage teacher subscriptions');
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+
+const params = Astro.url.searchParams;
+const allowedStatuses = new Set(['pending', 'approved', 'rejected', 'all']);
+const requestedStatus = params.get('status') || 'pending';
+const status = allowedStatuses.has(requestedStatus) ? requestedStatus : 'pending';
+const search = (params.get('q') || '').trim();
+const page = Math.max(1, Number(params.get('page')) || 1);
+const token = Astro.cookies.get('token')?.value;
+
+const [ordersResult, dashboardResult, financeResult] = await Promise.all([
+	apiFetch<any[]>('/dashboard/teacher-subscriptions/orders', {
+		countryId: Astro.locals.countryId,
+		cookieHeader: `token=${token}`,
+		params: { status: status === 'all' ? undefined : status, q: search || undefined, page, per_page: 20 },
+	}),
+	apiFetch<any>('/dashboard/teacher-subscriptions/dashboard', {
+		countryId: Astro.locals.countryId,
+		cookieHeader: `token=${token}`,
+	}),
+	apiFetch<any>('/dashboard/teacher-subscriptions/reports/finance', {
+		countryId: Astro.locals.countryId,
+		cookieHeader: `token=${token}`,
+	}),
+]);
+
+const orders = Array.isArray(ordersResult.data) ? ordersResult.data : [];
+const meta = ordersResult.meta;
+const stats = dashboardResult.data?.stats ?? {};
+const finance = financeResult.data ?? {};
+const totalOrders = Number(stats.orders_pending ?? 0) + Number(stats.orders_approved ?? 0) + Number(stats.orders_rejected ?? 0);
+const resultTotal = meta?.total ?? orders.length;
+const redirectTo = `${Astro.url.pathname}${Astro.url.search}`;
+
+const statusTabs = [
+	{ value: 'pending', label: 'قيد المراجعة', count: Number(stats.orders_pending ?? 0) },
+	{ value: 'approved', label: 'المقبولة', count: Number(stats.orders_approved ?? 0) },
+	{ value: 'rejected', label: 'المرفوضة', count: Number(stats.orders_rejected ?? 0) },
+	{ value: 'all', label: 'جميع الطلبات', count: totalOrders },
+];
+const statusLabels: Record<string, string> = { pending: 'قيد المراجعة', approved: 'مقبول', rejected: 'مرفوض' };
+const paymentLabels: Record<string, string> = { cliq: 'CliQ', bank_transfer: 'تحويل بنكي', cash: 'نقدي', wallet: 'محفظة إلكترونية' };
+const numberFormat = new Intl.NumberFormat('ar-JO');
+const moneyFormat = new Intl.NumberFormat('ar-JO', { minimumFractionDigits: 0, maximumFractionDigits: 3 });
+const dateFormat = new Intl.DateTimeFormat('ar-JO', { year: 'numeric', month: 'short', day: 'numeric' });
+const timeFormat = new Intl.DateTimeFormat('ar-JO', { hour: 'numeric', minute: '2-digit' });
+const formatDate = (value: string) => { const date = new Date(value); return Number.isNaN(date.getTime()) ? '—' : dateFormat.format(date); };
+const formatTime = (value: string) => { const date = new Date(value); return Number.isNaN(date.getTime()) ? '' : timeFormat.format(date); };
+const filterUrl = (nextStatus: string) => {
+	const url = new URL(Astro.url);
+	url.searchParams.set('status', nextStatus);
+	url.searchParams.delete('page');
+	return `${url.pathname}${url.search}`;
+};
+const initials = (name: string) => (name || 'مستخدم').trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
+---
+
+<DashboardLayout title="طلبات اشتراك المعلمين" user={user}>
+	<div class="teacher-orders-page">
+		<DashboardAlert />
+
+		<header class="teacher-orders-header">
+			<div>
+				<span class="teacher-orders-eyebrow">إدارة عضوية المعلمين</span>
+				<h1>طلبات الاشتراك</h1>
+				<p>راجع بيانات التحويل وإثبات الدفع قبل تفعيل اشتراك المعلم.</p>
+			</div>
+			<div class="teacher-orders-header-actions">
+				<a href="/dashboard/teacher-subscriptions/subscriptions">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7.5h16M7 4v3.5M17 4v3.5M6 11h4M6 15h7M4 5.5h16v14H4z"/></svg>
+					الاشتراكات النشطة
+				</a>
+				<a href="/dashboard/teacher-subscriptions/reports" class="is-primary">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 19V9m7 10V5m7 14v-7M3 19h18"/></svg>
+					التقارير
+				</a>
+			</div>
+		</header>
+
+		<section class="teacher-orders-summary" aria-label="ملخص الاشتراكات">
+			<div class="teacher-summary-card is-amber"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 7v5l3 2M21 12a9 9 0 1 1-9-9 9 9 0 0 1 9 9Z"/></svg></span><div><small>بانتظار المراجعة</small><strong>{numberFormat.format(Number(stats.orders_pending ?? 0))}</strong><p>طلب يحتاج إلى قرار</p></div></div>
+			<div class="teacher-summary-card is-green"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m8 12 2.5 2.5L16 9m5 3a9 9 0 1 1-9-9 9 9 0 0 1 9 9Z"/></svg></span><div><small>الاشتراكات النشطة</small><strong>{numberFormat.format(Number(stats.subscriptions_active ?? 0))}</strong><p>اشتراك فعّال حاليًا</p></div></div>
+			<div class="teacher-summary-card is-blue"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m7-10a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm13 10v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><div><small>المعلمون المسجلون</small><strong>{numberFormat.format(Number(stats.teachers_total ?? 0))}</strong><p>ملف معلم في المنصة</p></div></div>
+			<div class="teacher-summary-card is-orange"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18v12H3zM7 10h5m-5 4h3m7-5v6"/></svg></span><div><small>إيراد الشهر</small><strong>{moneyFormat.format(Number(finance.current_month_revenue_jod ?? 0))} <b>د.أ</b></strong><p>من الطلبات المقبولة</p></div></div>
+		</section>
+
+		<TeacherSubTabs active="orders" />
+
+		<section class="teacher-orders-filter-card">
+			<form method="get" action="/dashboard/teacher-subscriptions" class="teacher-orders-filter-form">
+				<input type="hidden" name="status" value={status} />
+				<label class="teacher-orders-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input type="search" name="q" value={search} placeholder="ابحث بالاسم، البريد، الهاتف أو رقم العملية..." aria-label="البحث في طلبات الاشتراك" /></label>
+				<button type="submit" class="teacher-orders-filter-button">بحث</button>
+				{search && <a href={`/dashboard/teacher-subscriptions?status=${status}`} class="teacher-orders-clear">مسح البحث</a>}
+			</form>
+			<div class="teacher-orders-result-count"><strong>{numberFormat.format(resultTotal)}</strong><span>نتيجة</span></div>
+		</section>
+
+		<nav class="teacher-orders-status-tabs" aria-label="تصفية الطلبات حسب الحالة">
+			{statusTabs.map((tab) => <a href={filterUrl(tab.value)} class:list={{ 'is-active': status === tab.value }} aria-current={status === tab.value ? 'page' : undefined}><span>{tab.label}</span><strong>{numberFormat.format(tab.count)}</strong></a>)}
+		</nav>
+
+		{!ordersResult.ok ? (
+			<section class="teacher-orders-state is-error"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 9v4m0 4h.01M10.3 3.7 2.4 18a2 2 0 0 0 1.75 3h15.7a2 2 0 0 0 1.75-3L13.7 3.7a2 2 0 0 0-3.4 0Z"/></svg></span><h2>تعذّر تحميل الطلبات</h2><p>{ordersResult.message || 'تحقق من اتصال الخادم ثم أعد المحاولة.'}</p><a href={redirectTo}>إعادة المحاولة</a></section>
+		) : orders.length === 0 ? (
+			<section class="teacher-orders-state"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h16v14H4zM8 9h8m-8 4h5"/></svg></span><h2>{search ? 'لا توجد نتائج مطابقة' : 'لا توجد طلبات في هذا التصنيف'}</h2><p>{search ? 'جرّب البحث بكلمة أقصر أو امسح عوامل التصفية.' : 'ستظهر الطلبات الجديدة هنا فور إرسالها.'}</p>{search && <a href={`/dashboard/teacher-subscriptions?status=${status}`}>عرض كل الطلبات</a>}</section>
+		) : (
+			<>
+				<section class="teacher-orders-table-card teacher-orders-desktop">
+					<div class="teacher-orders-table-head"><div><h2>سجل طلبات الاشتراك</h2><p>يعرض أحدث الطلبات أولًا مع بيانات الدفع والمراجعة.</p></div><span>صفحة {numberFormat.format(meta?.current_page ?? page)} من {numberFormat.format(meta?.last_page ?? 1)}</span></div>
+					<div class="teacher-orders-table-scroll"><table>
+						<thead><tr><th>الطلب</th><th>صاحب الطلب</th><th>الخطة والدفع</th><th>المبلغ</th><th>بيانات التحويل</th><th>الحالة والتاريخ</th><th>الإجراءات</th></tr></thead>
+						<tbody>{orders.map((order: any) => (
+							<tr>
+								<td class="teacher-order-number"><strong>#{numberFormat.format(Number(order.id))}</strong><small>{formatTime(order.created_at)}</small></td>
+								<td><div class="teacher-order-person"><span class={`avatar-tone-${Number(order.id) % 4}`}>{initials(order.user?.name || order.payer_name)}</span><div><strong>{order.user?.name || order.payer_name || 'مستخدم غير مسمّى'}</strong><p>{order.user?.email || order.phone || 'لا توجد بيانات تواصل'}</p>{order.phone && order.user?.email && <small>{order.phone}</small>}</div></div></td>
+								<td><div class="teacher-order-plan"><strong>{order.plan?.name || 'اشتراك المعلم'}</strong><span>{paymentLabels[order.payment_method] || order.payment_method || 'غير محدد'}</span></div></td>
+								<td><div class="teacher-order-amount"><strong>{moneyFormat.format(Number(order.amount_jod ?? 0))}</strong><span>{order.currency || 'JOD'}</span></div></td>
+								<td><div class="teacher-order-transfer"><strong>{order.payer_name || '—'}</strong><span>{order.payment_reference || 'دون رقم مرجعي'}</span></div></td>
+								<td><div class="teacher-order-status-date"><span class={`teacher-order-status is-${order.status}`}><i></i>{statusLabels[order.status] || order.status}</span><time datetime={order.created_at}>{formatDate(order.created_at)}</time></div></td>
+								<td><div class="teacher-order-actions">
+									{order.payment_proof_url ? <a href={`/api/dashboard/teacher-subscriptions/orders/${order.id}/proof`} target="_blank" rel="noopener" class="teacher-order-proof" title="فتح إثبات الدفع"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16h16V8Z"/><path d="M14 2v6h6M8 13h8m-8 4h5"/></svg><span>الإثبات</span></a> : <span class="teacher-order-no-proof">دون إثبات</span>}
+									{order.status === 'pending' && <><form method="post" action={`/api/dashboard/teacher-subscriptions/orders/${order.id}/approve`} data-confirm-approve><input type="hidden" name="redirect_to" value={redirectTo}/><button type="submit" class="teacher-order-approve" title="قبول وتفعيل الاشتراك"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 12 4 4L19 6"/></svg><span>قبول</span></button></form><button type="button" class="teacher-order-reject" data-reject-order={order.id} data-reject-name={order.user?.name || order.payer_name || `الطلب #${order.id}`} title="رفض الطلب"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 6 12 12M18 6 6 18"/></svg></button></>}
+								</div></td>
+							</tr>
+						))}</tbody>
+					</table></div>
+				</section>
+
+				<section class="teacher-orders-mobile">{orders.map((order: any) => (
+					<article class="teacher-order-mobile-card">
+						<header><div class="teacher-order-person"><span class={`avatar-tone-${Number(order.id) % 4}`}>{initials(order.user?.name || order.payer_name)}</span><div><strong>{order.user?.name || order.payer_name || 'مستخدم غير مسمّى'}</strong><p>{order.user?.email || order.phone || `طلب #${order.id}`}</p></div></div><span class={`teacher-order-status is-${order.status}`}><i></i>{statusLabels[order.status] || order.status}</span></header>
+						<dl><div><dt>رقم الطلب</dt><dd>#{numberFormat.format(Number(order.id))}</dd></div><div><dt>المبلغ</dt><dd>{moneyFormat.format(Number(order.amount_jod ?? 0))} {order.currency || 'JOD'}</dd></div><div><dt>طريقة الدفع</dt><dd>{paymentLabels[order.payment_method] || order.payment_method || 'غير محدد'}</dd></div><div><dt>تاريخ الطلب</dt><dd>{formatDate(order.created_at)}</dd></div><div class="is-wide"><dt>المحوّل / رقم العملية</dt><dd>{order.payer_name || '—'} · {order.payment_reference || 'دون رقم مرجعي'}</dd></div></dl>
+						<footer>
+							{order.payment_proof_url ? <a href={`/api/dashboard/teacher-subscriptions/orders/${order.id}/proof`} target="_blank" rel="noopener" class="teacher-order-proof"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16h16V8Z"/><path d="M14 2v6h6M8 13h8"/></svg><span>عرض إثبات الدفع</span></a> : <span class="teacher-order-no-proof">لا يوجد إثبات دفع</span>}
+							{order.status === 'pending' && <div class="teacher-mobile-review"><form method="post" action={`/api/dashboard/teacher-subscriptions/orders/${order.id}/approve`} data-confirm-approve><input type="hidden" name="redirect_to" value={redirectTo}/><button type="submit" class="teacher-order-approve"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 12 4 4L19 6"/></svg><span>قبول وتفعيل</span></button></form><button type="button" class="teacher-order-reject" data-reject-order={order.id} data-reject-name={order.user?.name || order.payer_name || `الطلب #${order.id}`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 6 12 12M18 6 6 18"/></svg><span>رفض</span></button></div>}
+						</footer>
+					</article>
+				))}</section>
+			</>
+		)}
+
+		{meta && meta.last_page > 1 && <Pagination currentPage={meta.current_page} lastPage={meta.last_page} url={Astro.url} />}
+	</div>
+
+	<dialog id="reject-order-dialog" class="teacher-reject-dialog">
+		<div class="teacher-reject-dialog-card">
+			<header><div><span>مراجعة الطلب</span><h2>رفض طلب الاشتراك</h2><p>سيبقى سبب الرفض محفوظًا في سجل الطلب.</p></div><button type="button" data-close-reject aria-label="إغلاق"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 6 12 12M18 6 6 18"/></svg></button></header>
+			<form method="post" id="reject-order-form"><input type="hidden" name="redirect_to" value={redirectTo}/><p>رفض طلب <strong id="reject-order-name"></strong></p><label><span>سبب الرفض أو ملاحظة الإدارة</span><textarea name="admin_note" rows="4" required placeholder="اكتب سببًا واضحًا يمكن الرجوع إليه لاحقًا..."></textarea></label><div><button type="button" data-close-reject>إلغاء</button><button type="submit">تأكيد رفض الطلب</button></div></form>
+		</div>
+	</dialog>
+
+	<script>
+		document.querySelectorAll<HTMLFormElement>('[data-confirm-approve]').forEach((form) => form.addEventListener('submit', (event) => { if (!window.confirm('سيتم قبول الطلب وتفعيل اشتراك المعلم مباشرة. هل تريد المتابعة؟')) event.preventDefault(); }));
+		const rejectDialog = document.getElementById('reject-order-dialog') as HTMLDialogElement | null;
+		const rejectForm = document.getElementById('reject-order-form') as HTMLFormElement | null;
+		const rejectName = document.getElementById('reject-order-name');
+		document.querySelectorAll<HTMLElement>('[data-reject-order]').forEach((button) => button.addEventListener('click', () => { if (!rejectDialog || !rejectForm) return; rejectForm.action = `/api/dashboard/teacher-subscriptions/orders/${button.dataset.rejectOrder}/reject`; if (rejectName) rejectName.textContent = button.dataset.rejectName || ''; rejectDialog.showModal(); }));
+		document.querySelectorAll('[data-close-reject]').forEach((button) => button.addEventListener('click', () => rejectDialog?.close()));
+		rejectDialog?.addEventListener('click', (event) => { if (event.target === rejectDialog) rejectDialog.close(); });
+	</script>
+
+	<style>
+		.teacher-orders-page{--to-ink:#102a43;--to-muted:#718096;--to-line:#dfe6ee;max-width:1400px;margin-inline:auto;padding-bottom:2rem}.teacher-orders-header{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;margin-bottom:1rem}.teacher-orders-eyebrow{display:block;margin-bottom:.22rem;color:#1a4d8f;font-size:.76rem;font-weight:850}.teacher-orders-header h1{margin:0;color:#061a3a;font-size:clamp(1.5rem,1.2rem + .8vw,2rem);font-weight:900;line-height:1.25}.teacher-orders-header p{margin:.32rem 0 0;color:var(--to-muted);font-size:.82rem}.teacher-orders-header-actions{display:flex;gap:.45rem}.teacher-orders-header-actions a{display:inline-flex;min-height:2.55rem;align-items:center;justify-content:center;gap:.38rem;border:1px solid #d7e1ec;border-radius:.55rem;background:#fff;padding:.48rem .75rem;color:#52667e;font-size:.75rem;font-weight:800;box-shadow:0 1px 2px rgb(15 23 42/.04)}.teacher-orders-header-actions a.is-primary{border-color:#16427d;background:#1a4d8f;color:#fff}.teacher-orders-header-actions svg{width:.95rem;height:.95rem}
+		.teacher-orders-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.65rem;margin-bottom:1rem}.teacher-summary-card{display:flex;min-height:5rem;align-items:center;gap:.7rem;border:1px solid var(--to-line);border-radius:.75rem;background:#fff;padding:.72rem .8rem;box-shadow:0 1px 2px rgb(15 23 42/.04)}.teacher-summary-card>span{display:grid;width:2.55rem;height:2.55rem;flex:none;place-items:center;border-radius:.58rem}.teacher-summary-card>span svg{width:1.15rem;height:1.15rem}.teacher-summary-card.is-amber>span{background:#fff7e8;color:#b46b0b}.teacher-summary-card.is-green>span{background:#edf9f5;color:#0f8464}.teacher-summary-card.is-blue>span{background:#edf4fc;color:#1a4d8f}.teacher-summary-card.is-orange>span{background:#fff4e7;color:#b96614}.teacher-summary-card small{color:var(--to-muted);font-size:.72rem}.teacher-summary-card strong{display:block;margin-top:.03rem;color:var(--to-ink);font-size:1.16rem;font-weight:900;line-height:1.25}.teacher-summary-card strong b{font-size:.64rem}.teacher-summary-card p{margin:.05rem 0 0;color:#9aa6b4;font-size:.64rem}
+		.teacher-orders-filter-card{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:.65rem;border:1px solid var(--to-line);border-radius:.75rem;background:#fff;padding:.65rem;box-shadow:0 1px 2px rgb(15 23 42/.05)}.teacher-orders-filter-form{display:flex;min-width:0;flex:1;align-items:center;gap:.42rem}.teacher-orders-search{position:relative;display:block;max-width:35rem;min-width:16rem;flex:1}.teacher-orders-search svg{position:absolute;top:50%;right:.7rem;width:.9rem;height:.9rem;color:#8796a8;transform:translateY(-50%)}.teacher-orders-search input{width:100%;min-height:2.35rem;border:1px solid #d9e2ec;border-radius:.5rem;background:#fff;padding:.45rem 2rem .45rem .65rem;color:var(--to-ink);font-family:inherit;font-size:.75rem}.teacher-orders-search input:focus{border-color:#81a7da;outline:0;box-shadow:0 0 0 3px rgb(26 77 143/.07)}.teacher-orders-filter-button{min-height:2.35rem;border:1px solid #315f9f;border-radius:.5rem;background:#fff;padding:.42rem .82rem;color:#1a4d8f;font-family:inherit;font-size:.73rem;font-weight:850}.teacher-orders-clear{padding:.4rem;color:#718096;font-size:.7rem;font-weight:750}.teacher-orders-result-count{display:flex;align-items:baseline;gap:.3rem;border-right:1px solid #e7ecf2;padding-inline:1rem .25rem;color:var(--to-muted);font-size:.7rem;white-space:nowrap}.teacher-orders-result-count strong{color:var(--to-ink);font-size:.96rem}
+		.teacher-orders-status-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.45rem;margin-bottom:.75rem}.teacher-orders-status-tabs a{display:flex;min-height:2.55rem;align-items:center;justify-content:space-between;border:1px solid var(--to-line);border-radius:.58rem;background:#fff;padding:.45rem .7rem;color:#64748b;font-size:.73rem;font-weight:800}.teacher-orders-status-tabs a strong{display:grid;min-width:1.65rem;height:1.55rem;place-items:center;border-radius:.38rem;background:#f1f5f9;color:#718096;font-size:.68rem}.teacher-orders-status-tabs a:hover{border-color:#b8cde5;color:#1a4d8f}.teacher-orders-status-tabs a.is-active{border-color:#9bb7d8;background:#f8fbff;color:#1a4d8f;box-shadow:inset 0 -2px #1a4d8f}.teacher-orders-status-tabs a.is-active strong{background:#e7f0fb;color:#1a4d8f}
+		.teacher-orders-table-card{overflow:hidden;border:1px solid var(--to-line);border-radius:.78rem;background:#fff;box-shadow:0 1px 2px rgb(15 23 42/.05)}.teacher-orders-table-head{display:flex;align-items:center;justify-content:space-between;gap:1rem;border-bottom:1px solid #edf1f5;padding:.8rem .9rem}.teacher-orders-table-head h2{margin:0;color:var(--to-ink);font-size:.92rem;font-weight:900}.teacher-orders-table-head p{margin:.12rem 0 0;color:var(--to-muted);font-size:.68rem}.teacher-orders-table-head>span{border:1px solid #e1e7ee;border-radius:999px;background:#f8fafc;padding:.24rem .5rem;color:#64748b;font-size:.64rem;font-weight:750}.teacher-orders-table-scroll{overflow-x:auto}.teacher-orders-table-card table{width:100%;border-collapse:collapse}.teacher-orders-table-card th{padding:.7rem .6rem;background:#f8fafc;color:#718096;font-size:.68rem;font-weight:850;text-align:right;white-space:nowrap}.teacher-orders-table-card td{padding:.72rem .6rem;border-top:1px solid #edf1f5;color:#64748b;font-size:.72rem;vertical-align:middle}.teacher-orders-table-card tbody tr:hover{background:#fafcff}.teacher-order-number strong{display:block;color:#1a4d8f;font-size:.73rem}.teacher-order-number small{color:#9aa6b4;font-size:.62rem}.teacher-order-person{display:flex;min-width:12.5rem;align-items:center;gap:.55rem}.teacher-order-person>span{display:grid;width:2.25rem;height:2.25rem;flex:none;place-items:center;border-radius:.55rem;font-size:.68rem;font-weight:900}.avatar-tone-0{background:#eaf2fb;color:#1a4d8f}.avatar-tone-1{background:#eaf8f3;color:#0f8464}.avatar-tone-2{background:#fff4e3;color:#b86a0b}.avatar-tone-3{background:#f2ecfb;color:#7652a8}.teacher-order-person>div{min-width:0}.teacher-order-person strong{display:block;overflow:hidden;max-width:12rem;color:var(--to-ink);font-size:.73rem;font-weight:850;text-overflow:ellipsis;white-space:nowrap}.teacher-order-person p{overflow:hidden;max-width:13rem;margin:.06rem 0;color:#718096;font-size:.64rem;text-overflow:ellipsis;white-space:nowrap}.teacher-order-person small{color:#9aa6b4;font-size:.61rem}.teacher-order-plan{min-width:8.5rem}.teacher-order-plan strong,.teacher-order-transfer strong{display:block;color:#344b63;font-size:.7rem;font-weight:800}.teacher-order-plan span,.teacher-order-transfer span{display:block;max-width:10rem;margin-top:.08rem;overflow:hidden;color:#8a97a6;font-size:.62rem;text-overflow:ellipsis;white-space:nowrap}.teacher-order-amount{display:flex;align-items:baseline;gap:.2rem;white-space:nowrap}.teacher-order-amount strong{color:var(--to-ink);font-size:.84rem;font-weight:900}.teacher-order-amount span{color:#718096;font-size:.6rem;font-weight:750}.teacher-order-status-date{display:flex;min-width:7.5rem;align-items:flex-start;flex-direction:column;gap:.24rem}.teacher-order-status{display:inline-flex;align-items:center;gap:.28rem;border-radius:999px;padding:.25rem .48rem;font-size:.64rem;font-weight:850;white-space:nowrap}.teacher-order-status i{width:.3rem;height:.3rem;border-radius:50%;background:currentColor}.teacher-order-status.is-pending{background:#fff7e8;color:#a9650f}.teacher-order-status.is-approved{background:#edf9f5;color:#0f8464}.teacher-order-status.is-rejected{background:#fff1f2;color:#c5303e}.teacher-order-status-date time{color:#8a97a6;font-size:.62rem}.teacher-order-actions{display:flex;min-width:8rem;align-items:center;justify-content:flex-start;gap:.3rem}.teacher-order-actions form{display:flex}.teacher-order-proof,.teacher-order-approve,.teacher-order-reject{display:inline-flex;min-height:1.95rem;align-items:center;justify-content:center;gap:.25rem;border:1px solid #dce4ed;border-radius:.44rem;background:#fff;padding:.3rem .48rem;color:#52667e;font-family:inherit;font-size:.62rem;font-weight:800;white-space:nowrap}.teacher-order-proof{color:#1a4d8f}.teacher-order-approve{border-color:#bfe6d8;color:#0f8464}.teacher-order-reject{border-color:#f1c9cf;color:#c5303e}.teacher-order-proof svg,.teacher-order-approve svg,.teacher-order-reject svg{width:.78rem;height:.78rem}.teacher-order-reject:has(span){padding-inline:.55rem}.teacher-order-no-proof{color:#a0abb8;font-size:.62rem;white-space:nowrap}
+		.teacher-orders-mobile{display:none}.teacher-order-mobile-card{border:1px solid var(--to-line);border-radius:.72rem;background:#fff;padding:.78rem;box-shadow:0 1px 2px rgb(15 23 42/.05)}.teacher-order-mobile-card>header{display:flex;align-items:flex-start;justify-content:space-between;gap:.6rem}.teacher-order-mobile-card>header .teacher-order-person{min-width:0}.teacher-order-mobile-card>header .teacher-order-person strong{font-size:.78rem}.teacher-order-mobile-card dl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.4rem;margin:.7rem 0 0}.teacher-order-mobile-card dl>div{border:1px solid #edf1f5;border-radius:.48rem;padding:.42rem}.teacher-order-mobile-card dl>div.is-wide{grid-column:1/-1}.teacher-order-mobile-card dt{color:#8a97a6;font-size:.64rem}.teacher-order-mobile-card dd{overflow:hidden;margin:.12rem 0 0;color:var(--to-ink);font-size:.72rem;font-weight:800;text-overflow:ellipsis;white-space:nowrap}.teacher-order-mobile-card>footer{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-top:.65rem;border-top:1px solid #edf1f5;padding-top:.62rem}.teacher-mobile-review{display:flex;gap:.3rem;margin-right:auto}.teacher-mobile-review form{display:flex}.teacher-mobile-review .teacher-order-approve,.teacher-mobile-review .teacher-order-reject{min-height:2.15rem;font-size:.68rem}
+		.teacher-orders-state{display:flex;min-height:14rem;align-items:center;justify-content:center;flex-direction:column;border:1px solid var(--to-line);border-radius:.78rem;background:#fff;padding:2rem;text-align:center}.teacher-orders-state>span{display:grid;width:3.1rem;height:3.1rem;place-items:center;border-radius:.7rem;background:#f1f5f9;color:#718096}.teacher-orders-state>span svg{width:1.3rem;height:1.3rem}.teacher-orders-state h2{margin:.65rem 0 0;color:var(--to-ink);font-size:.82rem;font-weight:900}.teacher-orders-state p{margin:.2rem 0 0;color:var(--to-muted);font-size:.65rem}.teacher-orders-state a{margin-top:.55rem;color:#1a4d8f;font-size:.65rem;font-weight:850}.teacher-orders-state.is-error{border-color:#fecaca}.teacher-orders-state.is-error>span{background:#fff1f2;color:#c5303e}
+		.teacher-reject-dialog{width:min(92vw,31rem);max-width:none;border:0;border-radius:.85rem;background:transparent;padding:0}.teacher-reject-dialog::backdrop{background:rgb(4 16 35/.58);backdrop-filter:blur(2px)}.teacher-reject-dialog-card{overflow:hidden;border:1px solid #dce4ed;border-radius:.85rem;background:#fff;box-shadow:0 20px 55px rgb(6 26 58/.22)}.teacher-reject-dialog-card>header{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;border-bottom:1px solid #edf1f5;padding:1rem 1.05rem}.teacher-reject-dialog-card>header span{color:#c5303e;font-size:.62rem;font-weight:850}.teacher-reject-dialog-card>header h2{margin:.15rem 0 0;color:#102a43;font-size:1rem;font-weight:900}.teacher-reject-dialog-card>header p{margin:.15rem 0 0;color:#718096;font-size:.64rem}.teacher-reject-dialog-card>header button{display:grid;width:2rem;height:2rem;place-items:center;border:1px solid #dfe6ee;border-radius:.45rem;background:#fff;color:#64748b}.teacher-reject-dialog-card>header svg{width:.85rem;height:.85rem}.teacher-reject-dialog-card form{padding:1rem 1.05rem}.teacher-reject-dialog-card form>p{margin:0 0 .7rem;color:#52667e;font-size:.68rem}.teacher-reject-dialog-card form>p strong{color:#102a43}.teacher-reject-dialog-card label span{display:block;margin-bottom:.3rem;color:#344b63;font-size:.66rem;font-weight:800}.teacher-reject-dialog-card textarea{width:100%;resize:vertical;border:1px solid #d9e2ec;border-radius:.5rem;background:#fff;padding:.58rem;color:#102a43;font-family:inherit;font-size:.7rem;line-height:1.7}.teacher-reject-dialog-card textarea:focus{border-color:#dc8d98;outline:0;box-shadow:0 0 0 3px rgb(197 48 62/.07)}.teacher-reject-dialog-card form>div{display:flex;justify-content:flex-end;gap:.4rem;margin-top:.75rem;border-top:1px solid #edf1f5;padding-top:.75rem}.teacher-reject-dialog-card form>div button{min-height:2.25rem;border-radius:.45rem;padding:.4rem .75rem;font-family:inherit;font-size:.65rem;font-weight:850}.teacher-reject-dialog-card form>div button:first-child{border:1px solid #dce4ed;background:#fff;color:#64748b}.teacher-reject-dialog-card form>div button:last-child{border:1px solid #a92937;background:#c5303e;color:#fff}
+		:global(.dark) .teacher-orders-page{--to-ink:#f8fafc;--to-muted:#94a3b8;--to-line:#334155}:global(.dark) .teacher-orders-header h1{color:#fff}:global(.dark) .teacher-orders-header-actions a,:global(.dark) .teacher-summary-card,:global(.dark) .teacher-orders-filter-card,:global(.dark) .teacher-orders-search input,:global(.dark) .teacher-orders-filter-button,:global(.dark) .teacher-orders-status-tabs a,:global(.dark) .teacher-orders-table-card,:global(.dark) .teacher-order-mobile-card,:global(.dark) .teacher-orders-state,:global(.dark) .teacher-order-proof,:global(.dark) .teacher-order-approve,:global(.dark) .teacher-order-reject{border-color:#334155;background:#0f2547;color:#cbd5e1}:global(.dark) .teacher-orders-header-actions a.is-primary{border-color:#315f9f;background:#1a4d8f;color:#fff}:global(.dark) .teacher-orders-status-tabs a.is-active{border-color:#315b8f;background:#132d50;color:#bfdbfe}:global(.dark) .teacher-orders-table-card th{background:#0b1e38}:global(.dark) .teacher-orders-table-head,:global(.dark) .teacher-orders-table-card td,:global(.dark) .teacher-order-mobile-card dl>div,:global(.dark) .teacher-order-mobile-card>footer{border-color:#263b56}:global(.dark) .teacher-orders-table-card tbody tr:hover{background:#122b4c}:global(.dark) .teacher-order-plan strong,:global(.dark) .teacher-order-transfer strong{color:#dbe5f0}:global(.dark) .teacher-reject-dialog-card{border-color:#334155;background:#0f2547}:global(.dark) .teacher-reject-dialog-card>header,:global(.dark) .teacher-reject-dialog-card form>div{border-color:#263b56}:global(.dark) .teacher-reject-dialog-card>header h2,:global(.dark) .teacher-reject-dialog-card form>p strong,:global(.dark) .teacher-reject-dialog-card label span{color:#f8fafc}:global(.dark) .teacher-reject-dialog-card>header button,:global(.dark) .teacher-reject-dialog-card textarea,:global(.dark) .teacher-reject-dialog-card form>div button:first-child{border-color:#40536a;background:#132943;color:#e2e8f0}
+		@media(max-width:1120px){.teacher-orders-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.teacher-orders-desktop{display:none}.teacher-orders-mobile{display:grid;gap:.65rem}}
+		@media(max-width:760px){.teacher-orders-header{align-items:stretch;flex-direction:column}.teacher-orders-header-actions a{flex:1}.teacher-orders-filter-card{align-items:stretch;flex-direction:column}.teacher-orders-filter-form{align-items:stretch;flex-wrap:wrap}.teacher-orders-search{max-width:none;min-width:100%}.teacher-orders-filter-button{flex:1}.teacher-orders-result-count{border:0;border-top:1px solid #edf1f5;padding:.58rem .1rem 0}.teacher-orders-status-tabs{grid-template-columns:repeat(2,minmax(0,1fr))}}
+		@media(max-width:480px){.teacher-orders-summary{grid-template-columns:1fr}.teacher-orders-header-actions{flex-direction:column}.teacher-order-mobile-card>header{flex-direction:column}.teacher-order-mobile-card>footer{align-items:stretch;flex-direction:column}.teacher-order-proof{width:100%}.teacher-mobile-review{width:100%;margin:0}.teacher-mobile-review form{flex:1}.teacher-mobile-review .teacher-order-approve{width:100%}.teacher-mobile-review .teacher-order-reject{flex:1}.teacher-orders-status-tabs a{font-size:.7rem}}
+	</style>
+</DashboardLayout>

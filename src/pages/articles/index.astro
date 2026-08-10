@@ -1,0 +1,9 @@
+---
+// Legacy bare path — the canonical listing lives at /{countryCode}/articles
+// (country is resolved from the cookie/query fallback since this URL has no country segment).
+// Search/filter query params (q, class_id, subject_id, page) are preserved across the redirect.
+import { getCountryById } from '../../lib/countries';
+
+const countryCode = getCountryById(Astro.locals.countryId).code;
+return Astro.redirect(`/${countryCode}/articles${Astro.url.search}`, 307);
+---

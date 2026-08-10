@@ -1,0 +1,109 @@
+---
+import HomeClassDirectory from './HomeClassDirectory.astro';
+import EmptyState from './ui/EmptyState.astro';
+import ErrorState from './ui/ErrorState.astro';
+
+interface Props {
+	classes: any[];
+	countryCode: string;
+	ok: boolean;
+	message: string;
+}
+
+const { classes, countryCode, ok, message } = Astro.props;
+const foundationCount = classes.filter((schoolClass: any) => /رياض|روضة|تمهيد/.test(String(schoolClass.grade_name || ''))).length;
+const secondaryCount = classes.filter((schoolClass: any) => /ثانو|بكالوريا/.test(String(schoolClass.grade_name || ''))).length;
+const basicCount = Math.max(0, classes.length - foundationCount - secondaryCount);
+---
+
+<section class="relative overflow-hidden border-b border-graphite-200 bg-white dark:border-graphite-800 dark:bg-graphite-950">
+	<div class="pointer-events-none absolute -right-28 -top-40 size-[30rem] rounded-full bg-royal-100/70 blur-3xl dark:bg-royal-900/25" aria-hidden="true"></div>
+	<div class="pointer-events-none absolute -bottom-32 left-10 size-80 rounded-full bg-emerald-brand-100/60 blur-3xl dark:bg-emerald-brand-900/15" aria-hidden="true"></div>
+	<div class="container-shell relative grid gap-8 py-10 sm:py-14 lg:grid-cols-[minmax(0,1fr)_23rem] lg:items-end lg:py-16">
+		<div class="max-w-3xl">
+			<span class="mb-4 inline-flex items-center gap-2 rounded-full border border-royal-100 bg-royal-50 px-3 py-1.5 text-xs font-extrabold text-royal-700 dark:border-royal-900 dark:bg-royal-950 dark:text-royal-200">
+				<svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m12 3 9 4.5-9 4.5-9-4.5L12 3Zm-7 7v5l7 4 7-4v-5"/></svg>
+				دليلك إلى المحتوى التعليمي
+			</span>
+			<h1 class="text-3xl font-black leading-tight tracking-tight text-graphite-950 sm:text-4xl lg:text-5xl dark:text-white">اختر صفك وابدأ رحلتك التعليمية</h1>
+			<p class="mt-4 max-w-2xl text-sm font-medium leading-8 text-graphite-600 sm:text-base dark:text-graphite-300">تصفح جميع الصفوف الدراسية، ثم انتقل إلى المواد والفصول والخطط وأوراق العمل والاختبارات المناسبة لمستواك.</p>
+			<div class="mt-6 flex flex-col gap-3 sm:flex-row">
+				<a href="#classes-directory" class="btn-primary">
+					استعرض الصفوف
+					<svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m12 5 7 7-7 7M19 12H5"/></svg>
+				</a>
+				<a href={`/${countryCode}/articles`} class="btn-outline">
+					<svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke-width="2"/><path stroke-linecap="round" stroke-width="2" d="m20 20-4-4"/></svg>
+					البحث في الملفات
+				</a>
+			</div>
+		</div>
+
+		<div class="grid grid-cols-3 gap-2 rounded-2xl border border-graphite-200 bg-white/85 p-3 shadow-soft backdrop-blur dark:border-graphite-700 dark:bg-graphite-900/85 sm:gap-3 sm:p-4">
+			<div class="rounded-xl bg-royal-50 px-2 py-4 text-center dark:bg-royal-950">
+				<strong class="block text-xl font-black text-royal-700 sm:text-2xl dark:text-royal-200">{classes.length.toLocaleString('ar-EG')}</strong>
+				<span class="mt-1 block text-[10px] font-bold text-graphite-500 sm:text-xs dark:text-graphite-400">صفًا دراسيًا</span>
+			</div>
+			<div class="rounded-xl bg-emerald-brand-50 px-2 py-4 text-center dark:bg-emerald-brand-950">
+				<strong class="block text-xl font-black text-emerald-brand-700 sm:text-2xl dark:text-emerald-brand-200">{basicCount.toLocaleString('ar-EG')}</strong>
+				<span class="mt-1 block text-[10px] font-bold text-graphite-500 sm:text-xs dark:text-graphite-400">صفًا أساسيًا</span>
+			</div>
+			<div class="rounded-xl bg-sunset-50 px-2 py-4 text-center dark:bg-sunset-900/25">
+				<strong class="block text-xl font-black text-sunset-600 sm:text-2xl dark:text-sunset-300">{secondaryCount.toLocaleString('ar-EG')}</strong>
+				<span class="mt-1 block text-[10px] font-bold text-graphite-500 sm:text-xs dark:text-graphite-400">صفًا ثانويًا</span>
+			</div>
+		</div>
+	</div>
+</section>
+
+<div class="container-shell pt-5 sm:pt-6">
+	<nav aria-label="مسار التصفح" class="rounded-2xl border border-graphite-200 bg-white px-4 py-4 shadow-soft sm:px-6 dark:border-graphite-700 dark:bg-graphite-900">
+		<ol class="flex items-center gap-2 text-xs font-semibold text-graphite-500 sm:text-sm dark:text-graphite-400">
+			<li><a href="/" class="inline-flex items-center gap-1.5 transition hover:text-royal-700 dark:hover:text-royal-300"><svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m3 11 9-8 9 8v9a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1v-9Z"/></svg>الرئيسية</a></li>
+			<li aria-hidden="true" class="text-graphite-300 dark:text-graphite-600">/</li>
+			<li><span class="font-extrabold text-graphite-800 dark:text-graphite-200" aria-current="page">الصفوف الدراسية</span></li>
+		</ol>
+	</nav>
+</div>
+
+<main class="page-shell pt-8 sm:pt-10">
+	<section id="classes-directory" class="scroll-mt-28" aria-labelledby="classes-directory-title">
+		<div class="mb-6 flex flex-col gap-3 sm:mb-8 sm:flex-row sm:items-end sm:justify-between">
+			<div>
+				<span class="mb-2 inline-flex items-center gap-2 text-sm font-extrabold text-emerald-brand-700 dark:text-emerald-brand-300"><span class="size-2 rounded-full bg-emerald-brand-500"></span>جميع المراحل في مكان واحد</span>
+				<h2 id="classes-directory-title" class="text-2xl font-black text-graphite-950 sm:text-3xl dark:text-white">حدد صفك الدراسي</h2>
+				<p class="mt-2 text-sm leading-7 text-graphite-500 dark:text-graphite-400">اضغط على بطاقة الصف للانتقال مباشرة إلى مواده وملفاته.</p>
+			</div>
+			<span class="w-fit rounded-xl bg-graphite-100 px-4 py-2 text-sm font-extrabold text-graphite-600 dark:bg-graphite-800 dark:text-graphite-300">{classes.length.toLocaleString('ar-EG')} صفوف متاحة</span>
+		</div>
+
+		{!ok ? (
+			<ErrorState message={message} />
+		) : classes.length > 0 ? (
+			<HomeClassDirectory classes={classes} countryCode={countryCode} />
+		) : (
+			<EmptyState message="لا توجد صفوف دراسية متاحة حاليًا." />
+		)}
+	</section>
+
+	<section class="mt-10 overflow-hidden rounded-2xl border border-graphite-200 bg-white shadow-soft sm:mt-12 dark:border-graphite-700 dark:bg-graphite-900" aria-labelledby="learning-path-title">
+		<header class="border-b border-graphite-200 bg-gradient-to-l from-royal-50 via-white to-emerald-brand-50 px-5 py-5 sm:px-7 dark:border-graphite-700 dark:from-royal-950/50 dark:via-graphite-900 dark:to-emerald-brand-950/30">
+			<span class="text-xs font-extrabold text-royal-600 dark:text-royal-300">ثلاث خطوات بسيطة</span>
+			<h2 id="learning-path-title" class="mt-1 text-xl font-black text-graphite-950 sm:text-2xl dark:text-white">كيف تصل إلى الملف المناسب؟</h2>
+		</header>
+		<ol class="grid grid-cols-1 divide-y divide-graphite-200 sm:grid-cols-3 sm:divide-x sm:divide-y-0 sm:divide-x-reverse dark:divide-graphite-700">
+			<li class="flex gap-4 p-5 sm:p-6">
+				<span class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-royal-600 text-sm font-black text-white">١</span>
+				<div><h3 class="font-black text-graphite-950 dark:text-white">اختر الصف</h3><p class="mt-1 text-xs font-medium leading-6 text-graphite-500 dark:text-graphite-400">حدد مرحلتك وصفك الدراسي الحالي.</p></div>
+			</li>
+			<li class="flex gap-4 p-5 sm:p-6">
+				<span class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-brand-600 text-sm font-black text-white">٢</span>
+				<div><h3 class="font-black text-graphite-950 dark:text-white">اختر المادة</h3><p class="mt-1 text-xs font-medium leading-6 text-graphite-500 dark:text-graphite-400">انتقل إلى المادة التي تريد دراستها.</p></div>
+			</li>
+			<li class="flex gap-4 p-5 sm:p-6">
+				<span class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-sunset-400 text-sm font-black text-white">٣</span>
+				<div><h3 class="font-black text-graphite-950 dark:text-white">تصفح الملفات</h3><p class="mt-1 text-xs font-medium leading-6 text-graphite-500 dark:text-graphite-400">اختر الفصل والتصنيف ثم افتح الملف.</p></div>
+			</li>
+		</ol>
+	</section>
+</main>

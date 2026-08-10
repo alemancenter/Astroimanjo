@@ -1,0 +1,126 @@
+---
+// General site search — /search?q=...&type=... — matches the legacy URL scheme still
+// referenced by old inbound links/search-engine index entries. `type` maps to a file
+// category slug (see lib/subject-categories.ts, e.g. "plan" -> study plans) and narrows
+// the search to articles in that category; without it, articles and posts are searched
+// together.
+import Layout from '../../layouts/Layout.astro';
+import '../../styles/content-pages.css';
+import Breadcrumbs from '../../components/ui/Breadcrumbs.astro';
+import ArticleCard from '../../components/ui/ArticleCard.astro';
+import PostCard from '../../components/ui/PostCard.astro';
+import Pagination from '../../components/ui/Pagination.astro';
+import EmptyState from '../../components/ui/EmptyState.astro';
+import ErrorState from '../../components/ui/ErrorState.astro';
+import { apiFetch } from '../../lib/api';
+import { getCountryById } from '../../lib/countries';
+import { SUBJECT_FILE_CATEGORIES } from '../../lib/subject-categories';
+
+const countryId = Astro.locals.countryId;
+const countryCode = getCountryById(countryId).code;
+const params = Astro.url.searchParams;
+const q = params.get('q')?.trim() ?? '';
+const type = params.get('type')?.trim() ?? '';
+const page = Math.max(1, Number(params.get('page')) || 1);
+const PER_PAGE = 12;
+
+const hasQuery = !!(q || type);
+
+let articles: any[] = [];
+let posts: any[] = [];
+let articlesMeta: any = null;
+let ok = true;
+let errorMessage = '';
+
+if (hasQuery) {
+	if (type) {
+		// A category is selected: articles-only, paginated within that category.
+		const result = await apiFetch<any[]>('/articles', {
+			countryId,
+			params: { q: q || undefined, file_category: type, page, per_page: PER_PAGE },
+		});
+		ok = result.ok;
+		errorMessage = result.message;
+		articles = Array.isArray(result.data) ? result.data : [];
+		articlesMeta = result.meta;
+	} else {
+		// No category: search articles and posts together, first page of each only —
+		// this is a broad "find anything" search, not a single paginated listing.
+		const [articlesResult, postsResult] = await Promise.all([
+			apiFetch<any[]>('/articles', { countryId, params: { q, page: 1, per_page: 9 } }),
+			apiFetch<any[]>('/posts', { countryId, params: { search: q, page: 1, per_page: 9 } }),
+		]);
+		ok = articlesResult.ok || postsResult.ok;
+		errorMessage = articlesResult.message || postsResult.message;
+		articles = Array.isArray(articlesResult.data) ? articlesResult.data : [];
+		posts = Array.isArray(postsResult.data) ? postsResult.data : [];
+	}
+}
+
+const totalResults = articles.length + posts.length;
+---
+
+<Layout title={q ? `نتائج البحث عن "${q}"` : 'البحث'} description="ابحث في مقالات وملفات وموضوعات الموقع." noindex>
+	<Breadcrumbs items={[{ label: 'البحث' }]} />
+
+	<div class="page-shell">
+		<header class="page-heading">
+			<span class="page-eyebrow">بحث شامل</span>
+			<h1 class="page-title">{q ? `نتائج البحث عن "${q}"` : 'البحث في الموقع'}</h1>
+			<p class="page-description">ابحث في المقالات والملفات الدراسية والمنشورات في مكان واحد.</p>
+		</header>
+
+		<form method="get" class="surface-card mb-10 flex flex-wrap gap-3 p-4 sm:p-5" aria-label="البحث في الموقع">
+			<input type="text" name="q" value={q} placeholder="اكتب كلمة أو عبارة للبحث..." class="form-control min-w-[220px] flex-1" autofocus />
+			<select name="type" onchange="this.form.submit()" class="form-control w-auto min-w-40">
+				<option value="">كل الأقسام</option>
+				{SUBJECT_FILE_CATEGORIES.map((cat) => (
+					<option value={cat.key} selected={type === cat.key}>{cat.label}</option>
+				))}
+			</select>
+			<button type="submit" class="btn-primary">بحث</button>
+		</form>
+
+		{
+			!hasQuery ? (
+				<EmptyState message="اكتب كلمة في مربع البحث أعلاه للبدء." />
+			) : !ok && totalResults === 0 ? (
+				<ErrorState message={errorMessage || 'تعذر إتمام البحث حالياً.'} />
+			) : totalResults === 0 ? (
+				<EmptyState message={`لا توجد نتائج مطابقة لـ "${q}".`} />
+			) : type ? (
+				<>
+					<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+						{articles.map((article: any, i: number) => (
+							<ArticleCard article={article} href={`/${countryCode}/lesson/articles/${article.id}`} index={i} />
+						))}
+					</div>
+					{articlesMeta && <Pagination currentPage={articlesMeta.current_page} lastPage={articlesMeta.last_page} url={Astro.url} />}
+				</>
+			) : (
+				<>
+					{articles.length > 0 && (
+						<div class="mb-12">
+							<h2 class="mb-6 text-xl font-extrabold text-graphite-950 dark:text-white">المقالات والملفات</h2>
+							<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+								{articles.map((article: any, i: number) => (
+									<ArticleCard article={article} href={`/${countryCode}/lesson/articles/${article.id}`} index={i} />
+								))}
+							</div>
+						</div>
+					)}
+					{posts.length > 0 && (
+						<div>
+							<h2 class="mb-6 text-xl font-extrabold text-graphite-950 dark:text-white">المنشورات</h2>
+							<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+								{posts.map((post: any, i: number) => (
+									<PostCard post={post} href={`/${countryCode}/posts/${post.id}`} index={i} />
+								))}
+							</div>
+						</div>
+					)}
+				</>
+			)
+		}
+	</div>
+</Layout>

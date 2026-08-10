@@ -1,0 +1,60 @@
+---
+// Shared body for the two live keyword URL forms (identical content either way):
+//   /{cc}/lesson/articles/keyword/{keyword}
+//   /{cc}/posts/keyword/{keyword}
+import Breadcrumbs from './ui/Breadcrumbs.astro';
+import ArticleCard from './ui/ArticleCard.astro';
+import PostCard from './ui/PostCard.astro';
+import EmptyState from './ui/EmptyState.astro';
+import ErrorState from './ui/ErrorState.astro';
+import { apiFetch } from '../lib/api';
+
+interface Props {
+	keyword: string;
+	countryCode: string;
+}
+
+const { keyword, countryCode } = Astro.props;
+const countryId = Astro.locals.countryId;
+const result = await apiFetch<any>(`/keywords/${encodeURIComponent(keyword)}`, { countryId });
+const data = result.data;
+const articles = data?.articles?.data ?? [];
+const posts = data?.posts?.data ?? [];
+---
+
+<Breadcrumbs items={[{ label: 'نتائج البحث بالوسم' }]} />
+
+<div class="page-shell">
+	<header class="page-heading"><span class="page-eyebrow">نتائج الوسم</span><h1 class="page-title"># {keyword}</h1><p class="page-description">المقالات والمنشورات المرتبطة بهذا الموضوع.</p></header>
+
+	{
+		!result.ok || !data ? (
+			<ErrorState message="لم يتم العثور على نتائج لهذا الوسم." />
+		) : articles.length === 0 && posts.length === 0 ? (
+			<EmptyState message="لا توجد نتائج مرتبطة بهذا الوسم حالياً." />
+		) : (
+			<>
+				{articles.length > 0 && (
+					<div class="mb-12">
+						<h2 class="mb-6 text-xl font-extrabold text-graphite-950 dark:text-white">المقالات</h2>
+						<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+							{articles.map((article: any, i: number) => (
+								<ArticleCard article={article} href={`/${countryCode}/lesson/articles/${article.id}`} index={i} />
+							))}
+						</div>
+					</div>
+				)}
+				{posts.length > 0 && (
+					<div>
+						<h2 class="mb-6 text-xl font-extrabold text-graphite-950 dark:text-white">المنشورات</h2>
+						<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+							{posts.map((post: any, i: number) => (
+								<PostCard post={post} href={`/${countryCode}/posts/${post.id}`} index={i} />
+							))}
+						</div>
+					</div>
+				)}
+			</>
+		)
+	}
+</div>

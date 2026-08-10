@@ -1,0 +1,67 @@
+---
+import DashboardLayout from '../../../layouts/DashboardLayout.astro';
+import DashboardAlert from '../../../components/ui/DashboardAlert.astro';
+import TeacherSubTabs from '../../../components/dashboard/TeacherSubTabs.astro';
+import Pagination from '../../../components/ui/Pagination.astro';
+import { requireDashboard } from '../../../lib/auth';
+import { apiFetch } from '../../../lib/api';
+
+const guard = await requireDashboard(Astro, 'manage teacher subscriptions');
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+
+const token = Astro.cookies.get('token')?.value;
+const page = Math.max(1, Number(Astro.url.searchParams.get('page')) || 1);
+const result = await apiFetch<any[]>('/dashboard/teacher-subscriptions/teachers', {
+	countryId: Astro.locals.countryId,
+	cookieHeader: `token=${token}`,
+	params: { page, per_page: 20 },
+});
+const teachers = Array.isArray(result.data) ? result.data : [];
+const meta = result.meta;
+---
+
+<DashboardLayout title="المعلمون" user={user}>
+	<DashboardAlert />
+	<TeacherSubTabs active="teachers" />
+
+	<div class="surface-card overflow-hidden">
+		<div class="overflow-x-auto">
+			<table class="w-full text-sm">
+				<thead class="bg-graphite-50 text-graphite-500 dark:bg-graphite-900/50 dark:text-graphite-400">
+					<tr>
+						<th class="text-right px-4 py-3 font-bold">الاسم</th>
+						<th class="text-right px-4 py-3 font-bold">المدرسة</th>
+						<th class="text-right px-4 py-3 font-bold">المدينة</th>
+						<th class="text-right px-4 py-3 font-bold">المواد</th>
+						<th class="text-right px-4 py-3 font-bold">إجراءات</th>
+					</tr>
+				</thead>
+				<tbody class="divide-y divide-graphite-100 dark:divide-graphite-800">
+					{
+						teachers.map((t: any) => {
+							let subjects: string[] = [];
+							try { subjects = JSON.parse(t.subjects || '[]'); } catch {}
+							return (
+								<tr>
+									<td class="px-4 py-3 font-bold text-graphite-950 dark:text-white">{t.user?.name}</td>
+									<td class="px-4 py-3 text-graphite-500 dark:text-graphite-400">{t.school || '—'}</td>
+									<td class="px-4 py-3 text-graphite-500 dark:text-graphite-400">{t.city || '—'}</td>
+									<td class="px-4 py-3 text-graphite-500 dark:text-graphite-400">{subjects.join('، ') || t.subject || '—'}</td>
+									<td class="px-4 py-3">
+										<form method="post" action={`/api/dashboard/teacher-subscriptions/teachers/${t.user_id}/remove-membership`} onsubmit="return confirm('إزالة عضوية هذا المعلم؟')">
+											<button type="submit" class="font-bold text-red-600 hover:underline dark:text-red-400">إزالة العضوية</button>
+										</form>
+									</td>
+								</tr>
+							);
+						})
+					}
+				</tbody>
+			</table>
+		</div>
+		{teachers.length === 0 && <p class="py-10 text-center text-graphite-400">لا يوجد معلمون بعد.</p>}
+	</div>
+
+	{meta && <Pagination currentPage={meta.current_page} lastPage={meta.last_page} url={Astro.url} />}
+</DashboardLayout>

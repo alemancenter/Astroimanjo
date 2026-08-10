@@ -1,0 +1,9 @@
+---
+// Legacy bare path — the canonical keyword results page lives at
+// /{countryCode}/lesson/articles/keyword/{keyword}.
+import { getCountryById } from '../../lib/countries';
+
+const { keyword } = Astro.params;
+const countryCode = getCountryById(Astro.locals.countryId).code;
+return Astro.redirect(`/${countryCode}/lesson/articles/keyword/${keyword}`, 307);
+---

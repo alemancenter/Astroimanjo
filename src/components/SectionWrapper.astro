@@ -1,0 +1,18 @@
+---
+interface Props { title: string; subtitle?: string; linkText?: string; linkUrl?: string; tone?: 'default' | 'muted'; }
+const { title, subtitle, linkText, linkUrl, tone = 'default' } = Astro.props;
+---
+<section class={`py-16 sm:py-20 ${tone === 'muted' ? 'bg-royal-50/55 dark:bg-graphite-950' : 'bg-white dark:bg-graphite-950/60'}`}>
+	<div class="container-shell">
+		<div class="mb-8 flex items-end justify-between gap-6 sm:mb-10">
+			<div class="max-w-3xl">
+				<div class="mb-3 h-1 w-12 rounded-full bg-gradient-to-l from-royal-600 to-emerald-brand-600"></div>
+				<h2 class="text-xl font-extrabold tracking-tight text-graphite-950 sm:text-2xl dark:text-white">{title}</h2>
+				{subtitle && <p class="mt-2.5 text-sm leading-7 text-graphite-600 sm:text-[15px] dark:text-graphite-300">{subtitle}</p>}
+			</div>
+			{linkText && linkUrl && <a href={linkUrl} class="btn-ghost hidden flex-shrink-0 sm:inline-flex">{linkText}<span aria-hidden="true">←</span></a>}
+		</div>
+		<slot />
+		{linkText && linkUrl && <div class="mt-8 sm:hidden"><a href={linkUrl} class="btn-outline w-full">{linkText}<span aria-hidden="true">←</span></a></div>}
+	</div>
+</section>

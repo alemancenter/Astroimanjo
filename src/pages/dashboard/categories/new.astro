@@ -1,0 +1,22 @@
+---
+import DashboardLayout from '../../../layouts/DashboardLayout.astro';
+import DashboardAlert from '../../../components/ui/DashboardAlert.astro';
+import CategoryForm from '../../../components/dashboard/CategoryForm.astro';
+import { requireDashboard } from '../../../lib/auth';
+import { apiFetchList } from '../../../lib/api';
+
+const guard = await requireDashboard(Astro, 'manage categories');
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+
+const { items: categories } = await apiFetchList<any>('/dashboard/categories', {
+	countryId: Astro.locals.countryId,
+	cookieHeader: `token=${Astro.cookies.get('token')?.value}`,
+	params: { per_page: 200 },
+});
+---
+
+<DashboardLayout title="قسم جديد" user={user}>
+	<DashboardAlert />
+	<CategoryForm categories={categories} countryId={Astro.locals.countryId} />
+</DashboardLayout>

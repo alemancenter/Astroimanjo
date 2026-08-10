@@ -1,0 +1,191 @@
+---
+interface Props {
+	googleClientId?: string;
+	facebookAppId?: string;
+	redirectTo?: string;
+	action?: 'login' | 'register';
+}
+
+const { googleClientId = '', facebookAppId = '', redirectTo = '/', action = 'login' } = Astro.props;
+const enabled = Boolean(googleClientId || facebookAppId);
+const actionLabel = action === 'register' ? 'المتابعة عبر' : 'الدخول عبر';
+---
+
+{enabled && (
+	<div
+		class="social-login space-y-3"
+		data-social-login
+		data-google-client-id={googleClientId}
+		data-facebook-app-id={facebookAppId}
+		data-redirect-to={redirectTo}
+	>
+		<div class="grid gap-3 sm:grid-cols-2">
+			{googleClientId && (
+				<button type="button" class="social-login__button" data-social-provider="google">
+					<svg viewBox="0 0 24 24" class="size-5 shrink-0" aria-hidden="true">
+						<path fill="#4285F4" d="M23.49 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.47c-.29 1.48-1.14 2.73-2.43 3.58v2.98h3.86c2.26-2.09 3.59-5.17 3.59-8.8z" />
+						<path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-2.98c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.29v3.09C3.26 21.3 7.31 24 12 24z" />
+						<path fill="#FBBC05" d="M5.27 14.31c-.24-.72-.38-1.49-.38-2.31s.14-1.59.38-2.31V6.6H1.29A11.96 11.96 0 0 0 0 12c0 1.94.46 3.77 1.29 5.4l3.98-3.09z" />
+						<path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.94 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.6l3.98 3.09c.95-2.85 3.6-4.94 6.73-4.94z" />
+					</svg>
+					<span>{actionLabel} Google</span>
+				</button>
+			)}
+			{facebookAppId && (
+				<button type="button" class="social-login__button" data-social-provider="facebook">
+					<svg viewBox="0 0 24 24" class="size-5 shrink-0" fill="#1877F2" aria-hidden="true">
+						<path d="M24 12.07C24 5.4 18.63 0 12 0S0 5.4 0 12.07c0 5.99 4.39 10.96 10.13 11.87v-8.38H7.08v-3.49h3.05V9.41c0-3.02 1.79-4.7 4.53-4.7 1.31 0 2.68.24 2.68.24v2.94h-1.51c-1.49 0-1.95.93-1.95 1.89v2.28h3.32l-.53 3.49h-2.79v8.38C19.61 23.03 24 18.06 24 12.07z" />
+					</svg>
+					<span>{actionLabel} Facebook</span>
+				</button>
+			)}
+		</div>
+		<p class="social-login__error hidden" data-social-error role="alert"></p>
+	</div>
+)}
+
+<script>
+	type Provider = 'google' | 'facebook';
+	type FacebookResponse = { status?: string; authResponse?: { accessToken?: string } };
+
+	declare global {
+		interface Window {
+			google?: {
+				accounts?: { oauth2?: { initTokenClient(config: {
+					client_id: string;
+					scope: string;
+					callback(response: { access_token?: string; error?: string }): void;
+					error_callback?(error: { message?: string }): void;
+				}): { requestAccessToken(): void } } };
+			};
+			FB?: {
+				init(config: { appId: string; version: string; xfbml: boolean; cookie: boolean }): void;
+				login(callback: (response: FacebookResponse) => void, options: { scope: string }): void;
+			};
+			fbAsyncInit?: () => void;
+		}
+	}
+
+	const loadedScripts = new Map<string, Promise<void>>();
+
+	function loadScript(src: string, id: string): Promise<void> {
+		const cached = loadedScripts.get(id);
+		if (cached) return cached;
+		const promise = new Promise<void>((resolve, reject) => {
+			if (document.getElementById(id)) return resolve();
+			const script = document.createElement('script');
+			script.id = id;
+			script.src = src;
+			script.async = true;
+			script.defer = true;
+			script.onload = () => resolve();
+			script.onerror = () => reject(new Error('تعذر تحميل خدمة تسجيل الدخول.'));
+			document.head.appendChild(script);
+		});
+		loadedScripts.set(id, promise);
+		return promise;
+	}
+
+	async function googleToken(clientId: string): Promise<string> {
+		await loadScript('https://accounts.google.com/gsi/client', 'google-identity-services');
+		if (!window.google?.accounts?.oauth2) throw new Error('تعذر تشغيل تسجيل الدخول عبر Google.');
+		return new Promise((resolve, reject) => {
+			const client = window.google!.accounts!.oauth2!.initTokenClient({
+				client_id: clientId,
+				scope: 'openid email profile',
+				callback: (response) => response.access_token
+					? resolve(response.access_token)
+					: reject(new Error('لم تكتمل عملية تسجيل الدخول عبر Google.')),
+				error_callback: (error) => reject(new Error(error.message || 'تم إلغاء تسجيل الدخول عبر Google.')),
+			});
+			client.requestAccessToken();
+		});
+	}
+
+	async function facebookToken(appId: string): Promise<string> {
+		await new Promise<void>((resolve, reject) => {
+			window.fbAsyncInit = () => {
+				window.FB?.init({ appId, version: 'v26.0', xfbml: false, cookie: false });
+				resolve();
+			};
+			loadScript('https://connect.facebook.net/ar_AR/sdk.js', 'facebook-jssdk').catch(reject);
+			if (window.FB) {
+				window.FB.init({ appId, version: 'v26.0', xfbml: false, cookie: false });
+				resolve();
+			}
+		});
+		if (!window.FB) throw new Error('تعذر تشغيل تسجيل الدخول عبر Facebook.');
+		return new Promise((resolve, reject) => {
+			window.FB!.login((response) => {
+				const token = response.authResponse?.accessToken;
+				if (response.status === 'connected' && token) resolve(token);
+				else reject(new Error('لم تكتمل عملية تسجيل الدخول عبر Facebook.'));
+			}, { scope: 'email,public_profile' });
+		});
+	}
+
+	async function completeLogin(provider: Provider, token: string, redirectTo: string): Promise<void> {
+		const response = await fetch('/api/auth/social-login', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ provider, token, redirect_to: redirectTo }),
+		});
+		const result = await response.json().catch(() => null);
+		if (!response.ok || !result?.success) throw new Error(result?.message || 'تعذر تسجيل الدخول، يرجى المحاولة مجددًا.');
+		window.location.assign(result.redirect || '/');
+	}
+
+	document.querySelectorAll<HTMLElement>('[data-social-login]').forEach((root) => {
+		if (root.dataset.initialized === 'true') return;
+		root.dataset.initialized = 'true';
+		const errorBox = root.querySelector<HTMLElement>('[data-social-error]');
+		const buttons = Array.from(root.querySelectorAll<HTMLButtonElement>('[data-social-provider]'));
+		buttons.forEach((button) => button.addEventListener('click', async () => {
+			const provider = button.dataset.socialProvider as Provider;
+			const original = button.innerHTML;
+			buttons.forEach((item) => { item.disabled = true; });
+			button.innerHTML = '<span class="social-login__spinner" aria-hidden="true"></span><span>جاري الاتصال...</span>';
+			if (errorBox) { errorBox.textContent = ''; errorBox.classList.add('hidden'); }
+			try {
+				const token = provider === 'google'
+					? await googleToken(root.dataset.googleClientId || '')
+					: await facebookToken(root.dataset.facebookAppId || '');
+				await completeLogin(provider, token, root.dataset.redirectTo || '/');
+			} catch (error) {
+				if (errorBox) {
+					errorBox.textContent = error instanceof Error ? error.message : 'تعذر تسجيل الدخول.';
+					errorBox.classList.remove('hidden');
+				}
+				button.innerHTML = original;
+				buttons.forEach((item) => { item.disabled = false; });
+			}
+		}));
+	});
+</script>
+
+<style>
+	.social-login__button {
+		display: inline-flex;
+		min-height: 3rem;
+		align-items: center;
+		justify-content: center;
+		gap: .65rem;
+		border: 1px solid var(--color-graphite-200);
+		border-radius: .85rem;
+		background: white;
+		padding: .7rem 1rem;
+		color: var(--color-graphite-800);
+		font-size: .875rem;
+		font-weight: 700;
+		transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+	}
+	.social-login__button:hover { transform: translateY(-1px); border-color: var(--color-royal-300); box-shadow: 0 8px 22px rgb(26 77 143 / .1); }
+	.social-login__button:focus-visible { outline: 3px solid color-mix(in srgb, var(--color-royal-500) 25%, transparent); outline-offset: 2px; }
+	.social-login__button:disabled { cursor: wait; opacity: .65; }
+	.social-login__error { margin: .75rem 0 0; border: 1px solid rgb(254 202 202); border-radius: .75rem; background: rgb(254 242 242); padding: .65rem .85rem; color: rgb(185 28 28); font-size: .8rem; line-height: 1.6; }
+	.social-login__spinner { width: 1rem; height: 1rem; border: 2px solid currentColor; border-inline-start-color: transparent; border-radius: 999px; animation: social-spin .7s linear infinite; }
+	@keyframes social-spin { to { transform: rotate(360deg); } }
+	:global(.dark) .social-login__button { border-color: var(--color-graphite-700); background: var(--color-graphite-950); color: var(--color-graphite-100); }
+	:global(.dark) .social-login__button:hover { border-color: var(--color-royal-500); }
+	:global(.dark) .social-login__error { border-color: rgb(127 29 29); background: rgb(69 10 10 / .45); color: rgb(252 165 165); }
+</style>

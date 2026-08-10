@@ -1,0 +1,249 @@
+---
+import DashboardLayout from '../../layouts/DashboardLayout.astro';
+import DashboardAlert from '../../components/ui/DashboardAlert.astro';
+import DashboardNavIcon from '../../components/dashboard/DashboardNavIcon.astro';
+import CountrySwitcher from '../../components/CountrySwitcher.astro';
+import { requireDashboard, hasPermission, isAdmin } from '../../lib/auth';
+import { apiFetch } from '../../lib/api';
+import { getCountryById } from '../../lib/countries';
+
+const guard = await requireDashboard(Astro);
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+const countryId = Astro.locals.countryId;
+const cookieHeader = `token=${Astro.cookies.get('token')?.value}`;
+const currentCountry = getCountryById(countryId);
+const canMonitor = isAdmin(user) || hasPermission(user, 'manage monitoring') || hasPermission(user, 'manage performance');
+const canSecurity = isAdmin(user) || hasPermission(user, 'manage security');
+const canTeacher = isAdmin(user) || hasPermission(user, 'manage teacher subscriptions');
+const unavailable = Promise.resolve({ ok: false, data: null, message: '', meta: null, status: 403 });
+
+const [summaryResult, contentResult, visitorResult, liveResult, cacheResult, responseResult, securityOverviewResult, securityStatsResult, teacherResult] = await Promise.all([
+	apiFetch<any>('/dashboard', { countryId, cookieHeader }),
+	apiFetch<any>('/dashboard/content-analytics', { countryId, cookieHeader }),
+	canMonitor ? apiFetch<any>('/dashboard/visitor-analytics', { countryId, cookieHeader, params: { days: 7 } }) : unavailable,
+	canMonitor ? apiFetch<any>('/dashboard/performance/live', { countryId, cookieHeader }) : unavailable,
+	canMonitor ? apiFetch<any>('/dashboard/performance/cache', { countryId, cookieHeader }) : unavailable,
+	canMonitor ? apiFetch<any>('/dashboard/performance/response-time', { countryId, cookieHeader }) : unavailable,
+	canSecurity ? apiFetch<any>('/dashboard/security/overview', { countryId, cookieHeader }) : unavailable,
+	canSecurity ? apiFetch<any>('/dashboard/security/stats', { countryId, cookieHeader }) : unavailable,
+	canTeacher ? apiFetch<any>('/dashboard/teacher-subscriptions/dashboard', { countryId, cookieHeader }) : unavailable,
+]);
+
+const summary = summaryResult.data || {};
+const totals = summary.totals || {};
+const trends = summary.trends || {};
+const analytics = summary.analytics || {};
+const content = contentResult.data || {};
+const visitor = visitorResult.data || {};
+const visitorStats = visitor.visitor_stats || {};
+const userStats = visitor.user_stats || {};
+const live = liveResult.data || {};
+const cache = cacheResult.data || {};
+const response = responseResult.data || {};
+const securityOverview = securityOverviewResult.data || {};
+const securityStats = securityStatsResult.data || {};
+const teacher = teacherResult.data || {};
+const teacherStats = teacher.stats || {};
+const recentActivities: any[] = Array.isArray(summary.recentActivities) ? summary.recentActivities : [];
+const onlineUsers: any[] = Array.isArray(summary.onlineUsers) ? summary.onlineUsers : [];
+
+const numberValue = (...values: unknown[]) => {
+	for (const value of values) {
+		const parsed = Number(value);
+		if (Number.isFinite(parsed)) return parsed;
+	}
+	return 0;
+};
+const number = new Intl.NumberFormat('ar-EG');
+const decimal = new Intl.NumberFormat('ar-EG', { maximumFractionDigits: 1 });
+const formatNumber = (value: unknown) => number.format(numberValue(value));
+const formatPercent = (value: unknown) => `${decimal.format(Math.abs(numberValue(value)))}%`;
+const formatBytes = (value: unknown) => {
+	const bytes = numberValue(value);
+	if (!bytes) return '0 بايت';
+	if (bytes < 1024) return `${number.format(bytes)} بايت`;
+	if (bytes < 1024 ** 2) return `${decimal.format(bytes / 1024)} كيلوبايت`;
+	if (bytes < 1024 ** 3) return `${decimal.format(bytes / 1024 ** 2)} ميجابايت`;
+	return `${decimal.format(bytes / 1024 ** 3)} جيجابايت`;
+};
+const formatDateTime = (value: unknown) => {
+	const date = new Date(String(value || ''));
+	return Number.isNaN(date.getTime()) ? 'حديثًا' : date.toLocaleString('ar-EG', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+};
+const trendValue = (trend: any) => numberValue(trend?.percentage, trend);
+const trendDown = (trend: any) => trend?.trend === 'down' || trendValue(trend) < 0;
+
+const dates: string[] = Array.isArray(analytics.dates) ? analytics.dates.slice(-7) : [];
+const labels = dates.map((value, index) => {
+	const date = new Date(String(value).length > 10 ? String(value) : `${value}T00:00:00`);
+	return Number.isNaN(date.getTime()) ? String(index + 1) : date.toLocaleDateString('ar-EG', { weekday: 'short' });
+});
+const series: { articles: number[]; posts: number[]; comments: number[] } = {
+	articles: (Array.isArray(analytics.articles) ? analytics.articles : []).slice(-7).map(Number),
+	posts: (Array.isArray(analytics.news) ? analytics.news : []).slice(-7).map(Number),
+	comments: (Array.isArray(analytics.comments) ? analytics.comments : []).slice(-7).map(Number),
+};
+const seriesLength = Math.max(labels.length, series.articles.length, series.posts.length, series.comments.length, 1);
+const normalizeSeries = (values: number[]) => Array.from({ length: seriesLength }, (_, index) => numberValue(values[index]));
+series.articles = normalizeSeries(series.articles);
+series.posts = normalizeSeries(series.posts);
+series.comments = normalizeSeries(series.comments);
+const chartMax = Math.max(1, ...series.articles, ...series.posts, ...series.comments);
+const linePoints = (values: number[], width = 720, height = 205) => values.map((value, index) => {
+	const x = values.length <= 1 ? width / 2 : (index / (values.length - 1)) * width;
+	const y = height - (value / chartMax) * (height - 26) - 10;
+	return `${x.toFixed(1)},${y.toFixed(1)}`;
+}).join(' ');
+const articlePoints = linePoints(series.articles);
+const postPoints = linePoints(series.posts);
+const commentPoints = linePoints(series.comments);
+const articleArea = `M0 215 L${articlePoints.replaceAll(' ', ' L')} L720 215 Z`;
+
+const visitorChart: any[] = Array.isArray(visitor.chart_data) ? visitor.chart_data.slice(-7) : [];
+const visitorMax = Math.max(1, ...visitorChart.map((item) => numberValue(item.pageViews, item.views, item.visits)));
+const publishedArticles = numberValue(content.published_articles);
+const draftArticles = numberValue(content.draft_articles);
+const contentTotal = publishedArticles + draftArticles;
+const publishRatio = contentTotal > 0 ? Math.round((publishedArticles / contentTotal) * 100) : 0;
+const memoryPercent = Math.round(numberValue(live.memory?.usage_percentage, live.memory?.percentage));
+const cacheRatio = Math.round(numberValue(cache.hit_ratio));
+const avgResponse = numberValue(response.average_ms);
+const platformHealthy = summaryResult.ok && (!canMonitor || (liveResult.ok && cacheResult.ok && responseResult.ok));
+
+const kpis = [
+	{ label: 'إجمالي المقالات', value: totals.articles, note: `${formatNumber(publishedArticles)} مقال منشور`, href: '/dashboard/articles', icon: 'article', tone: 'blue', trend: trends.articles, permission: 'manage articles' },
+	{ label: 'المنشورات', value: totals.news, note: 'الأخبار والمحتوى العام', href: '/dashboard/posts', icon: 'post', tone: 'violet', trend: trends.news, permission: 'manage posts' },
+	{ label: 'المستخدمون', value: numberValue(totals.users, userStats.total), note: `${formatNumber(userStats.new_today)} تسجيل جديد اليوم`, href: '/dashboard/users', icon: 'users', tone: 'orange', trend: trends.users, permission: 'manage users' },
+	{ label: 'النشطون الآن', value: numberValue(visitorStats.current, totals.online_users), note: `${formatNumber(visitorStats.current_members)} عضو · ${formatNumber(visitorStats.current_guests)} زائر`, href: '/dashboard/users', icon: 'dashboard', tone: 'green', trend: { percentage: visitorStats.change, trend: numberValue(visitorStats.change) < 0 ? 'down' : 'up' }, permission: 'manage users' },
+].filter((item) => isAdmin(user) || hasPermission(user, item.permission));
+
+const healthCards = [
+	{ label: 'زمن الاستجابة', value: canMonitor && responseResult.ok ? `${formatNumber(avgResponse)} ms` : 'غير متاح', note: avgResponse <= 150 ? 'استجابة ممتازة' : avgResponse <= 500 ? 'استجابة مقبولة' : 'تحتاج إلى متابعة', pct: Math.min(100, (avgResponse / 1000) * 100), tone: avgResponse > 500 ? 'red' : avgResponse > 150 ? 'orange' : 'green', icon: 'dashboard', href: '/dashboard/redis' },
+	{ label: 'ذاكرة التطبيق', value: canMonitor && liveResult.ok ? `${formatNumber(memoryPercent)}%` : 'غير متاح', note: canMonitor && liveResult.ok ? `${formatBytes(live.memory?.used)} مستخدم` : 'صلاحية المراقبة مطلوبة', pct: memoryPercent, tone: memoryPercent > 85 ? 'red' : memoryPercent > 65 ? 'orange' : 'blue', icon: 'files', href: '/dashboard/security' },
+	{ label: 'كفاءة Redis', value: canMonitor && cacheResult.ok ? `${formatNumber(cacheRatio)}%` : 'غير متاح', note: canMonitor && cacheResult.ok ? `${cache.cache_size || '0 B'} حجم الكاش` : 'صلاحية المراقبة مطلوبة', pct: cacheRatio, tone: cacheRatio >= 70 ? 'green' : cacheRatio > 0 ? 'orange' : 'dark', icon: 'database', href: '/dashboard/redis' },
+	{ label: 'تنبيهات الأمن', value: canSecurity && securityOverviewResult.ok ? formatNumber(securityOverview.last_24h_events) : 'غير متاح', note: canSecurity ? `${formatNumber(securityStats.blocked_ips)} عنوان محظور` : 'صلاحية الأمن مطلوبة', pct: Math.min(100, numberValue(securityOverview.last_24h_events)), tone: numberValue(securityStats.critical_logs) > 0 ? 'red' : 'green', icon: 'security', href: '/dashboard/security' },
+];
+
+const topItems = [
+	...((Array.isArray(content.top_articles) ? content.top_articles : []).map((item: any) => ({ id: item.id, title: item.title || 'مقال بدون عنوان', type: 'مقال', views: numberValue(item.visit_count, item.views), href: `/dashboard/articles/${item.id}/edit` }))),
+	...((Array.isArray(content.top_posts) ? content.top_posts : []).map((item: any) => ({ id: item.id, title: item.title || 'منشور بدون عنوان', type: 'منشور', views: numberValue(item.views, item.visit_count), href: `/dashboard/posts/${item.id}/edit` }))),
+].sort((a, b) => b.views - a.views).slice(0, 5);
+
+const quickActions = [
+	{ label: 'إضافة مقال', note: 'محتوى تعليمي جديد', href: '/dashboard/articles/new', icon: 'article', tone: 'blue', permission: 'manage articles' },
+	{ label: 'إضافة منشور', note: 'خبر أو إعلان عام', href: '/dashboard/posts/new', icon: 'post', tone: 'green', permission: 'manage posts' },
+	{ label: 'تدقيق المحتوى', note: 'الجودة وجاهزية AdSense', href: '/dashboard/content-audit', icon: 'audit', tone: 'orange', permission: 'manage content audit' },
+	{ label: 'إدارة الملفات', note: 'المرفقات والتنزيلات', href: '/dashboard/files', icon: 'files', tone: 'violet', permission: 'manage files' },
+	{ label: 'مركز الأمان', note: 'التنبيهات والعناوين', href: '/dashboard/security', icon: 'security', tone: 'red', permission: 'manage security' },
+	{ label: 'إعدادات المنصة', note: 'البريد والتكاملات', href: '/dashboard/settings', icon: 'settings', tone: 'dark', permission: 'manage settings' },
+].filter((item) => isAdmin(user) || hasPermission(user, item.permission));
+
+const activityIcon = (type: unknown) => String(type || '').toLowerCase().includes('comment') ? 'comments' : String(type || '').toLowerCase().includes('news') ? 'post' : 'article';
+---
+
+<DashboardLayout title="لوحة القيادة" description="مركز إدارة المنصة ومؤشرات الأداء" user={user}>
+	<div class="dashboard-home">
+		<DashboardAlert />
+		{!summaryResult.ok && <div class="dashboard-alert" role="alert"><i>!</i><div><strong>تعذّر جلب جزء من بيانات لوحة القيادة</strong><span>{summaryResult.message || 'تحقق من اتصال الباك إند ثم أعد تحديث الصفحة.'}</span></div><button type="button" onclick="window.location.reload()">إعادة المحاولة</button></div>}
+
+		<header class="dashboard-hero">
+			<div class="hero-copy">
+				<div class="hero-badges"><span><svg viewBox="0 0 24 24"><path d="M4 19V9m5 10V5m6 14v-7m5 7V3"/></svg>مركز إدارة المنصة</span><b class:list={{ online: platformHealthy }}><i></i>{platformHealthy ? 'الأنظمة تعمل بصورة طبيعية' : 'بعض المؤشرات غير متاحة'}</b></div>
+				<h1>لوحة القيادة</h1>
+				<p>صورة تنفيذية مباشرة لنشاط منصة {currentCountry.name}، تجمع المحتوى والزوار والأداء والتنبيهات في مكان واحد.</p>
+			</div>
+			<div class="hero-actions">
+				<div class="country-control"><span>قاعدة البيانات</span><CountrySwitcher /></div>
+				<button type="button" class="refresh-button" onclick="window.location.reload()"><svg viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6 9a7 7 0 0 1 12-2l2 2M4 15l2 2a7 7 0 0 0 12-2"/></svg><span>تحديث البيانات</span></button>
+				<a href="/" target="_blank" rel="noopener"><svg viewBox="0 0 24 24"><path d="M14 5h5v5m0-5-8 8M19 13v6H5V5h6"/></svg><span>عرض الموقع</span></a>
+			</div>
+		</header>
+
+		<section class="kpi-grid" aria-label="المؤشرات الرئيسية">
+			{kpis.map((item) => <a href={item.href} class={`kpi-card is-${item.tone}`}>
+				<header><span>{item.label}</span><i><DashboardNavIcon name={item.icon} class="size-5" /></i></header>
+				<div class="kpi-value"><strong>{formatNumber(item.value)}</strong>{trendValue(item.trend) !== 0 && <b class:list={{ down: trendDown(item.trend) }}>{trendDown(item.trend) ? '↓' : '↑'} {formatPercent(trendValue(item.trend))}</b>}</div>
+				<footer><span>{item.note}</span><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></footer>
+			</a>)}
+		</section>
+
+		<section class="health-strip" aria-label="صحة التشغيل">
+			{healthCards.map((item) => <a href={item.href} class={`health-card is-${item.tone}`}>
+				<i><DashboardNavIcon name={item.icon} class="size-4" /></i>
+				<div><span>{item.label}</span><strong>{item.value}</strong><small>{item.note}</small></div>
+				<aside><b style={`height:${Math.max(4, Math.min(100, item.pct))}%`}></b></aside>
+			</a>)}
+		</section>
+
+		<div class="primary-grid">
+			<section class="panel activity-chart-panel">
+				<header class="panel-heading"><div><span>آخر سبعة أيام</span><h2>نبض المحتوى</h2><p>حركة إنشاء المقالات والمنشورات والتعليقات يومًا بيوم.</p></div><div class="chart-legend"><span><i class="blue"></i>المقالات</span><span><i class="green"></i>المنشورات</span><span><i class="orange"></i>التعليقات</span></div></header>
+				<div class="large-chart">
+					<svg viewBox="0 0 720 230" role="img" aria-label="نشاط المحتوى خلال سبعة أيام" preserveAspectRatio="none"><defs><linearGradient id="activityArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1A4D8F" stop-opacity=".2"/><stop offset="100%" stop-color="#1A4D8F" stop-opacity="0"/></linearGradient></defs><g class="chart-grid"><line x1="0" x2="720" y1="35" y2="35"/><line x1="0" x2="720" y1="95" y2="95"/><line x1="0" x2="720" y1="155" y2="155"/><line x1="0" x2="720" y1="215" y2="215"/></g><path d={articleArea} fill="url(#activityArea)" stroke="none"/><polyline points={articlePoints} class="article-line"/><polyline points={postPoints} class="post-line"/><polyline points={commentPoints} class="comment-line"/></svg>
+					<div class="chart-labels">{Array.from({ length: seriesLength }, (_, index) => <span>{labels[index] || `يوم ${number.format(index + 1)}`}</span>)}</div>
+				</div>
+				<footer class="chart-totals"><div><i class="blue"></i><span>مقالات الأسبوع</span><strong>{formatNumber(series.articles.reduce((sum, value) => sum + value, 0))}</strong></div><div><i class="green"></i><span>منشورات الأسبوع</span><strong>{formatNumber(series.posts.reduce((sum, value) => sum + value, 0))}</strong></div><div><i class="orange"></i><span>تعليقات الأسبوع</span><strong>{formatNumber(series.comments.reduce((sum, value) => sum + value, 0))}</strong></div></footer>
+			</section>
+
+			<aside class="panel live-panel">
+				<header class="panel-heading"><div><span>متابعة مباشرة</span><h2>الزوار الآن</h2><p>نشاط المستخدمين خلال الدقائق الأخيرة.</p></div><b class="live-badge"><i></i>مباشر</b></header>
+				<div class="live-total"><div class="live-ring"><span><strong>{canMonitor ? formatNumber(visitorStats.current) : '—'}</strong><small>متصل الآن</small></span></div><div class="live-breakdown"><div><span>الأعضاء</span><strong>{canMonitor ? formatNumber(visitorStats.current_members) : '—'}</strong></div><div><span>الزوار</span><strong>{canMonitor ? formatNumber(visitorStats.current_guests) : '—'}</strong></div><div><span>زيارات اليوم</span><strong>{canMonitor ? formatNumber(visitorStats.total_combined_today || visitorStats.total_today) : '—'}</strong></div></div></div>
+				<div class="visitor-bars" aria-label="زيارات الأيام الأخيرة">{visitorChart.length ? visitorChart.map((item) => { const views = numberValue(item.pageViews, item.views, item.visits); return <div title={`${formatNumber(views)} مشاهدة`}><b style={`height:${Math.max(7, (views / visitorMax) * 100)}%`}></b><span>{String(item.name || '').slice(0, 3) || '—'}</span></div>; }) : Array.from({ length: 7 }, () => <div><b style="height:7%"></b><span>—</span></div>)}</div>
+				{onlineUsers.length > 0 && <div class="online-users"><span>متصلون مؤخرًا</span><div>{onlineUsers.slice(0, 5).map((online: any) => <a href={`/dashboard/users?view=${online.id}`} title={online.name || 'مستخدم'}>{String(online.name || 'م').trim().slice(0, 1)}</a>)}{onlineUsers.length > 5 && <b>+{number.format(onlineUsers.length - 5)}</b>}</div></div>}
+				<a class="panel-link" href="/dashboard/users"><span>عرض المستخدمين</span><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></a>
+			</aside>
+		</div>
+
+		<div class="insights-grid">
+			<section class="panel content-health">
+				<header class="panel-heading"><div><span>جاهزية النشر</span><h2>حالة المحتوى</h2><p>نسبة المقالات المنشورة إلى المسودات.</p></div><a href="/dashboard/content-audit">فتح التدقيق</a></header>
+				<div class="content-health-body"><div class="content-donut" style={`--publish:${publishRatio * 3.6}deg`}><span><strong>{formatNumber(publishRatio)}%</strong><small>منشور</small></span></div><div class="content-counts"><div><i class="published"></i><span>المقالات المنشورة</span><strong>{formatNumber(publishedArticles)}</strong></div><div><i class="draft"></i><span>المسودات</span><strong>{formatNumber(draftArticles)}</strong></div><div><i class="total"></i><span>إجمالي المحتوى</span><strong>{formatNumber(contentTotal)}</strong></div></div></div>
+				<footer><span>{publishRatio >= 80 ? 'نسبة النشر جيدة، حافظ على مراجعة الجودة.' : 'توجد مسودات تحتاج إلى مراجعة واستكمال.'}</span><b class:list={{ good: publishRatio >= 80 }}>{publishRatio >= 80 ? 'مستقر' : 'يحتاج متابعة'}</b></footer>
+			</section>
+
+			<section class="panel top-content">
+				<header class="panel-heading"><div><span>الأكثر مشاهدة</span><h2>أفضل المحتوى أداءً</h2><p>ترتيب موحد للمقالات والمنشورات.</p></div><a href="/dashboard/articles">عرض الكل</a></header>
+				{topItems.length ? <div class="rank-list">{topItems.map((item, index) => <a href={item.href}><b class:list={{ top: index < 3 }}>{number.format(index + 1)}</b><div><strong>{item.title}</strong><span>{item.type}</span></div><aside><svg viewBox="0 0 24 24"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></svg>{formatNumber(item.views)}</aside></a>)}</div> : <div class="empty-block"><i><DashboardNavIcon name="article" class="size-5" /></i><strong>لا توجد بيانات مشاهدة كافية</strong><span>ستظهر العناصر الأعلى أداءً بعد تسجيل الزيارات.</span></div>}
+			</section>
+
+			<section class="panel recent-activity">
+				<header class="panel-heading"><div><span>سجل العمليات</span><h2>أحدث النشاطات</h2><p>آخر تغييرات نفذها فريق الإدارة.</p></div><a href="/dashboard/security">المراقبة</a></header>
+				{recentActivities.length ? <div class="activity-list">{recentActivities.slice(0, 6).map((activity: any) => <article><i><DashboardNavIcon name={activityIcon(activity.type)} class="size-4" /></i><div><strong>{activity.title || activity.description || 'نشاط جديد'}</strong><span>{activity.user?.name || 'النظام'} · {formatDateTime(activity.created_at)}</span></div></article>)}</div> : <div class="empty-block"><i><DashboardNavIcon name="dashboard" class="size-5" /></i><strong>لا توجد نشاطات حديثة</strong><span>ستظهر عمليات الإدارة الجديدة في هذا السجل.</span></div>}
+			</section>
+		</div>
+
+		<div class="operations-grid">
+			<section class="panel security-summary">
+				<header class="panel-heading"><div><span>آخر 24 ساعة</span><h2>ملخص الأمان</h2><p>الأحداث الحرجة والعناوين المحظورة.</p></div><i class:list={['security-state', numberValue(securityStats.critical_logs) === 0 && 'safe']}><svg viewBox="0 0 24 24"><path d="M12 3 4 6v5c0 5 3.4 8.2 8 10 4.6-1.8 8-5 8-10V6Z"/><path d={numberValue(securityStats.critical_logs) === 0 ? 'm9 12 2 2 4-5' : 'M12 8v5m0 3h.01'}/></svg></i></header>
+				{canSecurity ? <><div class="security-metrics"><div><span>أحداث اليوم</span><strong>{formatNumber(securityOverview.last_24h_events)}</strong></div><div><span>حرجة</span><strong class="danger">{formatNumber(securityStats.critical_logs)}</strong></div><div><span>محظورة</span><strong>{formatNumber(securityStats.blocked_ips)}</strong></div></div><div class="security-note"><i></i><span>{numberValue(securityStats.critical_logs) > 0 ? 'توجد سجلات حرجة تحتاج إلى المراجعة الآن.' : 'لا توجد تنبيهات حرجة مفتوحة في القراءة الحالية.'}</span></div></> : <div class="locked-block"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg><span>بيانات الأمان تحتاج صلاحية إدارة الأمن.</span></div>}
+				<a class="panel-link" href="/dashboard/security"><span>فتح مركز الأمان</span><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></a>
+			</section>
+
+			<section class="panel teacher-summary">
+				<header class="panel-heading"><div><span>مساحة المعلمين</span><h2>الاشتراكات</h2><p>حالة الطلبات والعضويات المدفوعة.</p></div><i><DashboardNavIcon name="subscription" class="size-5" /></i></header>
+				{canTeacher ? <div class="teacher-metrics"><div class="main"><span>اشتراكات نشطة</span><strong>{formatNumber(teacherStats.subscriptions_active)}</strong><small>من {formatNumber(teacherStats.teachers_total)} معلم</small></div><div><article><span>طلبات معلقة</span><strong>{formatNumber(teacherStats.orders_pending)}</strong></article><article><span>أجهزة نشطة</span><strong>{formatNumber(teacherStats.devices_active)}</strong></article><article><span>تنزيلات مميزة</span><strong>{formatNumber(teacherStats.premium_downloads)}</strong></article><article><span>توليد بالذكاء</span><strong>{formatNumber(teacherStats.ai_generations)}</strong></article></div></div> : <div class="locked-block"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg><span>بيانات الاشتراكات تحتاج الصلاحية المناسبة.</span></div>}
+				<a class="panel-link" href="/dashboard/teacher-subscriptions"><span>إدارة الاشتراكات</span><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></a>
+			</section>
+
+			<section class="panel quick-actions">
+				<header class="panel-heading"><div><span>اختصارات يومية</span><h2>إجراءات سريعة</h2><p>انتقل مباشرة إلى أكثر العمليات استخدامًا.</p></div></header>
+				<div>{quickActions.map((action) => <a href={action.href} class={`is-${action.tone}`}><i><DashboardNavIcon name={action.icon} class="size-4" /></i><span><strong>{action.label}</strong><small>{action.note}</small></span><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></a>)}</div>
+			</section>
+		</div>
+	</div>
+
+	<style>
+		.dashboard-home{--dh-blue:#1a4d8f;--dh-green:#0f8464;--dh-orange:#e8a244;--dh-ink:#1b2a3d;--dh-muted:#69788b;--dh-line:#dce4ed;direction:rtl;padding:.1rem}.dashboard-home *{box-sizing:border-box}.dashboard-home svg{width:1.1rem;height:1.1rem;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;stroke-width:1.8}.dashboard-alert{display:flex;align-items:center;gap:.7rem;margin-bottom:.75rem;border:1px solid #efc9cd;border-radius:.75rem;background:#fff7f8;padding:.7rem .8rem;color:#a5323e}.dashboard-alert>i{display:grid;width:2rem;height:2rem;place-items:center;border-radius:.5rem;background:#ffe7ea;font-style:normal;font-weight:950}.dashboard-alert>div{display:grid}.dashboard-alert strong{font-size:.82rem}.dashboard-alert span{font-size:.72rem}.dashboard-alert button{margin-inline-start:auto;border:1px solid currentColor;border-radius:.42rem;background:transparent;padding:.38rem .55rem;color:inherit;font-family:inherit;font-size:.66rem;font-weight:850}
+		.dashboard-hero{display:flex;align-items:center;justify-content:space-between;gap:1.2rem;border:1px solid var(--dh-line);border-radius:1rem;background:#fff;padding:1.15rem 1.25rem;box-shadow:0 4px 14px rgb(22 43 75/.05)}.hero-badges{display:flex;flex-wrap:wrap;align-items:center;gap:.45rem}.hero-badges>span,.hero-badges>b{display:flex;align-items:center;gap:.3rem;border-radius:99rem;padding:.3rem .52rem;font-size:.66rem;font-weight:850}.hero-badges>span{background:#eaf1fa;color:var(--dh-blue)}.hero-badges>b{background:#fff0f2;color:#ab3440}.hero-badges>b.online{background:#e4f6ef;color:#087559}.hero-badges>b>i{width:.42rem;height:.42rem;border-radius:50%;background:currentColor;box-shadow:0 0 0 .16rem color-mix(in srgb,currentColor 18%,transparent)}.hero-copy h1{margin:.28rem 0 .18rem;color:var(--dh-ink);font-size:1.55rem;font-weight:950;letter-spacing:-.025em}.hero-copy p{max-width:43rem;margin:0;color:var(--dh-muted);font-size:.82rem;line-height:1.75}.hero-actions{display:flex;align-items:end;gap:.45rem}.country-control{display:grid;min-width:10.5rem;gap:.18rem}.country-control>span{color:#778599;font-size:.62rem;font-weight:800}.refresh-button,.hero-actions>a{display:flex;min-height:2.55rem;align-items:center;justify-content:center;gap:.35rem;border:1px solid #d3dde7;border-radius:.52rem;background:#fff;padding:.45rem .65rem;color:#435870;font-family:inherit;font-size:.67rem;font-weight:850}.hero-actions>a{border-color:#c1d1e3;background:#f5f8fc;color:var(--dh-blue)}
+		.kpi-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.65rem;margin:.75rem 0}.kpi-card{--tone:var(--dh-blue);--soft:#eaf1fa;display:flex;min-height:9rem;flex-direction:column;border:1px solid var(--dh-line);border-radius:.82rem;background:#fff;padding:.85rem;box-shadow:0 3px 10px rgb(23 43 77/.035);position:relative;transition:transform .16s,box-shadow .16s}.kpi-card::before{position:absolute;top:.7rem;right:0;width:.2rem;height:2.5rem;border-radius:.2rem 0 0 .2rem;background:var(--tone);content:""}.kpi-card:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgb(23 43 77/.08)}.kpi-card.is-green{--tone:var(--dh-green);--soft:#e4f6ef}.kpi-card.is-orange{--tone:#c87a1d;--soft:#fff2df}.kpi-card.is-violet{--tone:#7254a3;--soft:#f1edfa}.kpi-card header{display:flex;align-items:center;justify-content:space-between}.kpi-card header>span{color:#65758a;font-size:.75rem;font-weight:800}.kpi-card header>i{display:grid;width:2.45rem;height:2.45rem;place-items:center;border-radius:.62rem;background:var(--soft);color:var(--tone)}.kpi-value{display:flex;align-items:center;gap:.55rem;margin:.35rem 0}.kpi-value>strong{color:var(--dh-ink);font-size:1.65rem;font-weight:950;letter-spacing:-.03em}.kpi-value>b{border-radius:99rem;background:#e4f6ef;padding:.24rem .42rem;color:#087559;font-size:.6rem}.kpi-value>b.down{background:#fff0f2;color:#ad3440}.kpi-card footer{display:flex;align-items:center;gap:.35rem;margin-top:auto;color:#7d8998;font-size:.66rem}.kpi-card footer>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.kpi-card footer>svg{width:.8rem;height:.8rem;margin-inline-start:auto;color:var(--tone)}
+		.health-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.65rem;margin-bottom:.75rem}.health-card{--tone:var(--dh-blue);--soft:#eaf1fa;display:grid;min-width:0;grid-template-columns:auto 1fr auto;align-items:center;gap:.58rem;border:1px solid var(--dh-line);border-radius:.72rem;background:#fff;padding:.68rem .72rem}.health-card.is-green{--tone:var(--dh-green);--soft:#e4f6ef}.health-card.is-orange{--tone:#c77a1c;--soft:#fff2df}.health-card.is-red{--tone:#bb3542;--soft:#fff0f2}.health-card.is-dark{--tone:#4b596b;--soft:#edf1f5}.health-card>i{display:grid;width:2.25rem;height:2.25rem;place-items:center;border-radius:.55rem;background:var(--soft);color:var(--tone)}.health-card>div{display:grid;min-width:0}.health-card span{color:#6e7d90;font-size:.65rem}.health-card strong{overflow:hidden;color:var(--dh-ink);font-size:.82rem;font-weight:950;text-overflow:ellipsis;white-space:nowrap}.health-card small{overflow:hidden;color:#8d98a7;font-size:.58rem;text-overflow:ellipsis;white-space:nowrap}.health-card>aside{display:flex;width:.32rem;height:2.5rem;align-items:end;overflow:hidden;border-radius:99rem;background:#e8edf2}.health-card>aside>b{display:block;width:100%;border-radius:inherit;background:var(--tone)}
+		.panel{border:1px solid var(--dh-line);border-radius:.88rem;background:#fff;box-shadow:0 3px 12px rgb(23 43 77/.04)}.panel-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:.8rem;border-bottom:1px solid #edf1f5;padding-bottom:.7rem}.panel-heading>div>span{color:var(--dh-blue);font-size:.66rem;font-weight:900}.panel-heading h2{margin:.08rem 0;color:var(--dh-ink);font-size:.98rem;font-weight:950}.panel-heading p{margin:0;color:var(--dh-muted);font-size:.69rem}.panel-heading>a{color:var(--dh-blue);font-size:.66rem;font-weight:850}.primary-grid{display:grid;grid-template-columns:minmax(0,1.75fr) minmax(17rem,.65fr);gap:.7rem;margin-bottom:.7rem}.activity-chart-panel,.live-panel{padding:1rem}.chart-legend{display:flex;flex-wrap:wrap;gap:.55rem}.chart-legend span{display:flex;align-items:center;gap:.25rem;color:#718095;font-size:.61rem}.chart-legend i,.chart-totals i{width:.42rem;height:.42rem;border-radius:50%;background:var(--dh-blue)}.chart-legend i.green,.chart-totals i.green{background:var(--dh-green)}.chart-legend i.orange,.chart-totals i.orange{background:var(--dh-orange)}.large-chart{padding-top:.7rem}.large-chart svg{width:100%;height:14rem;overflow:visible}.chart-grid line{stroke:#dfe6ed;stroke-dasharray:3 5;stroke-width:1}.large-chart polyline{fill:none;stroke-linecap:round;stroke-linejoin:round}.article-line{stroke:var(--dh-blue);stroke-width:3}.post-line{stroke:var(--dh-green);stroke-width:2.5}.comment-line{stroke:var(--dh-orange);stroke-width:2}.chart-labels{display:grid;grid-template-columns:repeat(7,1fr);margin-top:.15rem;color:#8290a1;font-size:.61rem;text-align:center}.chart-totals{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.45rem;border-top:1px solid #edf1f5;padding-top:.65rem}.chart-totals>div{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:.35rem;border-radius:.5rem;background:#f7f9fb;padding:.45rem}.chart-totals span{color:#718095;font-size:.6rem}.chart-totals strong{grid-column:2;color:#304760;font-size:.73rem}.live-badge{display:flex;align-items:center;gap:.28rem;border-radius:99rem;background:#e4f6ef;padding:.27rem .45rem;color:#087559;font-size:.59rem}.live-badge i{width:.4rem;height:.4rem;border-radius:50%;background:#0fa378;box-shadow:0 0 0 .17rem #ccefe3}.live-total{display:grid;grid-template-columns:8.5rem 1fr;align-items:center;gap:.8rem;padding:.8rem 0}.live-ring{display:grid;width:7.5rem;aspect-ratio:1;margin:auto;place-items:center;border-radius:50%;background:conic-gradient(var(--dh-green) 0 76%,#e5edf0 76%);position:relative}.live-ring::after{position:absolute;width:5.4rem;aspect-ratio:1;border-radius:50%;background:#fff;content:""}.live-ring>span{display:grid;z-index:1;text-align:center}.live-ring strong{color:var(--dh-ink);font-size:1.35rem;font-weight:950}.live-ring small{color:#748396;font-size:.59rem}.live-breakdown{display:grid;gap:.28rem}.live-breakdown>div{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #edf1f5;padding:.4rem .05rem}.live-breakdown>div:last-child{border:0}.live-breakdown span{color:#718095;font-size:.63rem}.live-breakdown strong{color:var(--dh-ink);font-size:.72rem}.visitor-bars{display:flex;height:6.3rem;align-items:end;justify-content:space-between;gap:.28rem;border-block:1px solid #edf1f5;padding:.55rem 0}.visitor-bars>div{display:grid;height:100%;flex:1;grid-template-rows:1fr auto;align-items:end;gap:.22rem}.visitor-bars b{display:block;width:100%;max-width:1.3rem;margin:auto;border-radius:.28rem .28rem .1rem .1rem;background:#9ddbc6}.visitor-bars>div:nth-child(2n) b{background:#64b99d}.visitor-bars span{color:#8491a1;font-size:.54rem;text-align:center}.online-users{display:flex;align-items:center;justify-content:space-between;padding:.62rem 0}.online-users>span{color:#6f7f92;font-size:.62rem}.online-users>div{display:flex;direction:ltr}.online-users a,.online-users b{display:grid;width:1.8rem;height:1.8rem;margin-left:-.35rem;place-items:center;border:2px solid #fff;border-radius:50%;background:#eaf1fa;color:var(--dh-blue);font-size:.6rem;font-weight:900}.online-users b{background:#e8edf2;color:#617185}.panel-link{display:flex;min-height:2.35rem;align-items:center;justify-content:center;gap:.35rem;border:1px solid #d7e1eb;border-radius:.48rem;background:#f7f9fc;color:var(--dh-blue);font-size:.66rem;font-weight:900}.panel-link svg{width:.8rem;height:.8rem}
+		.insights-grid{display:grid;grid-template-columns:.75fr 1fr 1fr;gap:.7rem;margin-bottom:.7rem}.insights-grid>.panel{padding:.9rem}.content-health-body{display:grid;grid-template-columns:8rem 1fr;align-items:center;gap:.7rem;padding:.9rem 0}.content-donut{display:grid;width:7.2rem;aspect-ratio:1;margin:auto;place-items:center;border-radius:50%;background:conic-gradient(var(--dh-green) var(--publish),#f1d49f var(--publish));position:relative}.content-donut::after{position:absolute;width:5.15rem;aspect-ratio:1;border-radius:50%;background:#fff;content:""}.content-donut>span{display:grid;z-index:1;text-align:center}.content-donut strong{color:var(--dh-ink);font-size:1.05rem}.content-donut small{color:#738296;font-size:.58rem}.content-counts{display:grid;gap:.25rem}.content-counts>div{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:.35rem;border-bottom:1px solid #edf1f5;padding:.42rem 0}.content-counts i{width:.42rem;height:.42rem;border-radius:50%}.content-counts i.published{background:var(--dh-green)}.content-counts i.draft{background:var(--dh-orange)}.content-counts i.total{background:var(--dh-blue)}.content-counts span{color:#708095;font-size:.61rem}.content-counts strong{color:var(--dh-ink);font-size:.69rem}.content-health>footer{display:flex;align-items:center;justify-content:space-between;gap:.5rem;border-radius:.5rem;background:#fff9f2;padding:.55rem}.content-health>footer span{color:#876c4f;font-size:.6rem}.content-health>footer b{flex:none;border-radius:99rem;background:#fff0dc;padding:.24rem .4rem;color:#a86619;font-size:.55rem}.content-health>footer b.good{background:#e4f6ef;color:#087559}.rank-list,.activity-list{display:grid;padding-top:.48rem}.rank-list>a{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:.52rem;border-bottom:1px solid #edf1f5;padding:.48rem 0}.rank-list>a:last-child{border:0}.rank-list>a>b{display:grid;width:1.7rem;height:1.7rem;place-items:center;border-radius:.42rem;background:#eef2f6;color:#66768a;font-size:.61rem}.rank-list>a>b.top{background:#eaf1fa;color:var(--dh-blue)}.rank-list>a>div{display:grid;min-width:0}.rank-list strong{overflow:hidden;color:#30465f;font-size:.67rem;text-overflow:ellipsis;white-space:nowrap}.rank-list span{color:#8a96a5;font-size:.57rem}.rank-list aside{display:flex;align-items:center;gap:.25rem;border-radius:99rem;background:#f3f6f9;padding:.24rem .38rem;color:#66778c;font-size:.57rem;font-weight:850}.rank-list aside svg{width:.72rem;height:.72rem}.activity-list article{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:.52rem;border-bottom:1px solid #edf1f5;padding:.47rem 0}.activity-list article:last-child{border:0}.activity-list article>i{display:grid;width:1.9rem;height:1.9rem;place-items:center;border-radius:.48rem;background:#edf3fa;color:var(--dh-blue)}.activity-list article>div{display:grid;min-width:0}.activity-list strong{overflow:hidden;color:#30465f;font-size:.66rem;text-overflow:ellipsis;white-space:nowrap}.activity-list span{color:#8793a3;font-size:.56rem}.empty-block{display:grid;min-height:13rem;place-items:center;align-content:center;text-align:center}.empty-block>i{display:grid;width:2.6rem;height:2.6rem;place-items:center;border-radius:50%;background:#edf3fa;color:var(--dh-blue)}.empty-block strong{margin-top:.5rem;color:#40546b;font-size:.7rem}.empty-block span{color:#8390a0;font-size:.61rem}
+		.operations-grid{display:grid;grid-template-columns:.8fr .95fr 1.25fr;gap:.7rem}.operations-grid>.panel{padding:.9rem}.security-state,.teacher-summary .panel-heading>i{display:grid;width:2.45rem;height:2.45rem;place-items:center;border-radius:.6rem;background:#fff0f2;color:#b43642}.security-state.safe{background:#e4f6ef;color:var(--dh-green)}.teacher-summary .panel-heading>i{background:#eaf1fa;color:var(--dh-blue)}.security-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:.35rem;padding:.7rem 0}.security-metrics>div{display:grid;border:1px solid #e7ecf1;border-radius:.48rem;padding:.48rem}.security-metrics span{color:#7b8899;font-size:.57rem}.security-metrics strong{color:var(--dh-ink);font-size:.83rem}.security-metrics strong.danger{color:#b43642}.security-note{display:flex;align-items:center;gap:.38rem;margin-bottom:.6rem;border-radius:.48rem;background:#f6f9fc;padding:.48rem}.security-note i{width:.44rem;height:.44rem;flex:none;border-radius:50%;background:var(--dh-green);box-shadow:0 0 0 .16rem #d9f2e9}.security-note span{color:#65778c;font-size:.59rem}.teacher-metrics{display:grid;grid-template-columns:.7fr 1.3fr;gap:.45rem;padding:.7rem 0}.teacher-metrics>.main{display:grid;align-content:center;border-radius:.55rem;background:#eaf1fa;padding:.65rem}.teacher-metrics>.main span{color:#5b7290;font-size:.6rem}.teacher-metrics>.main strong{color:var(--dh-blue);font-size:1.3rem}.teacher-metrics>.main small{color:#7c8da2;font-size:.56rem}.teacher-metrics>div:last-child{display:grid;grid-template-columns:1fr 1fr;gap:.35rem}.teacher-metrics article{display:grid;border:1px solid #e7ecf2;border-radius:.48rem;padding:.45rem}.teacher-metrics article span{color:#7b8999;font-size:.55rem}.teacher-metrics article strong{color:#30465f;font-size:.72rem}.locked-block{display:flex;min-height:8.5rem;align-items:center;justify-content:center;gap:.5rem;color:#8290a2}.locked-block svg{width:1.2rem;height:1.2rem}.locked-block span{font-size:.66rem}.quick-actions>div{display:grid;grid-template-columns:1fr 1fr;gap:.35rem;padding-top:.55rem}.quick-actions>div>a{--tone:var(--dh-blue);--soft:#eaf1fa;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:.42rem;border:1px solid #e3e9f0;border-radius:.5rem;padding:.45rem;color:#40546c}.quick-actions>div>a.is-green{--tone:var(--dh-green);--soft:#e4f6ef}.quick-actions>div>a.is-orange{--tone:#be7319;--soft:#fff2df}.quick-actions>div>a.is-violet{--tone:#7254a3;--soft:#f1edfa}.quick-actions>div>a.is-red{--tone:#b43642;--soft:#fff0f2}.quick-actions>div>a.is-dark{--tone:#4b596b;--soft:#edf1f5}.quick-actions a>i{display:grid;width:2rem;height:2rem;place-items:center;border-radius:.45rem;background:var(--soft);color:var(--tone)}.quick-actions a>span{display:grid;min-width:0}.quick-actions a strong{color:#344a62;font-size:.63rem}.quick-actions a small{overflow:hidden;color:#8793a2;font-size:.53rem;text-overflow:ellipsis;white-space:nowrap}.quick-actions a>svg{width:.72rem;height:.72rem;color:var(--tone)}
+		:global(.dark) .dashboard-home{--dh-ink:#f2f6fb;--dh-muted:#9eacc0;--dh-line:#30445d}:global(.dark) .dashboard-hero,:global(.dark) .kpi-card,:global(.dark) .health-card,:global(.dark) .panel{border-color:#30445d;background:#0f2547}:global(.dark) .panel-heading,:global(.dark) .chart-totals,:global(.dark) .rank-list>a,:global(.dark) .activity-list article{border-color:#2b415c}:global(.dark) .live-ring::after,:global(.dark) .content-donut::after{background:#0f2547}:global(.dark) .chart-totals>div,:global(.dark) .security-note{background:#122a49}:global(.dark) .rank-list strong,:global(.dark) .activity-list strong,:global(.dark) .quick-actions a strong{color:#dbe5f1}:global(.dark) .quick-actions>div>a,:global(.dark) .security-metrics>div,:global(.dark) .teacher-metrics article{border-color:#314761}:global(.dark) .hero-actions button,:global(.dark) .hero-actions>a{background:#122a49;color:#d7e2ef}
+		@media(max-width:1180px){.kpi-grid,.health-strip{grid-template-columns:repeat(2,minmax(0,1fr))}.insights-grid{grid-template-columns:1fr 1fr}.recent-activity{grid-column:1/-1}.operations-grid{grid-template-columns:1fr 1fr}.quick-actions{grid-column:1/-1}}
+		@media(max-width:900px){.dashboard-hero{align-items:stretch;flex-direction:column}.hero-actions{align-items:stretch;flex-wrap:wrap}.country-control{flex:1}.primary-grid{grid-template-columns:1fr}.live-panel{display:block}.insights-grid{grid-template-columns:1fr}.recent-activity{grid-column:auto}.operations-grid{grid-template-columns:1fr}.quick-actions{grid-column:auto}}
+		@media(max-width:620px){.kpi-grid,.health-strip{grid-template-columns:1fr}.dashboard-hero{padding:1rem}.hero-copy h1{font-size:1.3rem}.hero-actions>*{flex:1}.hero-actions span{white-space:nowrap}.chart-legend{display:none}.chart-totals{grid-template-columns:1fr}.large-chart svg{height:11rem}.live-total,.content-health-body{grid-template-columns:1fr}.insights-grid,.operations-grid{grid-template-columns:1fr}.quick-actions>div{grid-template-columns:1fr}.teacher-metrics{grid-template-columns:1fr}.security-metrics{grid-template-columns:repeat(3,1fr)}}
+	</style>
+</DashboardLayout>

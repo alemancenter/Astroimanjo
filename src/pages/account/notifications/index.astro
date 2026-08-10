@@ -1,0 +1,209 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import '../../../styles/auth-pages.css';
+import Breadcrumbs from '../../../components/ui/Breadcrumbs.astro';
+import DashboardAlert from '../../../components/ui/DashboardAlert.astro';
+import Pagination from '../../../components/ui/Pagination.astro';
+import { getCurrentUser } from '../../../lib/auth';
+import { apiFetch } from '../../../lib/api';
+import { getCountryById } from '../../../lib/countries';
+import { resolveNotificationTarget } from '../../../lib/notification-links';
+
+const currentUser = await getCurrentUser(Astro);
+if (!currentUser) return Astro.redirect(`/login?redirect_to=${encodeURIComponent('/account/notifications')}`);
+
+const token = Astro.cookies.get('token')?.value;
+const authOptions = { countryId: Astro.locals.countryId, cookieHeader: `token=${token}` };
+const params = Astro.url.searchParams;
+const allowedStatuses = new Set(['all', 'unread', 'read']);
+const requestedStatus = params.get('status') || 'all';
+const status = allowedStatuses.has(requestedStatus) ? requestedStatus : 'all';
+const search = (params.get('q') || '').trim();
+const page = Math.max(1, Number(params.get('page')) || 1);
+const countryCode = getCountryById(Astro.locals.countryId).code;
+
+const [notificationsResult, statsResult] = await Promise.all([
+	apiFetch<any[]>('/dashboard/notifications', {
+		...authOptions,
+		params: { q: search || undefined, status: status === 'all' ? undefined : status, page, per_page: 20 },
+	}),
+	apiFetch<Record<string, number>>('/dashboard/notifications/stats', authOptions),
+]);
+
+const parseData = (data: any) => {
+	if (data && typeof data === 'object') return data;
+	if (typeof data === 'string') { try { return JSON.parse(data); } catch { return {}; } }
+	return {};
+};
+const items = (Array.isArray(notificationsResult.data) ? notificationsResult.data : []).map((item: any) => ({ ...item, data: parseData(item.data) }));
+const meta = notificationsResult.meta;
+const fallbackUnread = items.filter((item: any) => !item.read_at).length;
+const stats = statsResult.data ?? { total: meta?.total ?? items.length, unread: fallbackUnread, read: items.length - fallbackUnread, today: 0 };
+const resultTotal = meta?.total ?? items.length;
+const redirectTo = `${Astro.url.pathname}${Astro.url.search}`;
+const numberFormat = new Intl.NumberFormat('ar-JO');
+const dateTimeFormat = new Intl.DateTimeFormat('ar-JO', { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+const formatDateTime = (value: string) => {
+	const date = new Date(value);
+	return Number.isNaN(date.getTime()) ? '—' : dateTimeFormat.format(date);
+};
+const excerpt = (value: string, max = 190) => {
+	const clean = String(value || '').replace(/\s+/g, ' ').trim();
+	return clean.length > max ? `${clean.slice(0, max).trim()}…` : clean;
+};
+const publicActionUrl = (value: unknown) => resolveNotificationTarget(value, countryCode, Astro.url.origin);
+const notificationMeta = (typeValue: string) => {
+	const type = String(typeValue || '').toLowerCase();
+	if (type.includes('message')) return { kind: 'message', label: 'رسالة داخلية' };
+	if (type.includes('article')) return { kind: 'article', label: 'المقالات' };
+	if (type.includes('post')) return { kind: 'post', label: 'المنشورات' };
+	if (type.includes('subscription') || type.includes('teacher')) return { kind: 'subscription', label: 'الاشتراكات' };
+	if (type.includes('broadcast')) return { kind: 'broadcast', label: 'إشعار إداري' };
+	if (type.includes('security') || type.includes('role')) return { kind: 'system', label: 'النظام والأمان' };
+	return { kind: 'general', label: 'إشعار عام' };
+};
+const filterUrl = (nextStatus: string) => {
+	const url = new URL('/account/notifications', Astro.url);
+	url.searchParams.set('status', nextStatus);
+	if (search) url.searchParams.set('q', search);
+	return `${url.pathname}${url.search}`;
+};
+const tabs = [
+	{ value: 'all', label: 'جميع الإشعارات', count: Number(stats.total || 0) },
+	{ value: 'unread', label: 'غير المقروءة', count: Number(stats.unread || 0) },
+	{ value: 'read', label: 'المقروءة', count: Number(stats.read || 0) },
+];
+---
+
+<Layout title="الإشعارات" description="متابعة إشعارات حسابك وأنشطة المنصة." noindex>
+	<Breadcrumbs items={[{ label: 'حسابي', href: '/account' }, { label: 'الإشعارات' }]} />
+
+	<div class="account-notifications-page">
+		<DashboardAlert />
+
+		<header class="notifications-hero">
+			<div><span>التنبيهات والمتابعة</span><h1>مركز الإشعارات</h1><p>تابع ما يهمك من أنشطة المنصة ونظّم الإشعارات التي تحتاج إلى مراجعتك.</p></div>
+			<div class="notifications-hero-actions">
+				<a href="/account">العودة إلى حسابي</a>
+				{Number(stats.unread || 0) > 0 && <form method="post" action="/api/account/notifications/mark-all-read"><input type="hidden" name="redirect_to" value={redirectTo} /><button type="submit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m3 12 4 4L17 6m-7 6 4 4 7-7" /></svg>تعليم الكل كمقروء</button></form>}
+			</div>
+		</header>
+
+		<section class="notifications-summary" aria-label="ملخص الإشعارات">
+			<article class="is-blue"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg></i><div><span>إجمالي الإشعارات</span><strong>{numberFormat.format(Number(stats.total || 0))}</strong><small>إشعار في حسابك</small></div></article>
+			<article class="is-orange"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" /><circle cx="19" cy="5" r="3" fill="currentColor" stroke="none" /></svg></i><div><span>بانتظار القراءة</span><strong>{numberFormat.format(Number(stats.unread || 0))}</strong><small>تحتاج إلى المراجعة</small></div></article>
+			<article class="is-green"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m4 12 4 4L18 6m-7 6 4 4 6-7" /></svg></i><div><span>تمت قراءتها</span><strong>{numberFormat.format(Number(stats.read || 0))}</strong><small>إشعار تمت متابعته</small></div></article>
+			<article class="is-graphite"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 3v3m14-3v3M4 8h16v12H4zM8 12h3m2 0h3m-8 4h3" /></svg></i><div><span>إشعارات اليوم</span><strong>{numberFormat.format(Number(stats.today || 0))}</strong><small>وصلت منذ بداية اليوم</small></div></article>
+		</section>
+
+		<section class="notifications-toolbar">
+			<form method="get" action="/account/notifications"><input type="hidden" name="status" value={status} /><label><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg><input type="search" name="q" value={search} placeholder="ابحث في عنوان الإشعار أو نصه..." aria-label="البحث في الإشعارات" /></label><button type="submit">بحث</button>{search && <a href={`/account/notifications?status=${status}`}>مسح البحث</a>}</form>
+			<div><strong>{numberFormat.format(resultTotal)}</strong><span>نتيجة</span></div>
+		</section>
+
+		<nav class="notification-tabs" aria-label="تصفية الإشعارات حسب القراءة">
+			{tabs.map((item) => <a href={filterUrl(item.value)} class:list={{ 'is-active': status === item.value }} aria-current={status === item.value ? 'page' : undefined}><span>{item.label}</span><strong>{numberFormat.format(item.count)}</strong></a>)}
+		</nav>
+
+		{!notificationsResult.ok ? (
+			<section class="notifications-state is-error"><i>!</i><h2>تعذّر تحميل الإشعارات</h2><p>{notificationsResult.message || 'تحقق من اتصال الخادم ثم أعد المحاولة.'}</p><a href={redirectTo}>إعادة المحاولة</a></section>
+		) : items.length === 0 ? (
+			<section class="notifications-state"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg></i><h2>{search ? 'لا توجد إشعارات مطابقة' : status === 'unread' ? 'لا توجد إشعارات غير مقروءة' : 'لا توجد إشعارات'}</h2><p>{search ? 'جرّب عبارة بحث أقصر أو امسح التصفية.' : 'ستظهر تنبيهات النظام والأنشطة الجديدة هنا.'}</p>{(search || status !== 'all') && <a href="/account/notifications">عرض جميع الإشعارات</a>}</section>
+		) : (
+			<section class="notifications-list-card">
+				<header><div><h2>سجل الإشعارات</h2><p>حدد إشعارًا أو أكثر لإدارة السجل بسرعة.</p></div><label><input type="checkbox" id="notifications-select-all" /><span>تحديد الصفحة</span></label></header>
+				<form id="notifications-bulk-form" method="post" action="/api/account/notifications/bulk" class="notifications-bulk-bar" data-notifications-bulk hidden>
+					<input type="hidden" name="redirect_to" value={redirectTo} />
+					<div><strong id="notifications-selected-count">0</strong><span>إشعار محدد</span></div>
+					<div><button type="submit" name="action" value="read" class="is-read"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m3 12 4 4L17 6m-7 6 4 4 7-7" /></svg>تعليم كمقروء</button><button type="submit" name="action" value="delete" class="is-delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 7h16m-10 4v6m4-6v6M9 7l1-3h4l1 3m3 0-1 14H7L6 7" /></svg>حذف المحدد</button></div>
+				</form>
+				<div class="notifications-list">
+					{items.map((notification: any) => {
+						const itemMeta = notificationMeta(notification.type);
+						const actionUrl = publicActionUrl(notification.data?.action_url);
+						const unread = !notification.read_at;
+						return (
+							<article class:list={['notification-row', `is-${itemMeta.kind}`, { 'is-unread': unread }]}>
+								<label class="notification-select"><input type="checkbox" name="ids" value={notification.id} form="notifications-bulk-form" class="notification-checkbox" aria-label={`تحديد ${notification.data?.title || 'الإشعار'}`} /><span></span></label>
+								<div class="notification-icon">
+									{itemMeta.kind === 'message' ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 5h16v14H4zM4 7l8 6 8-6" /></svg> : itemMeta.kind === 'article' || itemMeta.kind === 'post' ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 3h9l3 3v15H6zM9 10h6m-6 4h6m-6 4h4" /></svg> : itemMeta.kind === 'subscription' ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 6h18v12H3zM7 10h5m-5 4h3m7-5v6" /></svg> : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg>}
+								</div>
+								<div class="notification-content"><div><h3>{notification.data?.title || 'إشعار دون عنوان'}</h3>{unread && <span><i></i>جديد</span>}</div><p>{excerpt(notification.data?.message) || 'لا يوجد نص مرفق بهذا الإشعار.'}</p><footer><span class={`notification-type is-${itemMeta.kind}`}>{itemMeta.label}</span><time datetime={notification.created_at}>{formatDateTime(notification.created_at)}</time></footer></div>
+								<div class="notification-actions">
+									{actionUrl && unread && actionUrl.startsWith('/') ? <form method="post" action={`/api/account/notifications/${notification.id}/read`}><input type="hidden" name="redirect_to" value={actionUrl} /><button type="submit" class="open-action"><span>فتح</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m9 18 6-6-6-6" /></svg></button></form> : actionUrl && <a href={actionUrl} target={actionUrl.startsWith('http') ? '_blank' : undefined} rel={actionUrl.startsWith('http') ? 'noopener' : undefined} class="open-action"><span>فتح</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m9 18 6-6-6-6" /></svg></a>}
+									{unread && <form method="post" action={`/api/account/notifications/${notification.id}/read`}><input type="hidden" name="redirect_to" value={redirectTo} /><button type="submit" title="تعليم كمقروء" aria-label="تعليم الإشعار كمقروء"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m3 12 4 4L17 6m-7 6 4 4 7-7" /></svg></button></form>}
+									<form method="post" action={`/api/account/notifications/${notification.id}/delete`} data-confirm-delete><input type="hidden" name="redirect_to" value={redirectTo} /><button type="submit" class="delete-action" title="حذف الإشعار" aria-label="حذف الإشعار"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 7h16m-10 4v6m4-6v6M9 7l1-3h4l1 3m3 0-1 14H7L6 7" /></svg></button></form>
+								</div>
+							</article>
+						);
+					})}
+				</div>
+			</section>
+		)}
+
+		{meta && meta.last_page > 1 && <Pagination currentPage={meta.current_page} lastPage={meta.last_page} url={Astro.url} />}
+	</div>
+
+	<dialog id="notification-delete-dialog" class="notification-delete-dialog" aria-labelledby="notification-delete-title">
+		<div class="notification-delete-card"><button type="button" data-close-delete aria-label="إغلاق"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m6 6 12 12M18 6 6 18" /></svg></button><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 7h16m-10 4v6m4-6v6M9 7l1-3h4l1 3m3 0-1 14H7L6 7" /></svg></i><span>تأكيد الحذف</span><h2 id="notification-delete-title" data-delete-title>حذف الإشعار؟</h2><p data-delete-description>سيتم حذف هذا الإشعار نهائيًا من سجل حسابك.</p><div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 9v4m0 4h.01M10.3 4.3 2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0Z" /></svg><span><strong>تنبيه مهم</strong> لا يمكن التراجع عن هذه العملية.</span></div><footer><button type="button" data-close-delete>إلغاء</button><button type="button" data-confirm-delete-action>حذف نهائي</button></footer></div>
+	</dialog>
+
+	<script>
+		const checkboxes = Array.from(document.querySelectorAll<HTMLInputElement>('.notification-checkbox'));
+		const selectAll = document.getElementById('notifications-select-all') as HTMLInputElement | null;
+		const bulkBar = document.querySelector<HTMLElement>('[data-notifications-bulk]');
+		const selectedCount = document.getElementById('notifications-selected-count');
+		const updateSelection = () => {
+			const count = checkboxes.filter((checkbox) => checkbox.checked).length;
+			if (selectedCount) selectedCount.textContent = String(count);
+			if (bulkBar) bulkBar.hidden = count === 0;
+			if (selectAll) { selectAll.checked = count > 0 && count === checkboxes.length; selectAll.indeterminate = count > 0 && count < checkboxes.length; }
+		};
+		checkboxes.forEach((checkbox) => checkbox.addEventListener('change', updateSelection));
+		selectAll?.addEventListener('change', () => { checkboxes.forEach((checkbox) => { checkbox.checked = selectAll.checked; }); updateSelection(); });
+
+		const deleteDialog = document.getElementById('notification-delete-dialog') as HTMLDialogElement | null;
+		let pendingDeleteForm: HTMLFormElement | null = null;
+		const openDelete = (form: HTMLFormElement, bulk = false) => {
+			pendingDeleteForm = form;
+			const title = deleteDialog?.querySelector<HTMLElement>('[data-delete-title]');
+			const description = deleteDialog?.querySelector<HTMLElement>('[data-delete-description]');
+			if (title) title.textContent = bulk ? 'حذف الإشعارات المحددة؟' : 'حذف هذا الإشعار؟';
+			if (description) description.textContent = bulk ? `سيتم حذف ${checkboxes.filter((item) => item.checked).length} إشعار نهائيًا من حسابك.` : 'سيتم حذف هذا الإشعار نهائيًا من سجل حسابك.';
+			deleteDialog?.showModal();
+		};
+		document.querySelectorAll<HTMLFormElement>('[data-confirm-delete]').forEach((form) => form.addEventListener('submit', (event) => { if (form.dataset.confirmed === 'true') return; event.preventDefault(); openDelete(form); }));
+		const bulkForm = document.getElementById('notifications-bulk-form') as HTMLFormElement | null;
+		bulkForm?.addEventListener('submit', (event) => {
+			const submitter = event.submitter as HTMLButtonElement | null;
+			if (submitter?.value !== 'delete' || bulkForm.dataset.confirmed === 'true') return;
+			event.preventDefault();
+			openDelete(bulkForm, true);
+		});
+		document.querySelectorAll('[data-close-delete]').forEach((button) => button.addEventListener('click', () => deleteDialog?.close()));
+		deleteDialog?.addEventListener('click', (event) => { if (event.target === deleteDialog) deleteDialog.close(); });
+		deleteDialog?.addEventListener('close', () => { pendingDeleteForm = null; });
+		deleteDialog?.querySelector('[data-confirm-delete-action]')?.addEventListener('click', () => {
+			if (!pendingDeleteForm) return;
+			const form = pendingDeleteForm;
+			form.dataset.confirmed = 'true';
+			if (form === bulkForm) {
+				const action = document.createElement('input'); action.type = 'hidden'; action.name = 'action'; action.value = 'delete'; form.append(action);
+			}
+			form.requestSubmit();
+		});
+	</script>
+
+	<style>
+		.account-notifications-page{--ink:#132f4c;--muted:#64748b;--line:#dfe7ef;max-width:1240px;margin-inline:auto;padding:2.25rem 1rem 4rem}.notifications-hero{display:flex;align-items:flex-end;justify-content:space-between;gap:1.25rem;margin-bottom:1.1rem}.notifications-hero>div:first-child>span{display:block;margin-bottom:.25rem;color:#1a4d8f;font-size:.78rem;font-weight:850}.notifications-hero h1{margin:0;color:#071d3d;font-size:clamp(1.75rem,1.4rem + 1vw,2.5rem);font-weight:950;letter-spacing:-.03em}.notifications-hero p{margin:.4rem 0 0;color:var(--muted);font-size:.92rem;line-height:1.8}.notifications-hero-actions{display:flex;align-items:center;gap:.55rem}.notifications-hero-actions a,.notifications-hero-actions button{display:inline-flex;min-height:2.75rem;align-items:center;justify-content:center;gap:.4rem;border:1px solid var(--line);border-radius:.68rem;background:#fff;padding:.55rem .85rem;color:#52667c;font-family:inherit;font-size:.76rem;font-weight:850}.notifications-hero-actions button{border-color:#1a4d8f;background:#1a4d8f;color:#fff}.notifications-hero-actions svg{width:1rem;height:1rem}
+		.notifications-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.75rem;margin-bottom:.85rem}.notifications-summary article{display:flex;min-width:0;align-items:center;gap:.75rem;border:1px solid var(--line);border-radius:.82rem;background:#fff;padding:.95rem;box-shadow:0 4px 14px rgb(15 23 42/.045)}.notifications-summary i{display:grid;width:2.7rem;height:2.7rem;flex:none;place-items:center;border-radius:.68rem}.notifications-summary svg{width:1.15rem;height:1.15rem;stroke-width:1.8}.notifications-summary article>div{min-width:0}.notifications-summary span,.notifications-summary small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.notifications-summary span{color:#52667c;font-size:.7rem;font-weight:750}.notifications-summary strong{display:block;margin:.05rem 0;color:var(--ink);font-size:1.3rem;font-weight:950}.notifications-summary small{color:#8796a8;font-size:.64rem}.notifications-summary .is-blue i{background:#edf4fc;color:#1a4d8f}.notifications-summary .is-orange i{background:#fff5e7;color:#b96d14}.notifications-summary .is-green i{background:#eaf8f3;color:#0f8464}.notifications-summary .is-graphite i{background:#eef1f4;color:#2e3540}
+		.notifications-toolbar,.notification-tabs,.notifications-list-card,.notifications-state{border:1px solid var(--line);border-radius:.82rem;background:#fff;box-shadow:0 4px 14px rgb(15 23 42/.045)}.notifications-toolbar{display:flex;align-items:center;justify-content:space-between;gap:.8rem;margin-bottom:.7rem;padding:.7rem}.notifications-toolbar form{display:flex;min-width:0;flex:1;gap:.5rem}.notifications-toolbar label{position:relative;max-width:42rem;flex:1}.notifications-toolbar label svg{position:absolute;top:50%;right:.75rem;width:1rem;height:1rem;color:#8796a8;transform:translateY(-50%)}.notifications-toolbar input{width:100%;min-height:2.65rem;border:1px solid #d9e2ec;border-radius:.6rem;padding:.55rem 2.2rem .55rem .7rem;color:var(--ink);font-family:inherit;font-size:.77rem}.notifications-toolbar button,.notifications-toolbar form>a{display:inline-flex;min-height:2.65rem;align-items:center;justify-content:center;border:1px solid #1a4d8f;border-radius:.6rem;background:#1a4d8f;padding:.5rem .9rem;color:#fff;font-family:inherit;font-size:.73rem;font-weight:850}.notifications-toolbar form>a{border-color:transparent;background:transparent;color:#b34848}.notifications-toolbar>div{display:flex;align-items:baseline;gap:.28rem;border-right:1px solid var(--line);padding-right:.8rem;white-space:nowrap}.notifications-toolbar>div strong{color:var(--ink);font-size:1rem}.notifications-toolbar>div span{color:#8796a8;font-size:.66rem}.notification-tabs{display:grid;grid-template-columns:repeat(3,1fr);overflow:hidden;margin-bottom:.7rem}.notification-tabs a{display:flex;min-height:3.2rem;align-items:center;justify-content:center;gap:.45rem;border-left:1px solid var(--line);color:#64748b;font-size:.78rem;font-weight:800}.notification-tabs a:last-child{border-left:0}.notification-tabs a.is-active{background:#f1f6fc;color:#1a4d8f;box-shadow:inset 0 -3px #1a4d8f}.notification-tabs strong{min-width:1.5rem;border-radius:999px;background:#edf1f5;padding:.1rem .38rem;text-align:center;font-size:.66rem}
+		.notifications-list-card{overflow:hidden}.notifications-list-card>header{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);padding:.9rem 1rem}.notifications-list-card h2{margin:0;color:var(--ink);font-size:1rem;font-weight:900}.notifications-list-card header p{margin:.18rem 0 0;color:#8796a8;font-size:.69rem}.notifications-list-card header label{display:flex;align-items:center;gap:.4rem;color:#65778a;font-size:.69rem;font-weight:750}.notifications-list-card header input{accent-color:#1a4d8f}.notifications-bulk-bar{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #c8d9ed;background:#f2f7fc;padding:.6rem .9rem}.notifications-bulk-bar[hidden]{display:none}.notifications-bulk-bar>div:first-of-type{display:flex;align-items:baseline;gap:.3rem;color:#1a4d8f}.notifications-bulk-bar>div:first-of-type strong{font-size:1rem}.notifications-bulk-bar>div:first-of-type span{font-size:.69rem;font-weight:750}.notifications-bulk-bar>div:last-child{display:flex;gap:.4rem}.notifications-bulk-bar button{display:inline-flex;min-height:2.25rem;align-items:center;gap:.3rem;border:1px solid #b8cce4;border-radius:.5rem;background:#fff;padding:.35rem .65rem;color:#1a4d8f;font-family:inherit;font-size:.65rem;font-weight:850}.notifications-bulk-bar button.is-delete{border-color:#efc2c7;color:#b83240}.notifications-bulk-bar svg{width:.82rem;height:.82rem}
+		.notification-row{display:grid;grid-template-columns:1.4rem 2.75rem minmax(0,1fr) auto;align-items:center;gap:.8rem;border-bottom:1px solid #edf1f5;padding:.9rem 1rem;transition:background .18s}.notification-row:last-child{border-bottom:0}.notification-row:hover{background:#f8fafc}.notification-row.is-unread{background:#f3f7fc;box-shadow:inset -3px 0 #1a4d8f}.notification-select input{position:absolute;opacity:0}.notification-select span{display:block;width:1rem;height:1rem;border:1.5px solid #bac7d5;border-radius:.25rem;background:#fff}.notification-select input:checked+span{border-color:#1a4d8f;background:#1a4d8f;box-shadow:inset 0 0 0 3px #fff}.notification-icon{display:grid;width:2.65rem;height:2.65rem;place-items:center;border-radius:.68rem;background:#edf4fc;color:#1a4d8f}.notification-row.is-message .notification-icon{background:#eaf8f3;color:#0f8464}.notification-row.is-subscription .notification-icon{background:#fff5e7;color:#b96d14}.notification-row.is-system .notification-icon{background:#eef1f4;color:#2e3540}.notification-icon svg{width:1.1rem;height:1.1rem;stroke-width:1.8}.notification-content{min-width:0}.notification-content>div{display:flex;align-items:center;gap:.45rem}.notification-content h3{overflow:hidden;margin:0;color:var(--ink);font-size:.84rem;font-weight:850;text-overflow:ellipsis;white-space:nowrap}.notification-content>div>span{display:inline-flex;align-items:center;gap:.25rem;border-radius:999px;background:#e8f1fc;padding:.16rem .4rem;color:#1a4d8f;font-size:.57rem;font-weight:850}.notification-content>div>span i{width:.35rem;height:.35rem;border-radius:50%;background:currentColor}.notification-content>p{margin:.25rem 0;color:#65778a;font-size:.72rem;line-height:1.75}.notification-content footer{display:flex;align-items:center;gap:.5rem}.notification-type{border-radius:999px;background:#edf4fc;padding:.16rem .42rem;color:#1a4d8f;font-size:.58rem;font-weight:800}.notification-type.is-message{background:#eaf8f3;color:#0f8464}.notification-type.is-subscription{background:#fff5e7;color:#a56613}.notification-content time{color:#95a1af;font-size:.61rem}.notification-actions{display:flex;align-items:center;gap:.28rem}.notification-actions button,.notification-actions>a{display:inline-flex;min-width:2.1rem;height:2.1rem;align-items:center;justify-content:center;gap:.22rem;border:1px solid #dfe6ee;border-radius:.5rem;background:#fff;padding:0 .45rem;color:#66788b;font-family:inherit;font-size:.64rem;font-weight:850}.notification-actions .open-action{border-color:#b9cde6;color:#1a4d8f}.notification-actions .delete-action:hover{border-color:#efb7bd;background:#fff5f5;color:#be3442}.notification-actions svg{width:.82rem;height:.82rem;stroke-width:1.8}
+		.notifications-state{display:grid;min-height:20rem;place-items:center;align-content:center;padding:2rem;text-align:center}.notifications-state>i{display:grid;width:3.7rem;height:3.7rem;place-items:center;border-radius:50%;background:#edf4fc;color:#1a4d8f;font-style:normal;font-weight:900}.notifications-state svg{width:1.5rem;height:1.5rem}.notifications-state h2{margin:.8rem 0 .2rem;color:var(--ink);font-size:1.05rem;font-weight:900}.notifications-state p{margin:0;color:#7b8b9d;font-size:.78rem}.notifications-state a{margin-top:.8rem;color:#1a4d8f;font-size:.75rem;font-weight:850}.notifications-state.is-error>i{background:#fff0f1;color:#c5303e}
+		.notification-delete-dialog{width:min(92vw,29rem);max-width:none;border:0;background:transparent;padding:0}.notification-delete-dialog::backdrop{background:rgb(4 16 35/.62);backdrop-filter:blur(3px)}.notification-delete-card{position:relative;border:1px solid #dce4ed;border-radius:1rem;background:#fff;padding:1.6rem;text-align:center;box-shadow:0 28px 70px rgb(6 26 58/.28)}.notification-delete-card::before{position:absolute;top:0;right:0;left:0;height:.28rem;border-radius:1rem 1rem 0 0;background:#c5303e;content:""}.notification-delete-card>button{position:absolute;top:.85rem;left:.85rem;display:grid;width:2.25rem;height:2.25rem;place-items:center;border:1px solid #dfe6ee;border-radius:.52rem;background:#fff;color:#718096}.notification-delete-card>button svg{width:.9rem;height:.9rem}.notification-delete-card>i{display:grid;width:4rem;height:4rem;margin:.15rem auto .8rem;place-items:center;border-radius:50%;background:#fff1f2;color:#c5303e;box-shadow:0 0 0 .45rem #fff8f8}.notification-delete-card>i svg{width:1.55rem;height:1.55rem}.notification-delete-card>span{color:#c5303e;font-size:.7rem;font-weight:900}.notification-delete-card h2{margin:.2rem 0;color:var(--ink);font-size:1.15rem;font-weight:950}.notification-delete-card>p{margin:.35rem 0;color:#718096;font-size:.76rem}.notification-delete-card>div{display:flex;align-items:center;gap:.55rem;margin-top:1rem;border:1px solid #f5d9bd;border-radius:.65rem;background:#fff9f1;padding:.7rem;color:#94602a;text-align:right}.notification-delete-card>div svg{width:1.05rem;height:1.05rem;flex:none}.notification-delete-card>div span{font-size:.68rem}.notification-delete-card>div strong{display:block}.notification-delete-card footer{display:grid;grid-template-columns:1fr 1.2fr;gap:.5rem;margin-top:1.1rem}.notification-delete-card footer button{min-height:2.65rem;border-radius:.55rem;font-family:inherit;font-size:.74rem;font-weight:900}.notification-delete-card footer button:first-child{border:1px solid #d9e2ec;background:#fff;color:#52667e}.notification-delete-card footer button:last-child{border:1px solid #aa2b38;background:#c5303e;color:#fff}
+		:global(.dark) .account-notifications-page{--ink:#f8fafc;--muted:#94a3b8;--line:#334155}:global(.dark) .notifications-hero h1{color:#fff}:global(.dark) .notifications-hero-actions a,:global(.dark) .notifications-summary article,:global(.dark) .notifications-toolbar,:global(.dark) .notifications-toolbar input,:global(.dark) .notification-tabs,:global(.dark) .notifications-list-card,:global(.dark) .notification-actions button,:global(.dark) .notification-actions>a,:global(.dark) .notifications-state,:global(.dark) .notification-delete-card{border-color:#334155;background:#0f2547;color:#cbd5e1}:global(.dark) .notification-tabs a,:global(.dark) .notifications-list-card>header,:global(.dark) .notification-row{border-color:#263b56}:global(.dark) .notification-tabs a.is-active,:global(.dark) .notification-row.is-unread,:global(.dark) .notification-row:hover{background:#122b4c}:global(.dark) .notifications-bulk-bar{border-color:#334155;background:#132943}:global(.dark) .notification-delete-card>div{border-color:#6b4c2b;background:#2a241e;color:#e9c79f}
+		@media(max-width:900px){.notifications-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.notifications-hero{align-items:flex-start;flex-direction:column}.notifications-hero-actions{width:100%}.notifications-hero-actions>*{flex:1}.notification-row{grid-template-columns:1.2rem 2.6rem minmax(0,1fr)}.notification-actions{grid-column:3;justify-content:flex-end}}
+		@media(max-width:620px){.account-notifications-page{padding-top:1.5rem}.notifications-summary{gap:.55rem}.notifications-summary article{padding:.75rem}.notifications-summary i{width:2.35rem;height:2.35rem}.notifications-summary strong{font-size:1.1rem}.notifications-summary small{display:none}.notifications-toolbar{align-items:stretch;flex-direction:column}.notifications-toolbar form{display:grid;grid-template-columns:1fr auto}.notifications-toolbar label{grid-column:1/-1}.notifications-toolbar form>a{text-align:center}.notifications-toolbar>div{justify-content:flex-end;border:0;padding:0}.notification-tabs a{flex-direction:column;gap:.15rem;font-size:.68rem}.notification-row{gap:.55rem;padding:.8rem .7rem}.notification-icon{width:2.35rem;height:2.35rem}.notification-content>div{align-items:flex-start;flex-direction:column;gap:.2rem}.notification-content h3{max-width:100%;white-space:normal}.notification-content>p{font-size:.69rem}.notification-content footer{align-items:flex-start;flex-direction:column;gap:.25rem}.notification-actions{grid-column:2/-1}.notifications-list-card>header{align-items:flex-start;gap:.5rem}.notifications-list-card header p{display:none}.notifications-bulk-bar{align-items:flex-start;flex-direction:column;gap:.45rem}.notifications-bulk-bar>div:last-child{width:100%}.notifications-bulk-bar button{flex:1;justify-content:center}.notifications-hero-actions{flex-direction:column}.notifications-hero-actions>*{width:100%}.notification-delete-card footer{grid-template-columns:1fr}}
+	</style>
+</Layout>

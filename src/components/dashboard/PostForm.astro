@@ -1,0 +1,317 @@
+---
+import 'quill/dist/quill.snow.css';
+import { COUNTRIES, getCountryById } from '../../lib/countries';
+import { assetUrl } from '../../lib/assets';
+
+interface Props {
+	post?: any;
+	categories: any[];
+	countryId: string;
+}
+
+const { post, categories, countryId } = Astro.props;
+const currentCountry = getCountryById(countryId);
+const imageUrl = assetUrl(post?.image_url || post?.image, 480) || '';
+const keywordsValue = typeof post?.keywords === 'string'
+	? post.keywords
+	: Array.isArray(post?.keywords_rel)
+		? post.keywords_rel.map((keyword: any) => keyword.keyword).filter(Boolean).join('، ')
+		: '';
+---
+
+<div class="post-form-page">
+	<header class="post-form-header">
+		<div class="post-form-heading">
+			<a href="/dashboard/posts" class="post-back-button" aria-label="العودة إلى المنشورات">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m15 18-6-6 6-6" /></svg>
+			</a>
+			<div>
+				<span class="post-eyebrow">إدارة المحتوى</span>
+				<h1>{post?.id ? 'تعديل المنشور' : 'إضافة منشور جديد'}</h1>
+				<p>أنشئ منشورًا منظمًا مع تصنيفه وصورته وبيانات ظهوره في محركات البحث.</p>
+			</div>
+		</div>
+		<div class="post-country-control">
+			<span class="post-country-flag" aria-hidden="true">{currentCountry.flag}</span>
+			<div><small>قاعدة البيانات</small><strong>{currentCountry.name}</strong></div>
+			<select id="post-country-select" data-current={countryId} aria-label="تبديل قاعدة البيانات">
+				{COUNTRIES.map((country) => <option value={country.id} selected={country.id === countryId}>{country.name}</option>)}
+			</select>
+		</div>
+	</header>
+
+	<form id="post-editor-form" method="post" action="/api/dashboard/posts/save" enctype="multipart/form-data" class="post-editor-grid">
+		{post?.id && <input type="hidden" name="id" value={post.id} />}
+
+		<main class="post-main-column">
+			<section class="post-card post-content-card">
+				<div class="post-card-heading">
+					<div><span class="post-step">01</span><h2>محتوى المنشور</h2><p>العنوان والنص الأساسي الذي سيظهر للزائر.</p></div>
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M7 3h7l4 4v14H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm7 0v5h4M9 13h6m-6 4h4" /></svg>
+				</div>
+
+				<div class="post-field">
+					<div class="post-label-row"><label for="title">العنوان</label><span id="post-title-count">0 / 500</span></div>
+					<input id="title" type="text" name="title" maxlength="500" required value={post?.title ?? ''} placeholder="مثال: إعلان مهم بخصوص موعد الامتحان" />
+				</div>
+
+				<div class="post-field post-editor-field">
+					<div class="post-label-row">
+						<label for="post-editor-container">المحتوى</label>
+						<button type="button" id="post-ai-button" class="post-ai-button">
+							<svg id="post-ai-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m12 3 1.1 4.1L17 8.3l-3.9 1.1L12 13.5l-1.1-4.1L7 8.3l3.9-1.2L12 3Zm6 11 .6 2.2 2.2.6-2.2.6L18 20l-.6-2.6-2.2-.6 2.2-.6L18 14Z" /></svg>
+							<span id="post-ai-label">توليد بالذكاء الاصطناعي</span>
+						</button>
+					</div>
+					<p id="post-ai-error" class="post-field-error" hidden></p>
+					<div id="post-editor-toolbar">
+						<span class="ql-formats"><button type="button" class="ql-bold"></button><button type="button" class="ql-italic"></button><button type="button" class="ql-underline"></button><button type="button" class="ql-strike"></button></span>
+						<span class="ql-formats"><select class="ql-header"><option value="2"></option><option value="3"></option><option value=""></option></select></span>
+						<span class="ql-formats"><button type="button" class="ql-list" value="ordered"></button><button type="button" class="ql-list" value="bullet"></button><button type="button" class="ql-blockquote"></button></span>
+						<span class="ql-formats"><select class="ql-align"></select><button type="button" class="ql-direction" value="rtl"></button></span>
+						<span class="ql-formats"><select class="ql-color"></select><button type="button" class="ql-link"></button><button type="button" class="ql-clean"></button></span>
+						<span class="ql-formats"><button type="button" class="ql-undo" title="تراجع"><svg viewBox="0 0 18 18"><polyline class="ql-stroke" points="4 8 4 4 8 4" /><path class="ql-stroke" d="M4.5,7.5A6,6,0,1,1,3.6,10.5" /></svg></button><button type="button" class="ql-redo" title="إعادة"><svg viewBox="0 0 18 18"><polyline class="ql-stroke" points="14 8 14 4 10 4" /><path class="ql-stroke" d="M13.5,7.5A6,6,0,1,0,14.4,10.5" /></svg></button></span>
+					</div>
+					<div id="post-editor-container"></div>
+					<textarea id="content" name="content" hidden>{post?.content ?? ''}</textarea>
+					<div class="post-editor-footer"><span id="post-content-error" class="post-field-error" hidden>يرجى كتابة محتوى المنشور قبل الحفظ.</span><span id="post-word-count">0 كلمة</span></div>
+				</div>
+			</section>
+
+			<section class="post-card post-seo-card">
+				<div class="post-card-heading">
+					<div><span class="post-step">02</span><h2>تحسين محركات البحث</h2><p>بيانات مختصرة تساعد المنشور على الظهور بصورة أفضل.</p></div>
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M4 18V9m5 9V5m5 13v-6m5 6V3M3 21h18" /></svg>
+				</div>
+				<div class="post-field">
+					<div class="post-label-row"><label for="meta_description">الوصف التعريفي</label><span id="post-meta-count">0 / 160</span></div>
+					<textarea id="meta_description" name="meta_description" maxlength="500" rows="3" placeholder="وصف قصير يظهر في نتائج البحث...">{post?.meta_description ?? ''}</textarea>
+					<small>عند تركه فارغًا سيتم توليده تلقائيًا من المحتوى.</small>
+				</div>
+				<div class="post-field">
+					<label for="keywords">الكلمات المفتاحية</label>
+					<input id="keywords" type="text" name="keywords" value={keywordsValue} placeholder="تعليم، أخبار، امتحانات" />
+					<small>افصل بين الكلمات باستخدام الفاصلة العربية.</small>
+				</div>
+				<div class="post-field">
+					<label for="alt">النص البديل للصورة</label>
+					<input id="alt" type="text" name="alt" maxlength="255" value={post?.alt ?? ''} placeholder="وصف واضح ومختصر للصورة" />
+					<small>عند تركه فارغًا سيُستخدم عنوان المنشور تلقائيًا.</small>
+				</div>
+			</section>
+		</main>
+
+		<aside class="post-sidebar">
+			<section class="post-side-card">
+				<div class="post-side-heading"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 6h7l2 2h9v11H3V6Z" /></svg></span><div><h2>التصنيف</h2><p>القسم الذي سيظهر فيه المنشور</p></div></div>
+				<div class="post-field">
+					<label for="category_id">القسم</label>
+					<select id="category_id" name="category_id" required>
+						<option value="">— اختر القسم —</option>
+						{categories.map((category: any) => <option value={category.id} selected={String(category.id) === String(post?.category_id ?? '')}>{category.name}</option>)}
+					</select>
+				</div>
+			</section>
+
+			<section class="post-side-card">
+				<div class="post-side-heading"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="8.5" cy="9" r="1.5" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="m4 17 5-5 4 4 2-2 5 4" /></svg></span><div><h2>الصورة الرئيسية</h2><p>واجهة المنشور عند عرضه</p></div></div>
+				<label class="post-image-drop" for="post-image-input">
+					<img id="post-image-preview" src={imageUrl || undefined} alt="" hidden={!imageUrl} />
+					<span id="post-image-placeholder" hidden={Boolean(imageUrl)}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 16V4m0 0L8 8m4-4 4 4M5 14v5h14v-5" /></svg><strong>اختر صورة</strong><small>PNG أو JPG أو WEBP</small></span>
+					<input id="post-image-input" type="file" name="image" accept="image/*" />
+				</label>
+			</section>
+
+			<section class="post-side-card">
+				<div class="post-side-heading"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6 1.7 1.7 0 0 0 10 3v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z" /></svg></span><div><h2>الإعدادات</h2><p>حالة الظهور والتمييز</p></div></div>
+				<div class="post-field">
+					<label for="is_active">الحالة</label>
+					<select id="is_active" name="is_active"><option value="true" selected={!post || post?.is_active === true}>منشور</option><option value="false" selected={post?.is_active === false}>مسودة</option></select>
+				</div>
+				<label class="post-featured-option"><input type="checkbox" name="is_featured" checked={post?.is_featured === true} /><span><strong>منشور مميز</strong><small>إبرازه في الواجهة الرئيسية</small></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m12 3 2.7 5.5 6 .9-4.3 4.2 1 6-5.4-2.9-5.4 2.9 1-6-4.3-4.2 6-.9L12 3Z" /></svg></label>
+			</section>
+
+			<section class="post-side-card">
+				<div class="post-side-heading"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m8.5 12.5 5-5a3 3 0 1 1 4.2 4.2l-7.1 7.1a5 5 0 0 1-7.1-7.1l7.8-7.8" /></svg></span><div><h2>المرفقات</h2><p>ملفات إضافية للمنشور</p></div></div>
+				<label class="post-files-drop" for="post-attachments"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 16V4m0 0L8 8m4-4 4 4M5 14v5h14v-5" /></svg><strong>اختر الملفات</strong><small id="post-files-label">يمكن اختيار أكثر من ملف</small><input id="post-attachments" type="file" name="attachments" multiple /></label>
+			</section>
+
+			<button id="post-submit-button" type="submit" class="post-submit-button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M5 4h12l2 2v14H5V4Zm3 0v6h8V4M8 20v-6h8v6" /></svg><span>{post?.id ? 'حفظ التعديلات' : 'حفظ المنشور'}</span></button>
+	</aside>
+	</form>
+</div>
+
+<script>
+	// package.json pins quill to exactly 2.0.2 (no caret) — 2.0.3+ carries an unpatched XSS
+	// advisory (CVE-2025-15056) in Quill's HTML-export path. Don't loosen the version range
+	// until a patched release exists.
+	import Quill from 'quill';
+
+	const editorContainer = document.getElementById('post-editor-container');
+	const editorToolbar = document.getElementById('post-editor-toolbar');
+	const contentInput = document.getElementById('content') as HTMLTextAreaElement | null;
+	const postForm = document.getElementById('post-editor-form') as HTMLFormElement | null;
+	const contentError = document.getElementById('post-content-error');
+	const wordCount = document.getElementById('post-word-count');
+
+	if (editorContainer && contentInput) {
+		const quill = new Quill(editorContainer, {
+			theme: 'snow',
+			modules: {
+				toolbar: {
+					container: editorToolbar,
+					handlers: {
+						undo(this: { quill: InstanceType<typeof Quill> }) { this.quill.history.undo(); },
+						redo(this: { quill: InstanceType<typeof Quill> }) { this.quill.history.redo(); },
+					},
+				},
+			},
+			placeholder: 'اكتب محتوى المنشور هنا...'
+		});
+		if (contentInput.value) quill.clipboard.dangerouslyPasteHTML(contentInput.value);
+		quill.root.setAttribute('dir', 'rtl');
+		quill.root.style.textAlign = 'right';
+
+		const updateWordCount = () => {
+			const words = quill.getText().trim().split(/\s+/).filter(Boolean).length;
+			if (wordCount) wordCount.textContent = `${words} كلمة`;
+		};
+		quill.on('text-change', updateWordCount);
+		updateWordCount();
+
+		postForm?.addEventListener('submit', (event) => {
+			contentInput.value = quill.root.innerHTML;
+			const empty = quill.getText().trim().length === 0;
+			if (contentError) contentError.hidden = !empty;
+			if (empty) {
+				event.preventDefault();
+				return;
+			}
+			const submitButton = document.getElementById('post-submit-button') as HTMLButtonElement | null;
+			if (submitButton) {
+				submitButton.disabled = true;
+				const label = submitButton.querySelector('span');
+				if (label) label.textContent = 'جارِ الحفظ...';
+			}
+		});
+
+		const aiButton = document.getElementById('post-ai-button') as HTMLButtonElement | null;
+		const aiLabel = document.getElementById('post-ai-label');
+		const aiIcon = document.getElementById('post-ai-icon');
+		const aiError = document.getElementById('post-ai-error');
+		const titleInput = document.getElementById('title') as HTMLInputElement | null;
+		const categoryInput = document.getElementById('category_id') as HTMLSelectElement | null;
+		const metaInput = document.getElementById('meta_description') as HTMLTextAreaElement | null;
+		const keywordsInput = document.getElementById('keywords') as HTMLInputElement | null;
+
+		const setAiBusy = (busy: boolean) => {
+			if (aiButton) aiButton.disabled = busy;
+			aiIcon?.classList.toggle('is-spinning', busy);
+			if (aiLabel) aiLabel.textContent = busy ? 'جارِ التوليد...' : 'توليد بالذكاء الاصطناعي';
+		};
+
+		aiButton?.addEventListener('click', async () => {
+			if (aiError) aiError.hidden = true;
+			const title = titleInput?.value.trim() ?? '';
+			if (title.length < 5) {
+				if (aiError) { aiError.textContent = 'أدخل عنوانًا من 5 أحرف على الأقل قبل التوليد.'; aiError.hidden = false; }
+				return;
+			}
+
+			setAiBusy(true);
+			try {
+				const selectedCategory = categoryInput?.selectedOptions[0];
+				const response = await fetch('/api/dashboard/ai/generate', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ title, content_type: 'post', category_id: categoryInput?.value || undefined, category_name: selectedCategory?.textContent?.trim() || undefined }),
+				});
+				const payload = await response.json();
+				if (!response.ok || !payload?.job_id) throw new Error(payload?.message || 'تعذّر بدء عملية التوليد');
+
+				for (let attempt = 0; attempt < 60; attempt++) {
+					await new Promise((resolve) => setTimeout(resolve, 2000));
+					const statusResponse = await fetch(`/api/dashboard/ai/status/${payload.job_id}`);
+					const status = await statusResponse.json();
+					if (status?.status === 'failed') throw new Error(status?.error || 'فشل توليد المحتوى');
+					if (status?.status !== 'done') continue;
+					const html = status.content_html || status.content || '';
+					if (html) quill.clipboard.dangerouslyPasteHTML(html);
+					if (status.article?.meta_description && metaInput && !metaInput.value.trim()) {
+						metaInput.value = status.article.meta_description;
+						metaInput.dispatchEvent(new Event('input'));
+					}
+					if (Array.isArray(status.article?.keywords) && keywordsInput && !keywordsInput.value.trim()) keywordsInput.value = status.article.keywords.join('، ');
+					setAiBusy(false);
+					return;
+				}
+				throw new Error('استغرق التوليد وقتًا أطول من المتوقع، حاول مجددًا.');
+			} catch (error) {
+				setAiBusy(false);
+				if (aiError) { aiError.textContent = error instanceof Error ? error.message : 'حدث خطأ أثناء التوليد'; aiError.hidden = false; }
+			}
+		});
+	}
+
+	const titleInput = document.getElementById('title') as HTMLInputElement | null;
+	const titleCount = document.getElementById('post-title-count');
+	const metaInput = document.getElementById('meta_description') as HTMLTextAreaElement | null;
+	const metaCount = document.getElementById('post-meta-count');
+	const updateCounter = (input: HTMLInputElement | HTMLTextAreaElement | null, target: HTMLElement | null, preferredMax: number) => {
+		if (input && target) target.textContent = `${input.value.length} / ${preferredMax}`;
+	};
+	titleInput?.addEventListener('input', () => updateCounter(titleInput, titleCount, 500));
+	metaInput?.addEventListener('input', () => updateCounter(metaInput, metaCount, 160));
+	updateCounter(titleInput, titleCount, 500);
+	updateCounter(metaInput, metaCount, 160);
+
+	const imageInput = document.getElementById('post-image-input') as HTMLInputElement | null;
+	const imagePreview = document.getElementById('post-image-preview') as HTMLImageElement | null;
+	const imagePlaceholder = document.getElementById('post-image-placeholder');
+	let previewUrl = '';
+	imageInput?.addEventListener('change', () => {
+		const file = imageInput.files?.[0];
+		if (!file || !imagePreview) return;
+		if (previewUrl) URL.revokeObjectURL(previewUrl);
+		previewUrl = URL.createObjectURL(file);
+		imagePreview.src = previewUrl;
+		imagePreview.hidden = false;
+		if (imagePlaceholder) imagePlaceholder.hidden = true;
+	});
+
+	const attachmentsInput = document.getElementById('post-attachments') as HTMLInputElement | null;
+	const attachmentsLabel = document.getElementById('post-files-label');
+	attachmentsInput?.addEventListener('change', () => {
+		const files = Array.from(attachmentsInput.files ?? []);
+		if (attachmentsLabel) attachmentsLabel.textContent = files.length ? `${files.length} ملف محدد` : 'يمكن اختيار أكثر من ملف';
+	});
+
+	const countrySelect = document.getElementById('post-country-select') as HTMLSelectElement | null;
+	countrySelect?.addEventListener('change', () => {
+		if (countrySelect.value === countrySelect.dataset.current) return;
+		const url = new URL(window.location.href);
+		url.searchParams.set('country', countrySelect.value);
+		window.location.href = url.toString();
+	});
+</script>
+
+<style>
+	.post-form-page{--post-ink:#102a43;--post-muted:#718096;--post-line:#dfe6ee;max-width:1280px;margin-inline:auto;padding-bottom:2rem;color:var(--post-ink)}
+	.post-form-header{display:flex;align-items:center;justify-content:space-between;gap:1.25rem;margin-bottom:1.1rem;border:1px solid var(--post-line);border-radius:.8rem;background:#fff;padding:1rem 1.15rem;box-shadow:0 1px 2px rgb(15 23 42 / .05)}
+	.post-form-heading{display:flex;min-width:0;align-items:center;gap:.8rem}.post-back-button{display:grid;width:2.35rem;height:2.35rem;flex:none;place-items:center;border:1px solid #d9e2ec;border-radius:.55rem;color:#35516d}.post-back-button:hover{border-color:#9bb7dc;background:#f6f9fd;color:#1a4d8f}.post-back-button svg{width:1rem;height:1rem}.post-eyebrow{display:block;margin-bottom:.1rem;color:#1a4d8f;font-size:.65rem;font-weight:850}.post-form-heading h1{margin:0;color:#061a3a;font-size:clamp(1.2rem,1rem + .6vw,1.65rem);font-weight:900;line-height:1.35}.post-form-heading p{margin:.2rem 0 0;color:var(--post-muted);font-size:.7rem}
+	.post-country-control{display:flex;align-items:center;gap:.55rem;flex:none}.post-country-flag{font-size:1.5rem}.post-country-control div{display:grid}.post-country-control small{color:var(--post-muted);font-size:.58rem}.post-country-control strong{font-size:.72rem}.post-country-control select{min-height:2.25rem;border:1px solid #d9e2ec;border-radius:.5rem;background:#fff;padding:.35rem .55rem;color:var(--post-ink);font-size:.7rem}
+	.post-editor-grid{display:grid;grid-template-columns:minmax(0,1fr) 17.5rem;align-items:start;gap:1rem}.post-main-column,.post-sidebar{display:grid;gap:1rem}.post-sidebar{position:sticky;top:1rem}.post-card,.post-side-card{border:1px solid var(--post-line);border-radius:.8rem;background:#fff;box-shadow:0 1px 2px rgb(15 23 42 / .05)}.post-card{padding:1rem}.post-side-card{padding:.9rem}
+	.post-card-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem;border-bottom:1px solid #edf1f5;padding-bottom:.8rem}.post-card-heading>div{display:grid;grid-template-columns:auto 1fr;column-gap:.5rem}.post-card-heading .post-step{grid-row:1 / span 2;display:grid;width:1.75rem;height:1.75rem;place-items:center;border-radius:.4rem;background:#edf4fc;color:#1a4d8f;font-size:.6rem;font-weight:900}.post-card-heading h2{margin:0;color:#102a43;font-size:.86rem;font-weight:900}.post-card-heading p{margin:.12rem 0 0;color:var(--post-muted);font-size:.64rem}.post-card-heading>svg{width:1.1rem;height:1.1rem;color:#1a4d8f}
+	.post-field{display:grid;gap:.35rem;margin-top:.85rem}.post-field:first-of-type{margin-top:0}.post-field label,.post-label-row label{color:#243b53;font-size:.68rem;font-weight:850}.post-label-row{display:flex;align-items:center;justify-content:space-between;gap:.75rem}.post-label-row>span{color:#91a0b2;font-size:.6rem}.post-field input,.post-field select,.post-field textarea{width:100%;min-height:2.45rem;border:1px solid #d9e2ec;border-radius:.5rem;background:#fff;padding:.52rem .65rem;color:#102a43;font-family:inherit;font-size:.72rem;transition:border-color .15s,box-shadow .15s}.post-field textarea{resize:vertical;line-height:1.7}.post-field input:focus,.post-field select:focus,.post-field textarea:focus{border-color:#7da4d7;outline:0;box-shadow:0 0 0 3px rgb(26 77 143 / .07)}.post-field small{color:#8796a8;font-size:.58rem}
+	.post-editor-field{margin-top:1rem}.post-ai-button{display:inline-flex;min-height:2rem;align-items:center;gap:.35rem;border:1px solid #b8cce5;border-radius:.45rem;background:#fff;padding:.35rem .6rem;color:#1a4d8f;font-size:.64rem;font-weight:800}.post-ai-button:hover{background:#f4f8fd}.post-ai-button:disabled{cursor:wait;opacity:.65}.post-ai-button svg{width:.85rem;height:.85rem}.post-ai-button svg.is-spinning{animation:post-spin 1s linear infinite}.post-field-error{margin:0;color:#c53030;font-size:.62rem;font-weight:750}
+	:global(#post-editor-toolbar.ql-toolbar.ql-snow){border:1px solid #d9e2ec;border-radius:.55rem .55rem 0 0;background:#fbfcfe;padding:.45rem;direction:rtl}:global(#post-editor-container.ql-container.ql-snow){height:23rem;border:1px solid #d9e2ec;border-top:0;border-radius:0 0 .55rem .55rem;background:#fff;font-family:inherit;font-size:.82rem}:global(#post-editor-container .ql-editor){padding:1rem 1.1rem;line-height:1.9}:global(#post-editor-toolbar .ql-formats){margin-right:0;margin-left:.45rem}.post-editor-footer{display:flex;min-height:1.5rem;align-items:center;justify-content:space-between;gap:1rem;color:#8796a8;font-size:.58rem}
+	.post-side-heading{display:flex;align-items:flex-start;gap:.6rem;margin-bottom:.85rem}.post-side-heading>span{display:grid;width:1.9rem;height:1.9rem;flex:none;place-items:center;border-radius:.45rem;background:#edf4fc;color:#1a4d8f}.post-side-heading svg{width:.95rem;height:.95rem}.post-side-heading h2{margin:0;color:#102a43;font-size:.76rem;font-weight:900}.post-side-heading p{margin:.12rem 0 0;color:var(--post-muted);font-size:.58rem}
+	.post-image-drop{position:relative;display:grid;min-height:9.5rem;cursor:pointer;overflow:hidden;place-items:center;border:1px dashed #afc2d8;border-radius:.6rem;background:#fafcfe;text-align:center}.post-image-drop:hover{border-color:#1a4d8f;background:#f6f9fd}.post-image-drop input,.post-files-drop input{position:absolute;width:1px;height:1px;opacity:0}.post-image-drop img{width:100%;height:10.5rem;object-fit:cover}.post-image-drop>span{display:grid;justify-items:center;gap:.25rem;color:#60758a}.post-image-drop svg,.post-files-drop svg{width:1.25rem;height:1.25rem;color:#1a4d8f}.post-image-drop strong,.post-files-drop strong{font-size:.68rem}.post-image-drop small,.post-files-drop small{color:#8796a8;font-size:.56rem}
+	.post-featured-option{display:flex;cursor:pointer;align-items:center;gap:.55rem;margin-top:.8rem;border:1px solid #dfe6ee;border-radius:.55rem;padding:.6rem}.post-featured-option:has(input:checked){border-color:#e8a244;background:#fffaf2}.post-featured-option input{accent-color:#e8a244}.post-featured-option span{display:grid;flex:1}.post-featured-option strong{font-size:.67rem}.post-featured-option small{color:var(--post-muted);font-size:.56rem}.post-featured-option svg{width:.95rem;height:.95rem;color:#d58c27}
+	.post-files-drop{position:relative;display:grid;min-height:5.5rem;cursor:pointer;justify-items:center;align-content:center;gap:.2rem;border:1px dashed #afc2d8;border-radius:.55rem;background:#fafcfe}.post-files-drop:hover{border-color:#1a4d8f;background:#f6f9fd}
+	.post-submit-button{display:flex;min-height:2.75rem;width:100%;align-items:center;justify-content:center;gap:.45rem;border:1px solid #16427d;border-radius:.6rem;background:#1a4d8f;padding:.6rem .8rem;color:#fff;font-size:.72rem;font-weight:900;box-shadow:0 2px 4px rgb(26 77 143 / .18)}.post-submit-button:hover{background:#153f76}.post-submit-button:disabled{cursor:wait;opacity:.7}.post-submit-button svg{width:1rem;height:1rem}
+	@keyframes post-spin{to{transform:rotate(360deg)}}
+	:global(.dark) .post-form-page{--post-ink:#e6edf5;--post-muted:#93a4b8;--post-line:#334155}:global(.dark) .post-form-header,:global(.dark) .post-card,:global(.dark) .post-side-card{background:#111827}:global(.dark) .post-form-heading h1,:global(.dark) .post-card-heading h2,:global(.dark) .post-side-heading h2,:global(.dark) .post-field label,:global(.dark) .post-label-row label{color:#f1f5f9}:global(.dark) .post-country-control select,:global(.dark) .post-field input,:global(.dark) .post-field select,:global(.dark) .post-field textarea{border-color:#3b4a5c;background:#172033;color:#e6edf5}:global(.dark) .post-card-heading{border-color:#283548}:global(.dark) .post-back-button{border-color:#3b4a5c;color:#c7d2df}:global(.dark) .post-ai-button{border-color:#3d5d82;background:#172033;color:#9cc1ef}:global(.dark) :global(#post-editor-toolbar.ql-toolbar.ql-snow),:global(.dark) :global(#post-editor-container.ql-container.ql-snow){border-color:#3b4a5c;background:#172033}:global(.dark) :global(#post-editor-container .ql-editor){color:#e6edf5}:global(.dark) .post-image-drop,:global(.dark) .post-files-drop{border-color:#52647a;background:#151e2d}:global(.dark) .post-featured-option{border-color:#3b4a5c}:global(.dark) .post-featured-option:has(input:checked){background:#2b2418}
+	@media(max-width:900px){.post-editor-grid{grid-template-columns:1fr}.post-sidebar{position:static;grid-template-columns:repeat(2,minmax(0,1fr))}.post-submit-button{grid-column:1/-1}}
+	@media(max-width:640px){.post-form-header{align-items:flex-start;flex-direction:column}.post-country-control{width:100%;border-top:1px solid var(--post-line);padding-top:.75rem}.post-country-control select{margin-inline-start:auto}.post-editor-grid{gap:.75rem}.post-card,.post-side-card{border-radius:.65rem;padding:.8rem}.post-sidebar{grid-template-columns:1fr}:global(#post-editor-container.ql-container.ql-snow){height:20rem}.post-label-row{align-items:flex-start}.post-ai-button span{display:none}}
+</style>

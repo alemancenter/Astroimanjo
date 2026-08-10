@@ -1,0 +1,7 @@
+---
+import { getCountryById } from '../../lib/countries';
+
+const fileId = Astro.params.fileId;
+const countryCode = getCountryById(Astro.locals.countryId).code;
+return Astro.redirect(`/${countryCode}/download/${fileId}`, 307);
+---

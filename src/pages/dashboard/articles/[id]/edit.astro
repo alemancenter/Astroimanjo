@@ -1,0 +1,30 @@
+---
+import DashboardLayout from '../../../../layouts/DashboardLayout.astro';
+import DashboardAlert from '../../../../components/ui/DashboardAlert.astro';
+import ArticleForm from '../../../../components/dashboard/ArticleForm.astro';
+import { requireDashboard } from '../../../../lib/auth';
+import { apiFetch } from '../../../../lib/api';
+
+const guard = await requireDashboard(Astro, 'manage articles');
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+
+const { id } = Astro.params;
+const result = await apiFetch<any>(`/dashboard/articles/${id}/edit`, {
+	countryId: Astro.locals.countryId,
+	cookieHeader: `token=${Astro.cookies.get('token')?.value}`,
+});
+const data = result.data;
+const article = data?.data;
+---
+
+<DashboardLayout title="تعديل مقال" user={user}>
+	<DashboardAlert />
+	{
+		!result.ok || !article ? (
+			<p class="text-red-600 dark:text-red-400">{result.ok ? 'المقال غير موجود.' : result.message}</p>
+		) : (
+			<ArticleForm article={article} classes={data?.classes ?? []} countryId={Astro.locals.countryId} />
+		)
+	}
+</DashboardLayout>

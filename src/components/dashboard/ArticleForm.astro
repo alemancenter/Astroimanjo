@@ -1,0 +1,1174 @@
+---
+import 'quill/dist/quill.snow.css';
+import { SUBJECT_FILE_CATEGORIES, getSubjectFileCategory } from '../../lib/subject-categories';
+import { COUNTRIES, getCountryById } from '../../lib/countries';
+
+interface Props {
+	article?: any;
+	classes: any[];
+	countryId: string;
+}
+const { article, classes, countryId } = Astro.props;
+const currentCountry = getCountryById(countryId);
+// Subject/semester options are fetched on demand client-side (see the script below) via
+// /filter/subjects/{classId} and /filter/semesters/{subjectId} — already-working, already
+// publicly-deployed backend endpoints — instead of relying on the dashboard's own
+// GetDashboardCreateData/GetDashboardEditData, which (as currently deployed to production)
+// unconditionally returns empty subjects/semesters arrays. When editing, the article's own
+// preloaded Subject/Semester relations seed the initial selection so nothing needs a fetch
+// before the page is even interactive.
+
+const inputClass =
+	'form-control';
+const labelClass = 'form-label';
+
+const keywordsValue = Array.isArray(article?.keywords_rel)
+	? article.keywords_rel.map((k: any) => k.keyword).filter(Boolean).join('، ')
+	: '';
+
+const files: any[] = Array.isArray(article?.files) ? article.files : [];
+
+function formatSize(bytes: number): string {
+	if (!bytes) return '—';
+	const kb = bytes / 1024;
+	if (kb < 1024) return `${kb.toFixed(0)} KB`;
+	return `${(kb / 1024).toFixed(1)} MB`;
+}
+---
+
+<div class="article-form-page">
+<div class="article-form-countrybar surface-card mb-6 flex flex-wrap items-center justify-between gap-4 border-r-4 border-royal-500 p-5 sm:p-6">
+	<div class="article-form-page-heading">
+		<a href="/dashboard/articles" class="article-form-page-heading-icon" aria-label="العودة إلى المقالات"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m15 18-6-6 6-6" /></svg></a>
+		<div><h2>{article?.id ? 'تعديل المقالة' : 'إضافة مقالة جديدة'}</h2><p>أنشئ محتوى تعليميًا منظمًا وحدد بياناته وتصنيفاته بسهولة.</p></div>
+	</div>
+	<div class="flex items-center gap-3">
+		<span class="text-3xl" aria-hidden="true">{currentCountry.flag}</span>
+		<div>
+			<p class="text-xs font-bold text-graphite-500 dark:text-graphite-400">قاعدة البيانات الحالية</p>
+			<p class="text-lg font-extrabold text-graphite-950 dark:text-white">{currentCountry.name}</p>
+		</div>
+	</div>
+	<div class="flex items-center gap-2">
+		<label for="country-database-select" class="form-label text-xs">تبديل قاعدة البيانات</label>
+		<select
+			id="country-database-select"
+			class="form-control w-auto"
+			data-current={currentCountry.id}
+		>
+			{COUNTRIES.map((c) => <option value={c.id} selected={c.id === countryId}>{c.flag} {c.name}</option>)}
+		</select>
+	</div>
+	{article?.id && (
+		<p class="w-full text-xs font-bold text-sunset-700 dark:text-sunset-300">
+			⚠ تبديل قاعدة البيانات هنا سينقلك لإنشاء مقال جديد — هذا المقال محفوظ في قاعدة {currentCountry.name} ولا يمكن نقله بين الدول.
+		</p>
+	)}
+</div>
+
+<form id="article-form" method="post" action="/api/dashboard/articles/save" class="article-editor-form">
+	{article?.id && <input type="hidden" name="id" value={article.id} />}
+	<p id="save-error" class="hidden article-save-error"></p>
+
+	<div class="article-main-column">
+		<section class="article-content-card">
+			<div class="article-card-title">
+				<div><h2>محتوى المقالة</h2><p>أدخل العنوان واكتب المحتوى التعليمي بصورة واضحة ومنظمة.</p></div>
+				<span>01</span>
+			</div>
+
+			<div class="article-title-section">
+				<label for="title" class={labelClass}>العنوان</label>
+				<input id="title" type="text" name="title" required value={article?.title ?? ''} class={inputClass} placeholder="مثال: حل أسئلة درس القواعد" />
+			</div>
+
+			<div class="article-content-section">
+				<div class="article-content-label">
+					<label for="quill-editor-container" class={labelClass}>المحتوى</label>
+					<button type="button" id="ai-generate-btn" class="article-ai-button">
+						<svg id="ai-generate-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m12 3 1.1 4.1L17 8.3l-3.9 1.1L12 13.5l-1.1-4.1L7 8.3l3.9-1.2L12 3Zm6 11 .6 2.2 2.2.6-2.2.6L18 20l-.6-2.6-2.2-.6 2.2-.6L18 14Z" /></svg>
+						<span id="ai-generate-label">توليد بالذكاء الاصطناعي</span>
+					</button>
+				</div>
+				<p id="ai-generate-error" class="form-hint hidden text-red-600 dark:text-red-400"></p>
+				<div id="quill-toolbar">
+					<span class="ql-formats"><button type="button" class="ql-bold"></button><button type="button" class="ql-italic"></button><button type="button" class="ql-underline"></button><button type="button" class="ql-strike"></button></span>
+					<span class="ql-formats"><select class="ql-header"><option value="1"></option><option value="2"></option><option value="3"></option><option value=""></option></select><select class="ql-size"><option value="12px">صغير</option><option value="" selected>عادي</option><option value="20px">كبير</option><option value="28px">كبير جدًا</option></select></span>
+					<span class="ql-formats"><button type="button" class="ql-list" value="ordered"></button><button type="button" class="ql-list" value="bullet"></button><button type="button" class="ql-blockquote"></button></span>
+					<span class="ql-formats"><select class="ql-align"></select><button type="button" class="ql-direction" value="rtl"></button></span>
+					<span class="ql-formats"><select class="ql-color"></select><select class="ql-background"></select></span>
+					<span class="ql-formats"><button type="button" class="ql-link"></button><button type="button" class="ql-image"></button><button type="button" class="ql-video"></button><button type="button" class="ql-clean"></button></span>
+					<span class="ql-formats"><button type="button" class="ql-undo" title="تراجع"><svg viewBox="0 0 18 18"><polyline class="ql-stroke" points="4 8 4 4 8 4" /><path class="ql-stroke" d="M4.5,7.5A6,6,0,1,1,3.6,10.5" /></svg></button><button type="button" class="ql-redo" title="إعادة"><svg viewBox="0 0 18 18"><polyline class="ql-stroke" points="14 8 14 4 10 4" /><path class="ql-stroke" d="M13.5,7.5A6,6,0,1,0,14.4,10.5" /></svg></button></span>
+				</div>
+				<div id="quill-editor-container"></div>
+				<textarea id="content" name="content" class="hidden">{article?.content ?? ''}</textarea>
+				<p id="content-error" class="hidden text-xs font-bold text-red-600 dark:text-red-400">يرجى كتابة محتوى المقال قبل الحفظ.</p>
+			</div>
+		</section>
+
+		<section class="article-seo-card">
+			<div class="article-card-title">
+				<div><h2>تحسين محركات البحث</h2><p>بيانات مختصرة تساعد المقال في الظهور والوصول إلى جمهوره.</p></div>
+				<span>02</span>
+			</div>
+			<div class="article-seo-section">
+				<label for="meta_description" class={labelClass}>الوصف</label>
+				<textarea id="meta_description" name="meta_description" rows="3" class={inputClass} placeholder="وصف قصير يظهر في نتائج البحث...">{article?.meta_description ?? ''}</textarea>
+				<p class="form-hint">يفضل أن يكون الوصف بين 120 و160 حرفًا.</p>
+			</div>
+			<div class="article-keywords-section">
+				<label for="keywords" class={labelClass}>الكلمات المفتاحية</label>
+				<input id="keywords" type="text" name="keywords" value={keywordsValue} class={inputClass} placeholder="تعليم، قواعد، لغة عربية" />
+				<p class="form-hint">افصل بين الكلمات باستخدام الفاصلة العربية.</p>
+			</div>
+		</section>
+	</div>
+
+	<aside class="article-sidebar">
+		<section class="article-side-card article-taxonomy-section">
+			<div class="article-side-section-heading"><span class="article-side-section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 6h16M7 3v6m10-6v6M5 11h14v8H5z" /></svg></span><div><strong>التصنيف التعليمي</strong><small>قاعدة البيانات والمرحلة الدراسية</small></div></div>
+			<div><label for="class_id" class={labelClass}>الصف الدراسي</label><select id="class_id" name="grade_level" required class={inputClass}><option value="">— اختر الصف —</option>{classes.map((cls: any) => <option value={cls.id} selected={cls.id === (article?.subject?.grade_level ?? article?.grade_level)}>{cls.grade_name}</option>)}</select></div>
+			<div><label for="subject_id" class={labelClass}>المادة</label><select id="subject_id" name="subject_id" required class={inputClass}>{article?.subject ? <option value={article.subject_id} data-grade-level={article.subject.grade_level} selected>{article.subject.subject_name}</option> : <option value="">— اختر الصف أولًا —</option>}</select></div>
+			<div><label for="semester_id" class={labelClass}>الفصل الدراسي</label><select id="semester_id" name="semester_id" required class={inputClass}>{article?.semester ? <option value={article.semester_id} selected>{article.semester.semester_name}</option> : <option value="">— اختر المادة أولًا —</option>}</select></div>
+		</section>
+
+		{!article?.id && (
+			<section class="article-side-card article-create-attachments">
+				<div class="article-side-section-heading"><span class="article-side-section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m8.5 12.5 5-5a3 3 0 1 1 4.2 4.2l-7.1 7.1a5 5 0 0 1-7.1-7.1l7.8-7.8" /></svg></span><div><strong>المرفقات</strong><small>الملفات التابعة للمقال</small></div></div>
+				<div><label for="staged-file-category" class={labelClass}>تصنيف الملفات</label><select id="staged-file-category" class={inputClass}><option value="">بدون تصنيف</option>{SUBJECT_FILE_CATEGORIES.map((c) => <option value={c.key}>{c.label}</option>)}</select></div>
+				<label class="article-file-drop" for="staged-file-input"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 16V4m0 0L8 8m4-4 4 4M5 14v5h14v-5" /></svg><span>اختر الملفات أو اسحبها هنا</span><small>PDF, DOCX, PPTX, ZIP</small><input id="staged-file-input" type="file" multiple /></label>
+				<ul id="staged-file-list" class="space-y-2"></ul>
+			</section>
+		)}
+
+		<section class="article-side-card article-status-section">
+			<div class="article-side-section-heading"><span class="article-side-section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M5 12h14M12 5v14" /></svg></span><div><strong>الإعدادات</strong><small>حالة ظهور المقالة</small></div></div>
+			<span class={labelClass}>الحالة</span>
+			<div class="article-status-options"><label><input type="radio" name="status" value="1" checked={article?.status === 1 || !article} /><span>منشور</span></label><label><input type="radio" name="status" value="0" checked={article?.status === 0} /><span>مسودة</span></label></div>
+			<button type="submit" id="article-submit-btn" class="article-submit-section"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 12 20 4l-5 16-4-6-7-2Z" /></svg><span id="article-submit-label">حفظ المقالة</span></button>
+		</section>
+	</aside>
+</form>
+
+{article?.id && (
+	<div class="article-attachments-card surface-card mt-6 space-y-5 p-5 sm:p-8">
+		<div class="border-b border-graphite-200 pb-6 dark:border-graphite-700">
+			<span class="page-eyebrow">الملفات الدراسية</span>
+			<h3 class="text-lg font-extrabold text-graphite-950 dark:text-white">الملفات المرفقة بالمقال</h3>
+			<p class="mt-2 text-sm text-graphite-500 dark:text-graphite-400">الملفات القابلة للتنزيل المرتبطة بهذا المقال.</p>
+		</div>
+		{files.length > 0 ? (
+			<ul class="space-y-2">
+				{files.map((f: any) => (
+					<li class="flex items-center justify-between gap-3 rounded-xl border border-graphite-200 p-3 dark:border-graphite-700">
+						<div class="min-w-0"><p class="truncate text-sm font-bold text-graphite-950 dark:text-white">{f.file_name}</p><p class="text-xs text-graphite-500 dark:text-graphite-400">{getSubjectFileCategory(f.file_category)?.label || f.file_category || 'بدون تصنيف'} · {formatSize(f.file_size)}</p></div>
+						<form method="post" action={`/api/dashboard/files/${f.id}/delete`} onsubmit="return confirm('حذف هذا الملف نهائيًا؟')"><input type="hidden" name="redirect_to" value={`/dashboard/articles/${article.id}/edit`} /><button type="submit" class="shrink-0 text-sm font-bold text-red-600 hover:underline dark:text-red-400">حذف</button></form>
+					</li>
+				))}
+			</ul>
+		) : <p class="text-sm text-graphite-400">لا توجد ملفات مرفقة بعد.</p>}
+		<form method="post" action={`/api/dashboard/articles/${article.id}/files`} enctype="multipart/form-data" class="flex flex-wrap items-end gap-3 rounded-xl border border-dashed border-graphite-300 p-4 dark:border-graphite-600">
+			<input type="hidden" name="redirect_to" value={`/dashboard/articles/${article.id}/edit`} />
+			<div class="min-w-[200px] flex-1"><label for="new-file" class="form-label text-xs">ملف جديد</label><input id="new-file" type="file" name="file" required class="form-control text-sm" /></div>
+			<div><label for="file_category" class="form-label text-xs">التصنيف</label><select id="file_category" name="file_category" class="form-control text-sm"><option value="">بدون تصنيف</option>{SUBJECT_FILE_CATEGORIES.map((c) => <option value={c.key}>{c.label}</option>)}</select></div>
+			<button type="submit" class="btn-outline">رفع الملف</button>
+		</form>
+	</div>
+)}
+</div>
+
+<style>
+	.article-form-page {
+		--af-ink: #102a43;
+		--af-muted: #6b7c93;
+		--af-line: #dfe6ee;
+		--af-soft: #f7f9fc;
+		--af-blue: #2159d6;
+		max-width: 1360px;
+		margin-inline: auto;
+		padding-bottom: 2rem;
+	}
+
+	.article-form-countrybar {
+		min-height: 4.5rem;
+		margin-bottom: 1rem;
+		border: 0;
+		border-radius: 0;
+		background: transparent;
+		padding: 0;
+		box-shadow: none;
+	}
+
+	.article-form-page-heading {
+		display: flex;
+		order: 1;
+		align-items: center;
+		gap: 0.75rem;
+	}
+
+	.article-form-page-heading-icon {
+		display: inline-grid;
+		width: 2rem;
+		height: 2rem;
+		place-items: center;
+		border: 1px solid #d7e0ea;
+		border-radius: 0.55rem;
+		background: #fff;
+		color: #42526a;
+		transition: border-color 150ms ease, color 150ms ease;
+	}
+
+	.article-form-page-heading-icon:hover {
+		border-color: #9eb9df;
+		color: var(--af-blue);
+	}
+
+	.article-form-page-heading-icon svg {
+		width: 1rem;
+		height: 1rem;
+	}
+
+	.article-form-page-heading h2 {
+		margin: 0;
+		color: #061a3a;
+		font-size: clamp(1.35rem, 1.1rem + 0.65vw, 1.85rem);
+		font-weight: 900;
+		line-height: 1.25;
+	}
+
+	.article-form-page-heading p {
+		margin: 0.25rem 0 0;
+		color: var(--af-muted);
+		font-size: 0.74rem;
+		font-weight: 600;
+	}
+
+	.article-form-countrybar > .flex.items-center.gap-3 {
+		display: none;
+	}
+
+	.article-form-countrybar > .flex.items-center.gap-2 {
+		order: 2;
+		margin-inline-start: auto;
+	}
+
+	.article-form-countrybar > .flex.items-center.gap-2 .form-label {
+		display: none;
+	}
+
+	.article-form-countrybar > .flex.items-center.gap-2 select {
+		width: 9rem;
+		min-height: 2.3rem;
+		border: 1px solid #d7e0ea;
+		border-radius: 0.55rem;
+		background-color: #fff;
+		padding-block: 0.35rem;
+		font-size: 0.75rem;
+		font-weight: 700;
+		box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+	}
+
+	.article-form-warning,
+	.article-save-error {
+		margin-bottom: 1rem;
+		border: 1px solid #fecaca;
+		border-radius: 0.65rem;
+		background: #fef2f2;
+		padding: 0.75rem 0.9rem;
+		color: #b91c1c;
+		font-size: 0.75rem;
+		font-weight: 700;
+	}
+
+	.article-editor-form {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) 16rem;
+		gap: 1.1rem;
+		align-items: start;
+	}
+
+	.article-main-column,
+	.article-sidebar {
+		display: flex;
+		min-width: 0;
+		flex-direction: column;
+		gap: 1.1rem;
+	}
+
+	.article-sidebar {
+		position: sticky;
+		top: 5.15rem;
+	}
+
+	.article-content-card,
+	.article-seo-card,
+	.article-side-card,
+	.article-attachments-card {
+		border: 1px solid var(--af-line);
+		border-radius: 0.85rem;
+		background: #fff;
+		box-shadow: 0 1px 2px rgb(15 23 42 / 0.07);
+	}
+
+	.article-content-card,
+	.article-seo-card {
+		overflow: hidden;
+	}
+
+	.article-card-title {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 1rem;
+		border-bottom: 1px solid #edf1f5;
+		padding: 1rem 1.15rem 0.9rem;
+	}
+
+	.article-card-title h2 {
+		margin: 0;
+		color: var(--af-ink);
+		font-size: 0.9rem;
+		font-weight: 850;
+	}
+
+	.article-card-title p {
+		margin: 0.2rem 0 0;
+		color: var(--af-muted);
+		font-size: 0.68rem;
+		line-height: 1.6;
+	}
+
+	.article-card-title > span {
+		display: inline-grid;
+		width: 1.75rem;
+		height: 1.75rem;
+		place-items: center;
+		border-radius: 999px;
+		background: #f1f5f9;
+		color: #718096;
+		font-size: 0.62rem;
+		font-weight: 850;
+	}
+
+	.article-title-section {
+		padding: 1rem 1.15rem 0;
+	}
+
+	.article-content-section {
+		padding: 0.9rem 1.15rem 1.1rem;
+	}
+
+	.article-content-label {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+		margin-bottom: 0.45rem;
+	}
+
+	.article-content-label .form-label {
+		margin: 0;
+	}
+
+	.article-form-page .form-label {
+		margin-bottom: 0.38rem;
+		color: var(--af-ink);
+		font-size: 0.7rem;
+		font-weight: 750;
+	}
+
+	.article-form-page .form-control {
+		min-height: 2.55rem;
+		border: 1px solid #d9e2ec;
+		border-radius: 0.55rem;
+		background: #fff;
+		padding: 0.55rem 0.7rem;
+		color: var(--af-ink);
+		font-size: 0.76rem;
+		box-shadow: 0 1px 2px rgb(15 23 42 / 0.035);
+	}
+
+	.article-form-page .form-control:focus {
+		border-color: #7ca7df;
+		outline: none;
+		box-shadow: 0 0 0 3px rgb(33 89 214 / 0.08);
+	}
+
+	.article-title-section .form-control {
+		width: 100%;
+		font-size: 0.8rem;
+	}
+
+	.article-ai-button {
+		display: inline-flex;
+		min-height: 1.9rem;
+		align-items: center;
+		gap: 0.35rem;
+		border: 1px solid #d3deed;
+		border-radius: 0.5rem;
+		background: #fff;
+		padding: 0.3rem 0.55rem;
+		color: #2563eb;
+		font-size: 0.64rem;
+		font-weight: 750;
+	}
+
+	.article-ai-button:hover {
+		border-color: #9db7dc;
+		background: #f8fafc;
+	}
+
+	.article-ai-button svg {
+		width: 0.9rem;
+		height: 0.9rem;
+	}
+
+	#quill-toolbar {
+		display: flex;
+		min-height: 3rem;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.12rem;
+		border: 1px solid #d9e2ec;
+		border-bottom: 0;
+		border-radius: 0.6rem 0.6rem 0 0;
+		background: #f8fafc;
+		padding: 0.42rem 0.5rem;
+	}
+
+	/* quill-resize-image's drag handle (#editor-resizer .handler) writes plain width/height
+	   HTML attributes on the <img>, which the backend sanitizer already allows — safe. Its
+	   built-in preset panel (100%/50%/align buttons), however, writes an inline
+	   style="width:...;float:...", and those CSS properties aren't in the sanitizer's
+	   AllowStyles allowlist, so they'd silently vanish on save. The element is created at
+	   runtime (not by this component's template), so it needs :global() to be reachable here. */
+	:global(#editor-resizer .toolbar) {
+		display: none !important;
+	}
+
+	#quill-toolbar .ql-formats {
+		display: inline-flex;
+		align-items: center;
+		margin: 0;
+		padding-inline: 0.18rem;
+	}
+
+	#quill-toolbar button,
+	#quill-toolbar select {
+		border-radius: 0.3rem;
+	}
+
+	#quill-toolbar button:hover,
+	#quill-toolbar button.ql-active {
+		background: #eaf1fb;
+	}
+
+	#quill-editor-container {
+		min-height: 20rem;
+		border: 1px solid #d9e2ec;
+		border-radius: 0 0 0.6rem 0.6rem;
+		background: #fff;
+	}
+
+	#quill-editor-container :global(.ql-editor) {
+		min-height: 20rem;
+		padding: 1rem 1.1rem;
+		font-family: inherit;
+		font-size: 0.86rem;
+		line-height: 2;
+		text-align: right;
+	}
+
+	#quill-editor-container :global(.ql-editor.ql-blank)::before {
+		right: 1.1rem;
+		left: auto;
+		color: #94a3b8;
+		font-style: normal;
+	}
+
+	.article-seo-card {
+		padding-bottom: 1rem;
+	}
+
+	.article-seo-section,
+	.article-keywords-section {
+		padding: 0.9rem 1.15rem 0;
+	}
+
+	.article-seo-section textarea {
+		min-height: 3.4rem;
+		resize: vertical;
+	}
+
+	.article-form-page .form-hint {
+		margin-top: 0.35rem;
+		color: #8a99ab;
+		font-size: 0.62rem;
+		line-height: 1.6;
+	}
+
+	.article-side-card {
+		padding: 1rem;
+	}
+
+	.article-side-section-heading {
+		display: flex;
+		align-items: center;
+		gap: 0.55rem;
+		margin-bottom: 0.9rem;
+	}
+
+	.article-side-section-heading > div {
+		display: grid;
+		gap: 0.08rem;
+	}
+
+	.article-side-section-heading strong {
+		color: var(--af-ink);
+		font-size: 0.78rem;
+		font-weight: 850;
+	}
+
+	.article-side-section-heading small {
+		color: var(--af-muted);
+		font-size: 0.6rem;
+		font-weight: 600;
+	}
+
+	.article-side-section-icon {
+		display: inline-grid;
+		width: 1.8rem;
+		height: 1.8rem;
+		flex: 0 0 auto;
+		place-items: center;
+		border: 1px solid #d9e2ec;
+		border-radius: 0.5rem;
+		background: var(--af-soft);
+		color: #456284;
+	}
+
+	.article-side-section-icon svg {
+		width: 0.9rem;
+		height: 0.9rem;
+	}
+
+	.article-taxonomy-section,
+	.article-create-attachments {
+		display: grid;
+		gap: 0.8rem;
+	}
+
+	.article-file-drop {
+		display: flex;
+		min-height: 5.25rem;
+		cursor: pointer;
+		align-items: center;
+		justify-content: center;
+		flex-direction: column;
+		gap: 0.2rem;
+		border: 1px dashed #aac0dc;
+		border-radius: 0.6rem;
+		background: #fbfcfe;
+		padding: 0.75rem;
+		text-align: center;
+	}
+
+	.article-file-drop:hover {
+		border-color: #6f98ce;
+		background: #f7faff;
+	}
+
+	.article-file-drop svg {
+		width: 1rem;
+		height: 1rem;
+		color: #4875b4;
+	}
+
+	.article-file-drop span {
+		color: #3f5268;
+		font-size: 0.65rem;
+		font-weight: 750;
+	}
+
+	.article-file-drop small {
+		color: #94a3b8;
+		font-size: 0.55rem;
+	}
+
+	.article-file-drop input {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		opacity: 0;
+	}
+
+	.article-status-options {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 0.45rem;
+	}
+
+	.article-status-options label {
+		display: flex;
+		min-height: 2.4rem;
+		cursor: pointer;
+		align-items: center;
+		gap: 0.4rem;
+		border: 1px solid #d9e2ec;
+		border-radius: 0.55rem;
+		padding: 0.45rem 0.55rem;
+		color: #42526a;
+		font-size: 0.68rem;
+		font-weight: 750;
+	}
+
+	.article-status-options label:has(input:checked) {
+		border-color: #8bafe0;
+		background: #f3f7fd;
+		color: #174ea6;
+	}
+
+	.article-status-options input {
+		accent-color: var(--af-blue);
+	}
+
+	.article-submit-section {
+		display: inline-flex;
+		width: 100%;
+		min-height: 2.65rem;
+		align-items: center;
+		justify-content: center;
+		gap: 0.45rem;
+		margin-top: 0.9rem;
+		border: 1px solid #1f55cf;
+		border-radius: 0.55rem;
+		background: #2458d3;
+		color: #fff;
+		font-size: 0.72rem;
+		font-weight: 850;
+		box-shadow: 0 2px 4px rgb(37 88 211 / 0.16);
+	}
+
+	.article-submit-section:hover {
+		background: #1d4fca;
+	}
+
+	.article-submit-section svg {
+		width: 0.95rem;
+		height: 0.95rem;
+	}
+
+	.article-attachments-card {
+		margin-top: 1.1rem;
+		padding: 1rem;
+	}
+
+	:global(.dark) .article-form-page {
+		--af-ink: #f8fafc;
+		--af-muted: #94a3b8;
+		--af-line: #334155;
+		--af-soft: #152b4a;
+	}
+
+	:global(.dark) .article-form-page-heading h2 {
+		color: #fff;
+	}
+
+	:global(.dark) .article-form-page-heading-icon,
+	:global(.dark) .article-form-countrybar > .flex.items-center.gap-2 select,
+	:global(.dark) .article-content-card,
+	:global(.dark) .article-seo-card,
+	:global(.dark) .article-side-card,
+	:global(.dark) .article-attachments-card,
+	:global(.dark) .article-form-page .form-control,
+	:global(.dark) #quill-editor-container {
+		border-color: #334155;
+		background: #0f2547;
+		color: #e2e8f0;
+	}
+
+	:global(.dark) #quill-toolbar {
+		border-color: #334155;
+		background: #0b1e38;
+	}
+
+	:global(.dark) .article-card-title {
+		border-bottom-color: #253a55;
+	}
+
+	:global(.dark) .article-file-drop {
+		border-color: #46617f;
+		background: #0b1e38;
+	}
+
+	:global(.dark) .article-status-options label {
+		border-color: #3b506b;
+		color: #cbd5e1;
+	}
+
+	:global(.dark) .article-status-options label:has(input:checked) {
+		border-color: #5b88c4;
+		background: #16355e;
+		color: #dbeafe;
+	}
+
+	@media (max-width: 980px) {
+		.article-editor-form {
+			grid-template-columns: minmax(0, 1fr);
+		}
+		.article-sidebar {
+			position: static;
+			display: grid;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+		.article-status-section {
+			grid-column: 1 / -1;
+		}
+	}
+
+	@media (max-width: 640px) {
+		.article-form-countrybar {
+			align-items: stretch;
+		}
+		.article-form-page-heading {
+			width: 100%;
+		}
+		.article-form-countrybar > .flex.items-center.gap-2 {
+			width: 100%;
+			margin: 0;
+		}
+		.article-form-countrybar > .flex.items-center.gap-2 select {
+			width: 100%;
+		}
+		.article-sidebar {
+			display: flex;
+		}
+		.article-card-title p,
+		.article-card-title > span {
+			display: none;
+		}
+		.article-title-section,
+		.article-content-section,
+		.article-seo-section,
+		.article-keywords-section {
+			padding-inline: 0.85rem;
+		}
+		#quill-toolbar {
+			flex-wrap: nowrap;
+			overflow-x: auto;
+		}
+	}
+</style>
+
+<script>
+	// package.json pins quill to exactly 2.0.2 (no caret) — 2.0.3+ carries an unpatched XSS
+	// advisory (CVE-2025-15056) in Quill's HTML-export path. Don't loosen the version range
+	// until a patched release exists.
+	import Quill from 'quill';
+	import QuillResizeImage from 'quill-resize-image';
+	import { assetUrl } from '../../lib/assets';
+
+	// Drag-to-resize handles on inserted images. Writes plain width/height HTML attributes
+	// (not inline style) on the <img> — verified against the module's own source — which
+	// bluemonday's stock UGCPolicy() already allows via AllowImages() (img width/height
+	// matching a NumberOrPercent pattern), so unlike the align/direction/size attributors
+	// below, this survives the backend sanitizer with no server-side change needed.
+	Quill.register('modules/resize', QuillResizeImage);
+
+	// Quill's DEFAULT align/direction/size/font attributors render as CSS classes
+	// (ql-align-*, ql-direction-rtl, ql-size-*, ql-font-*) instead of inline styles — the
+	// backend sanitizer (bluemonday) has no class allowlist, so those get silently stripped
+	// on save, and even if they survived, the public article page never loads Quill's own
+	// stylesheet to interpret them. Verified this the hard way (a live save round-tripped
+	// and lost the formatting). Swap align/direction/size to their style-based variants,
+	// which Quill ships natively for exactly this reason — inline `style="..."` survives
+	// sanitization (see validator.go's AllowStyles) and needs no theme CSS to render
+	// correctly on the public site. Font-family has no clean style-based equivalent that
+	// would actually change anything (the public site loads exactly one webfont), so it's
+	// left out rather than shipping a picker that does nothing.
+	const AlignStyle = Quill.import('attributors/style/align') as any;
+	const DirectionStyle = Quill.import('attributors/style/direction') as any;
+	const SizeStyle = Quill.import('attributors/style/size') as any;
+	SizeStyle.whitelist = ['12px', '20px', '28px'];
+	Quill.register(AlignStyle, true);
+	Quill.register(DirectionStyle, true);
+	Quill.register(SizeStyle, true);
+
+	const container = document.getElementById('quill-editor-container');
+	const toolbar = document.getElementById('quill-toolbar');
+	const hiddenTextarea = document.getElementById('content') as HTMLTextAreaElement | null;
+	const errorHint = document.getElementById('content-error');
+
+	async function uploadEditorImage(quill: InstanceType<typeof Quill>) {
+		const input = document.createElement('input');
+		input.type = 'file';
+		input.accept = 'image/*';
+		input.onchange = async () => {
+			const file = input.files?.[0];
+			if (!file) return;
+			const range = quill.getSelection(true);
+			const placeholderIndex = range ? range.index : quill.getLength();
+			quill.insertText(placeholderIndex, 'جارِ رفع الصورة...', 'italic', 'api');
+
+			const formData = new FormData();
+			formData.set('image', file);
+			try {
+				const res = await fetch('/api/dashboard/upload-image', { method: 'POST', body: formData });
+				const json = await res.json();
+				quill.deleteText(placeholderIndex, 'جارِ رفع الصورة...'.length);
+				if (!res.ok || !json?.success) {
+					throw new Error(json?.message || 'فشل رفع الصورة');
+				}
+				// Not the backend's raw `url` field — that points at storage paths that 404
+				// unreliably (see lib/assets.ts). Route through the same image proxy every
+				// other image reference in this project uses.
+				const src = assetUrl(json.data?.path, 1200);
+				if (src) quill.insertEmbed(placeholderIndex, 'image', src, 'user');
+				quill.setSelection(placeholderIndex + 1, 0);
+			} catch (err) {
+				quill.deleteText(placeholderIndex, 'جارِ رفع الصورة...'.length);
+				alert(err instanceof Error ? err.message : 'فشل رفع الصورة');
+			}
+		};
+		input.click();
+	}
+
+	// Mirrors lib/countries.ts (COUNTRIES) — kept as a tiny literal here rather than importing
+	// the full list, since this script only ever needs id → code for one outgoing request.
+	const COUNTRY_ID_TO_CODE: Record<string, string> = { '1': 'jo', '2': 'sa', '3': 'eg', '4': 'ps' };
+
+	// New-article file staging: only present on the create page (absent when editing, where
+	// files upload immediately via their own form). Held here rather than re-read from the
+	// <input> at submit time so files stay staged across multiple picks (each change replaces
+	// the input's own FileList, so accumulating requires tracking it separately).
+	const stagedFiles: File[] = [];
+	const stagedFileInput = document.getElementById('staged-file-input') as HTMLInputElement | null;
+	const stagedFileList = document.getElementById('staged-file-list');
+	function renderStagedFiles() {
+		if (!stagedFileList) return;
+		stagedFileList.innerHTML = '';
+		stagedFiles.forEach((file, index) => {
+			const li = document.createElement('li');
+			li.className = 'flex items-center justify-between gap-3 rounded-xl border border-graphite-200 p-3 text-sm dark:border-graphite-700';
+			const name = document.createElement('span');
+			name.className = 'truncate font-bold text-graphite-950 dark:text-white';
+			name.textContent = file.name;
+			const removeBtn = document.createElement('button');
+			removeBtn.type = 'button';
+			removeBtn.className = 'shrink-0 text-xs font-bold text-red-600 hover:underline dark:text-red-400';
+			removeBtn.textContent = 'إزالة';
+			removeBtn.addEventListener('click', () => {
+				stagedFiles.splice(index, 1);
+				renderStagedFiles();
+			});
+			li.append(name, removeBtn);
+			stagedFileList.appendChild(li);
+		});
+	}
+	stagedFileInput?.addEventListener('change', () => {
+		for (const file of Array.from(stagedFileInput.files ?? [])) stagedFiles.push(file);
+		stagedFileInput.value = '';
+		renderStagedFiles();
+	});
+
+	if (container && hiddenTextarea) {
+		const quill = new Quill(container, {
+			theme: 'snow',
+			modules: {
+				toolbar: {
+					container: toolbar,
+					handlers: {
+						image: function (this: { quill: InstanceType<typeof Quill> }) {
+							uploadEditorImage(this.quill);
+						},
+						undo: function (this: { quill: InstanceType<typeof Quill> }) {
+							this.quill.history.undo();
+						},
+						redo: function (this: { quill: InstanceType<typeof Quill> }) {
+							this.quill.history.redo();
+						},
+					},
+				},
+				resize: { locale: {} },
+			},
+			placeholder: 'ابدأ بكتابة محتوى المقال هنا...',
+		});
+		// Documented API for seeding initial HTML (not a raw innerHTML assignment) — keeps
+		// Quill's internal document model in sync with the DOM from the start, rather than
+		// only after the first edit.
+		if (hiddenTextarea.value) quill.clipboard.dangerouslyPasteHTML(hiddenTextarea.value);
+		quill.root.setAttribute('dir', 'rtl');
+		quill.root.style.textAlign = 'right';
+
+		const form = hiddenTextarea.closest('form') as HTMLFormElement | null;
+		const isCreateMode = !form?.querySelector('input[name="id"]');
+		const submitBtn = document.getElementById('article-submit-btn') as HTMLButtonElement | null;
+		const submitLabel = document.getElementById('article-submit-label');
+		const saveError = document.getElementById('save-error');
+
+		form?.addEventListener('submit', (event) => {
+			hiddenTextarea.value = quill.root.innerHTML;
+			const isEmpty = quill.getText().trim().length === 0;
+			errorHint?.classList.toggle('hidden', !isEmpty);
+			if (isEmpty) {
+				event.preventDefault();
+				return;
+			}
+			// Editing an existing article: files already upload immediately via their own
+			// form below — a normal POST is enough here, nothing else to coordinate.
+			if (!isCreateMode) return;
+
+			// Creating a new article: the article doesn't have an id yet, so any files staged
+			// above (#staged-file-input) can't be uploaded until this save returns one. Submit
+			// via fetch instead of a native POST so the response (the new id) is readable,
+			// then upload each staged file, then land on the edit page — one guided flow
+			// instead of "save, then come back and add files".
+			event.preventDefault();
+			saveError?.classList.add('hidden');
+			if (submitBtn) submitBtn.disabled = true;
+			if (submitLabel) submitLabel.textContent = 'جارِ الحفظ...';
+
+			(async () => {
+				try {
+					const formData = new FormData(form);
+					const res = await fetch(form.action, {
+						method: 'POST',
+						headers: { 'X-Requested-With': 'fetch' },
+						body: formData,
+					});
+					const json = await res.json();
+					if (!res.ok || !json?.success || !json?.id) {
+						throw new Error(json?.message || 'تعذّر حفظ المقال');
+					}
+
+					const stagedCategory = (document.getElementById('staged-file-category') as HTMLSelectElement | null)?.value ?? '';
+					if (submitLabel && stagedFiles.length > 0) submitLabel.textContent = `جارِ رفع الملفات (0/${stagedFiles.length})...`;
+					for (let i = 0; i < stagedFiles.length; i++) {
+						const uploadData = new FormData();
+						uploadData.set('file', stagedFiles[i]);
+						if (stagedCategory) uploadData.set('file_category', stagedCategory);
+						const uploadRes = await fetch(`/api/dashboard/articles/${json.id}/files`, { method: 'POST', body: uploadData });
+						// A failed file upload shouldn't block navigating to the now-created
+						// article — the admin can retry the upload from the edit page either way.
+						if (!uploadRes.ok) console.error('failed to upload staged file', stagedFiles[i].name);
+						if (submitLabel) submitLabel.textContent = `جارِ رفع الملفات (${i + 1}/${stagedFiles.length})...`;
+					}
+
+					window.location.href = `/dashboard/articles/${json.id}/edit?success=1`;
+				} catch (err) {
+					if (submitBtn) submitBtn.disabled = false;
+					if (submitLabel) submitLabel.textContent = 'حفظ';
+					if (saveError) {
+						saveError.textContent = err instanceof Error ? err.message : 'حدث خطأ غير متوقع أثناء الحفظ';
+						saveError.classList.remove('hidden');
+					}
+				}
+			})();
+		});
+
+		// AI content generation — starts an async backend job (Together AI via
+		// services.AIService), polls until done, then fills content + (only if still empty)
+		// meta_description/keywords from the same generated article so nothing is overwritten
+		// that the admin already typed themselves.
+		const aiButton = document.getElementById('ai-generate-btn') as HTMLButtonElement | null;
+		const aiIcon = document.getElementById('ai-generate-icon');
+		const aiLabel = document.getElementById('ai-generate-label');
+		const aiError = document.getElementById('ai-generate-error');
+		const titleInput = document.getElementById('title') as HTMLInputElement | null;
+		const metaDescriptionInput = document.getElementById('meta_description') as HTMLTextAreaElement | null;
+		const keywordsInput = document.getElementById('keywords') as HTMLInputElement | null;
+		const subjectSelectForAI = document.getElementById('subject_id') as HTMLSelectElement | null;
+		const semesterSelectForAI = document.getElementById('semester_id') as HTMLSelectElement | null;
+		const countrySelectForAI = document.getElementById('country-database-select') as HTMLSelectElement | null;
+
+		const setAIBusy = (busy: boolean) => {
+			if (aiButton) aiButton.disabled = busy;
+			aiIcon?.classList.toggle('animate-spin', busy);
+			if (aiLabel) aiLabel.textContent = busy ? 'جارِ التوليد...' : 'توليد بالذكاء الاصطناعي';
+		};
+
+		aiButton?.addEventListener('click', async () => {
+			aiError?.classList.add('hidden');
+			const title = titleInput?.value.trim() ?? '';
+			if (title.length < 5) {
+				if (aiError) {
+					aiError.textContent = 'يرجى إدخال عنوان مكون من 5 أحرف على الأقل قبل التوليد.';
+					aiError.classList.remove('hidden');
+				}
+				return;
+			}
+
+			const subjectOption = subjectSelectForAI?.selectedOptions[0];
+			const semesterOption = semesterSelectForAI?.selectedOptions[0];
+			const countryCode = COUNTRY_ID_TO_CODE[countrySelectForAI?.value ?? ''] ?? '';
+
+			setAIBusy(true);
+			try {
+				const genRes = await fetch('/api/dashboard/ai/generate', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						title,
+						content_type: 'article',
+						country_code: countryCode,
+						grade_level: subjectOption?.dataset.gradeLevel || undefined,
+						subject_id: subjectOption?.value || undefined,
+						subject_name: subjectOption?.textContent?.trim() || undefined,
+						semester_id: semesterOption?.value || undefined,
+						semester_name: semesterOption?.textContent?.trim() || undefined,
+					}),
+				});
+				const genJson = await genRes.json();
+				if (!genRes.ok || !genJson?.job_id) {
+					throw new Error(genJson?.message || 'تعذّر بدء عملية التوليد');
+				}
+
+				const jobId = genJson.job_id;
+				const poll = async (): Promise<void> => {
+					const statusRes = await fetch(`/api/dashboard/ai/status/${jobId}`);
+					const statusJson = await statusRes.json();
+					if (statusJson?.status === 'done') {
+						const html = statusJson.content_html || statusJson.content || '';
+						if (html) quill.clipboard.dangerouslyPasteHTML(html);
+						const article = statusJson.article;
+						if (article?.meta_description && metaDescriptionInput && !metaDescriptionInput.value.trim()) {
+							metaDescriptionInput.value = article.meta_description;
+						}
+						if (Array.isArray(article?.keywords) && article.keywords.length && keywordsInput && !keywordsInput.value.trim()) {
+							keywordsInput.value = article.keywords.join('، ');
+						}
+						setAIBusy(false);
+						return;
+					}
+					if (statusJson?.status === 'failed') {
+						throw new Error(statusJson?.error || 'فشل توليد المحتوى');
+					}
+					await new Promise((resolve) => setTimeout(resolve, 3000));
+					return poll();
+				};
+				await poll();
+			} catch (err) {
+				setAIBusy(false);
+				if (aiError) {
+					aiError.textContent = err instanceof Error ? err.message : 'حدث خطأ غير متوقع أثناء التوليد';
+					aiError.classList.remove('hidden');
+				}
+			}
+		});
+	}
+
+	// Country/database selector — reloads the page under the chosen country so the
+	// class/subject/semester lists (fetched server-side) reflect that country's own data.
+	// Matches CountrySwitcher.astro's bare-page mechanism (?country= query, persisted to a
+	// cookie by middleware.ts) rather than inventing a second one.
+	const countrySelect = document.getElementById('country-database-select') as HTMLSelectElement | null;
+	countrySelect?.addEventListener('change', () => {
+		if (countrySelect.value === countrySelect.dataset.current) return;
+		const url = new URL(window.location.href);
+		url.searchParams.set('country', countrySelect.value);
+		window.location.href = url.toString();
+	});
+
+	// Cascading class → subject → semester, fetched on demand from the backend's own
+	// /filter/subjects/{classId} and /filter/semesters/{subjectId} — already-working, already
+	// publicly-deployed endpoints (used by the public article search page already) — rather
+	// than from the dashboard's own bulk create/edit-data endpoint, which as currently
+	// deployed to production unconditionally returns empty subjects/semesters arrays. This
+	// sidesteps that bug entirely without needing any backend change.
+	function setSelectLoading(select: HTMLSelectElement, label: string) {
+		select.innerHTML = '';
+		const opt = document.createElement('option');
+		opt.value = '';
+		opt.textContent = label;
+		select.appendChild(opt);
+		select.disabled = true;
+	}
+
+	function populateSelect(select: HTMLSelectElement, items: any[], valueKey: string, labelKey: string, placeholder: string, extraAttrs?: (item: any) => Record<string, string>, preserveValue?: string) {
+		// Callers that first show a loading state via setSelectLoading() have already wiped
+		// select.value to '' by the time this runs — preserveValue lets them pass the value
+		// captured *before* that wipe, instead of losing it. Falls back to reading select.value
+		// live for the plain (no loading-state) call sites.
+		const currentValue = preserveValue ?? select.value;
+		select.innerHTML = '';
+		select.disabled = false;
+		const placeholderOption = document.createElement('option');
+		placeholderOption.value = '';
+		placeholderOption.textContent = placeholder;
+		select.appendChild(placeholderOption);
+		for (const item of items) {
+			const opt = document.createElement('option');
+			opt.value = String(item[valueKey]);
+			opt.textContent = item[labelKey];
+			if (extraAttrs) {
+				for (const [key, value] of Object.entries(extraAttrs(item))) opt.dataset[key] = value;
+			}
+			select.appendChild(opt);
+		}
+		if ([...select.options].some((o) => o.value === currentValue)) select.value = currentValue;
+	}
+
+	const classSelectEl = document.getElementById('class_id') as HTMLSelectElement | null;
+	const subjectSelectEl = document.getElementById('subject_id') as HTMLSelectElement | null;
+	const semesterSelectEl = document.getElementById('semester_id') as HTMLSelectElement | null;
+
+	async function loadSubjectsForClass(classId: string) {
+		if (!subjectSelectEl) return;
+		if (!classId) {
+			populateSelect(subjectSelectEl, [], 'id', 'subject_name', '— اختر الصف أولاً —');
+			return;
+		}
+		// Capture before setSelectLoading() wipes select.value to '' — otherwise the article's
+		// originally-selected subject is lost the moment loading starts, regardless of whether
+		// it's still present in the freshly-fetched list.
+		const previousValue = subjectSelectEl.value;
+		setSelectLoading(subjectSelectEl, 'جارِ التحميل...');
+		try {
+			const res = await fetch(`/api/dashboard/filter/subjects/${classId}`);
+			const json = await res.json();
+			const items = Array.isArray(json?.data) ? json.data : [];
+			populateSelect(subjectSelectEl, items, 'id', 'subject_name', '— اختر مادة —', (item) => ({ gradeLevel: String(item.grade_level) }), previousValue);
+		} catch {
+			populateSelect(subjectSelectEl, [], 'id', 'subject_name', '— تعذّر تحميل المواد —');
+		}
+	}
+
+	async function loadSemestersForSubject(subjectId: string) {
+		if (!semesterSelectEl) return;
+		if (!subjectId) {
+			populateSelect(semesterSelectEl, [], 'id', 'semester_name', '— اختر المادة أولاً —');
+			return;
+		}
+		const previousValue = semesterSelectEl.value;
+		setSelectLoading(semesterSelectEl, 'جارِ التحميل...');
+		try {
+			const res = await fetch(`/api/dashboard/filter/semesters/${subjectId}`);
+			const json = await res.json();
+			const items = Array.isArray(json?.data?.semesters) ? json.data.semesters : [];
+			populateSelect(semesterSelectEl, items, 'id', 'semester_name', '— اختر فصلاً —', undefined, previousValue);
+		} catch {
+			populateSelect(semesterSelectEl, [], 'id', 'semester_name', '— تعذّر تحميل الفصول —');
+		}
+	}
+
+	classSelectEl?.addEventListener('change', async () => {
+		await loadSubjectsForClass(classSelectEl.value);
+		if (semesterSelectEl) populateSelect(semesterSelectEl, [], 'id', 'semester_name', '— اختر المادة أولاً —');
+	});
+	subjectSelectEl?.addEventListener('change', () => loadSemestersForSubject(subjectSelectEl.value));
+
+	// Editing an existing article: the subject/semester selects start out with only the
+	// article's current values pre-filled (from its preloaded Subject/Semester relations, no
+	// fetch needed) — but the admin should still be able to pick a DIFFERENT subject within
+	// the same class, or a different semester within the same subject, without having to
+	// touch the class dropdown first. Load the full sibling options now, preserving selection.
+	// Sequenced (not fire-and-forget): loadSubjectsForClass reads subjectSelectEl's original
+	// value synchronously before its own loading state clears it, but that same clearing also
+	// makes subjectSelectEl.value read '' for the check below for as long as its fetch is in
+	// flight — awaiting first means the semester preload correctly sees the restored subject.
+	(async () => {
+		if (classSelectEl?.value) await loadSubjectsForClass(classSelectEl.value);
+		if (subjectSelectEl?.value) await loadSemestersForSubject(subjectSelectEl.value);
+	})();
+</script>

@@ -1,0 +1,19 @@
+@import "tailwindcss/utilities" source(none);
+
+@reference "./global.css";
+
+@source "../pages/[countryCode]/classes";
+@source "../pages/[countryCode]/lesson/[classId].astro";
+@source "../pages/[countryCode]/lesson/[classId]/subjects";
+@source "../pages/[countryCode]/lesson/subjects";
+@source "../components/ClassDetail.astro";
+@source "../components/ClassesDirectoryPage.astro";
+@source "../components/HomeClassDirectory.astro";
+@source "../components/SubjectCategoryDetail.astro";
+@source "../components/SubjectDetail.astro";
+@source "../components/ui/ArticleCard.astro";
+@source "../components/ui/Breadcrumbs.astro";
+@source "../components/ui/ClassSubjectIcon.astro";
+@source "../components/ui/EmptyState.astro";
+@source "../components/ui/ErrorState.astro";
+@source "../components/ui/SubjectCategoryIcon.astro";

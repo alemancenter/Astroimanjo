@@ -1,0 +1,12 @@
+---
+import Layout from '../../../../../layouts/Layout.astro';
+import '../../../../../styles/content-pages.css';
+import KeywordsBrowse from '../../../../../components/KeywordsBrowse.astro';
+
+const countryCode = Astro.locals.countryCode!;
+const hasFilters = !!Astro.url.searchParams.get('q')?.trim();
+---
+
+<Layout title="تصفح وسوم المقالات" description="كل الوسوم المستخدمة في المقالات التعليمية، مرتبة أبجدياً." noindex={hasFilters}>
+	<KeywordsBrowse type="articles" detailBase={`/${countryCode}/lesson/articles/keyword`} title="وسوم المقالات" />
+</Layout>

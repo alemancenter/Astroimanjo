@@ -1,0 +1,101 @@
+---
+import DashboardLayout from '../../../../layouts/DashboardLayout.astro';
+import DashboardAlert from '../../../../components/ui/DashboardAlert.astro';
+import { requireDashboard } from '../../../../lib/auth';
+import { apiFetch, apiFetchList } from '../../../../lib/api';
+import { COUNTRIES, getCountryById } from '../../../../lib/countries';
+
+const guard = await requireDashboard(Astro, 'manage classes');
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+
+const { id } = Astro.params;
+const token = Astro.cookies.get('token')?.value;
+const authOptions = { countryId: Astro.locals.countryId, cookieHeader: `token=${token}` };
+const [result, semesterResult] = await Promise.all([
+	apiFetch<any>(`/dashboard/school-classes/${id}`, authOptions),
+	apiFetchList<any>('/dashboard/semesters', { ...authOptions, params: { per_page: 500 } }),
+]);
+const cls = result.data;
+const subjects: any[] = cls?.subjects ?? [];
+const semesters: any[] = semesterResult.items.filter((item: any) => String(item.grade_level) === String(cls?.id));
+const redirectTo = `/dashboard/classes/${id}/edit`;
+const currentCountry = getCountryById(Astro.locals.countryId);
+---
+
+<DashboardLayout title={cls ? cls.grade_name : 'إدارة الصف'} user={user}>
+	<DashboardAlert />
+
+	{!result.ok || !cls ? (
+		<section class="class-editor-error"><strong>تعذّر فتح الصف الدراسي</strong><p>{result.ok ? 'الصف المطلوب غير موجود.' : result.message}</p><a href="/dashboard/classes">العودة إلى الصفوف</a></section>
+	) : (
+		<div class="class-editor">
+			<header class="class-editor-header">
+				<div class="class-editor-heading"><a href="/dashboard/classes" aria-label="العودة إلى الصفوف"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m9 5-7 7 7 7M3 12h18" /></svg></a><div><span>الهيكل الأكاديمي / الصفوف</span><h1>{cls.grade_name}</h1><p>عدّل بيانات الصف ونظّم المواد والفصول الدراسية المرتبطة به.</p></div></div>
+				<label class="class-editor-country"><span aria-hidden="true">{currentCountry.flag}</span><select id="class-editor-country-select" data-current={Astro.locals.countryId} aria-label="تبديل قاعدة البيانات">{COUNTRIES.map((country) => <option value={country.id} selected={country.id === Astro.locals.countryId}>{country.name}</option>)}</select></label>
+			</header>
+
+			<section class="class-editor-overview">
+				<div class="class-editor-mark">{Number(cls.grade_level || 0).toLocaleString('ar-EG')}</div>
+				<div><span>الصف الحالي</span><strong>{cls.grade_name}</strong><small>المعرّف #{cls.id}</small></div>
+				<div class="class-editor-stat"><span>المواد</span><strong>{subjects.length.toLocaleString('ar-EG')}</strong></div>
+				<div class="class-editor-stat"><span>الفصول</span><strong>{semesterResult.ok ? semesters.length.toLocaleString('ar-EG') : '—'}</strong></div>
+				<div class="class-editor-stat"><span>ترتيب الظهور</span><strong>{Number(cls.grade_level || 0).toLocaleString('ar-EG')}</strong></div>
+			</section>
+
+			<section class="class-editor-card class-data-card">
+				<div class="class-card-heading"><span class="is-blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m4 20 4.3-1 9.9-9.9a2.1 2.1 0 0 0-3-3L5.3 16 4 20Zm9.8-12.5 3 3" /></svg></span><div><h2>بيانات الصف</h2><p>الاسم الظاهر للطلاب وموقع الصف في التسلسل.</p></div></div>
+				<form method="post" action="/api/dashboard/classes/save" class="class-data-form">
+					<input type="hidden" name="id" value={cls.id} />
+					<input type="hidden" name="redirect_to" value={redirectTo} />
+					<label><span>اسم الصف</span><input type="text" name="grade_name" required minlength="2" value={cls.grade_name} /></label>
+					<label><span>ترتيب الظهور</span><input type="number" name="grade_level" required min="1" value={cls.grade_level} /></label>
+					<button type="submit">حفظ التعديلات</button>
+				</form>
+			</section>
+
+			<div class="class-editor-grid">
+				<section class="class-editor-card academic-list-card">
+					<div class="class-card-heading"><span class="is-green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M4 5.5A2.5 2.5 0 0 1 6.5 3H11v16H6.5A2.5 2.5 0 0 0 4 21V5.5Zm16 0A2.5 2.5 0 0 0 17.5 3H13v16h4.5A2.5 2.5 0 0 1 20 21V5.5Z" /></svg></span><div><h2>المواد الدراسية</h2><p>{subjects.length.toLocaleString('ar-EG')} مادة مرتبطة بهذا الصف.</p></div></div>
+					<div class="academic-items">
+						{subjects.map((subject: any, index: number) => <article class="academic-item"><span class="academic-index">{(index + 1).toLocaleString('ar-EG')}</span><div><strong>{subject.subject_name}</strong><small>{Number(subject.articles_count || 0).toLocaleString('ar-EG')} مقال · {Number(subject.files_count || 0).toLocaleString('ar-EG')} ملف</small></div><form method="post" action={`/api/dashboard/subjects/${subject.id}/delete`} data-confirm-subject><input type="hidden" name="redirect_to" value={redirectTo} /><button type="submit" aria-label={`حذف ${subject.subject_name}`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 7h16m-10 4v6m4-6v6m-7-10 .8 13h8.4L17 7m-7-3h4l1 3H9l1-3Z" /></svg></button></form></article>)}
+						{subjects.length === 0 && <div class="academic-empty"><strong>لا توجد مواد بعد</strong><p>أضف أول مادة دراسية لهذا الصف من الحقل أدناه.</p></div>}
+					</div>
+					<form method="post" action="/api/dashboard/subjects/save" class="academic-add-form"><input type="hidden" name="grade_level" value={cls.id} /><input type="hidden" name="redirect_to" value={redirectTo} /><label><span>مادة جديدة</span><div><input type="text" name="subject_name" required minlength="2" placeholder="مثال: الرياضيات" /><button type="submit">إضافة المادة</button></div></label></form>
+				</section>
+
+				<section class="class-editor-card academic-list-card">
+					<div class="class-card-heading"><span class="is-orange"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M5 4v3m14-3v3M4 9h16M5 6h14a1 1 0 0 1 1 1v13H4V7a1 1 0 0 1 1-1Z" /></svg></span><div><h2>الفصول الدراسية</h2><p>{semesterResult.ok ? `${semesters.length.toLocaleString('ar-EG')} فصل مرتبط بهذا الصف.` : 'تعذّر جلب الفصول الدراسية.'}</p></div></div>
+					<div class="academic-items">
+						{semesters.map((semester: any, index: number) => <article class="academic-item"><span class="academic-index is-orange">{(index + 1).toLocaleString('ar-EG')}</span><div><strong>{semester.semester_name}</strong><small>الفصل #{semester.id}</small></div><form method="post" action={`/api/dashboard/semesters/${semester.id}/delete`} data-confirm-semester><input type="hidden" name="redirect_to" value={redirectTo} /><button type="submit" aria-label={`حذف ${semester.semester_name}`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 7h16m-10 4v6m4-6v6m-7-10 .8 13h8.4L17 7m-7-3h4l1 3H9l1-3Z" /></svg></button></form></article>)}
+						{semesterResult.ok && semesters.length === 0 && <div class="academic-empty"><strong>لا توجد فصول بعد</strong><p>أضف الفصل الأول أو الثاني لهذا الصف.</p></div>}
+						{!semesterResult.ok && <div class="academic-empty is-error"><strong>تعذّر تحميل الفصول</strong><p>{semesterResult.message}</p></div>}
+					</div>
+					<form method="post" action="/api/dashboard/semesters/save" class="academic-add-form"><input type="hidden" name="grade_level" value={cls.id} /><input type="hidden" name="redirect_to" value={redirectTo} /><label><span>فصل دراسي جديد</span><div><input type="text" name="semester_name" required minlength="2" placeholder="مثال: الفصل الدراسي الأول" /><button type="submit">إضافة الفصل</button></div></label></form>
+				</section>
+			</div>
+		</div>
+	)}
+
+	<script>
+		document.querySelectorAll<HTMLFormElement>('[data-confirm-subject]').forEach((form) => form.addEventListener('submit', (event) => { if (!window.confirm('هل تريد حذف هذه المادة؟ قد تتأثر المقالات والملفات المرتبطة بها.')) event.preventDefault(); }));
+		document.querySelectorAll<HTMLFormElement>('[data-confirm-semester]').forEach((form) => form.addEventListener('submit', (event) => { if (!window.confirm('هل تريد حذف هذا الفصل الدراسي؟')) event.preventDefault(); }));
+		const countrySelect = document.getElementById('class-editor-country-select') as HTMLSelectElement | null;
+		countrySelect?.addEventListener('change', () => {
+			if (countrySelect.value === countrySelect.dataset.current) return;
+			const url = new URL('/dashboard/classes', window.location.origin);
+			url.searchParams.set('country', countrySelect.value);
+			window.location.href = url.toString();
+		});
+	</script>
+
+	<style>
+		.class-editor{--ce-ink:#102a43;--ce-muted:#718096;--ce-line:#dfe6ee;max-width:1360px;margin-inline:auto;padding-bottom:2rem}.class-editor-header{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;margin-bottom:1rem}.class-editor-heading{display:flex;align-items:center;gap:.7rem}.class-editor-heading>a{display:grid;width:2.35rem;height:2.35rem;flex:none;place-items:center;border:1px solid var(--ce-line);border-radius:.55rem;background:#fff;color:#52667e}.class-editor-heading>a:hover{color:#1a4d8f}.class-editor-heading svg{width:1rem;height:1rem}.class-editor-heading span{color:#1a4d8f;font-size:.6rem;font-weight:800}.class-editor-heading h1{margin:.16rem 0 0;color:#061a3a;font-size:clamp(1.25rem,1rem + .55vw,1.75rem);font-weight:900}.class-editor-heading p{margin:.2rem 0 0;color:var(--ce-muted);font-size:.7rem}.class-editor-country{display:flex;min-height:2.6rem;align-items:center;gap:.4rem;border:1px solid var(--ce-line);border-radius:.6rem;background:#fff;padding:.35rem .55rem}.class-editor-country select{border:0;background:transparent;color:var(--ce-ink);font-family:inherit;font-size:.66rem;font-weight:750;outline:0}
+		.class-editor-overview{display:flex;align-items:center;gap:.8rem;margin-bottom:1rem;border:1px solid var(--ce-line);border-radius:.8rem;background:#fff;padding:.75rem;box-shadow:0 1px 2px rgb(15 23 42/.05)}.class-editor-mark{display:grid;width:3rem;height:3rem;flex:none;place-items:center;border:1px solid #d6e4f3;border-radius:.65rem;background:#edf4fc;color:#1a4d8f;font-size:.85rem;font-weight:900}.class-editor-overview>div:nth-child(2){min-width:0;flex:1}.class-editor-overview>div:nth-child(2)>span,.class-editor-stat span{display:block;color:var(--ce-muted);font-size:.55rem}.class-editor-overview>div:nth-child(2)>strong{display:block;margin-top:.08rem;color:var(--ce-ink);font-size:.76rem}.class-editor-overview>div:nth-child(2)>small{display:block;color:#9aa6b4;font-size:.5rem}.class-editor-stat{min-width:6.7rem;border-right:1px solid #e8edf2;padding-right:.8rem}.class-editor-stat strong{display:block;margin-top:.12rem;color:var(--ce-ink);font-size:.79rem;font-weight:900}
+		.class-editor-card{border:1px solid var(--ce-line);border-radius:.85rem;background:#fff;box-shadow:0 1px 2px rgb(15 23 42/.05)}.class-data-card{margin-bottom:1rem;padding:1rem}.class-card-heading{display:flex;align-items:center;gap:.58rem}.class-card-heading>span{display:grid;width:2rem;height:2rem;flex:none;place-items:center;border-radius:.48rem}.class-card-heading svg{width:.9rem;height:.9rem}.class-card-heading .is-blue{background:#edf4fc;color:#1a4d8f}.class-card-heading .is-green{background:#edf9f5;color:#0f8464}.class-card-heading .is-orange{background:#fff7eb;color:#bf7010}.class-card-heading h2{margin:0;color:var(--ce-ink);font-size:.75rem;font-weight:850}.class-card-heading p{margin:.1rem 0 0;color:var(--ce-muted);font-size:.56rem}.class-data-form{display:grid;grid-template-columns:minmax(0,2fr) minmax(8rem,.75fr) auto;align-items:end;gap:.65rem;margin-top:.85rem}.class-data-form label>span,.academic-add-form label>span{display:block;margin-bottom:.3rem;color:#52667e;font-size:.59rem;font-weight:800}.class-data-form input,.academic-add-form input{width:100%;min-height:2.4rem;border:1px solid #d9e2ec;border-radius:.5rem;background:#fff;padding:.45rem .65rem;color:var(--ce-ink);font-family:inherit;font-size:.68rem}.class-data-form input:focus,.academic-add-form input:focus{border-color:#81a7da;outline:0;box-shadow:0 0 0 3px rgb(26 77 143/.07)}.class-data-form button,.academic-add-form button{min-height:2.4rem;border:1px solid #16427d;border-radius:.5rem;background:#1a4d8f;padding:.45rem .8rem;color:#fff;font-family:inherit;font-size:.62rem;font-weight:850;white-space:nowrap}
+		.class-editor-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}.academic-list-card{display:flex;min-height:25rem;flex-direction:column;padding:1rem}.academic-items{display:grid;align-content:start;gap:.45rem;margin-top:.85rem;flex:1}.academic-item{display:flex;align-items:center;gap:.55rem;border:1px solid #e5ebf1;border-radius:.58rem;padding:.52rem .58rem}.academic-index{display:grid;width:1.75rem;height:1.75rem;flex:none;place-items:center;border-radius:.4rem;background:#edf9f5;color:#0f8464;font-size:.57rem;font-weight:900}.academic-index.is-orange{background:#fff7eb;color:#b7680c}.academic-item>div{min-width:0;flex:1}.academic-item strong{display:block;overflow:hidden;color:var(--ce-ink);font-size:.65rem;text-overflow:ellipsis;white-space:nowrap}.academic-item small{display:block;margin-top:.08rem;color:#929fad;font-size:.5rem}.academic-item button{display:grid;width:1.75rem;height:1.75rem;place-items:center;border:1px solid #e1e7ee;border-radius:.42rem;background:#fff;color:#94a3b8}.academic-item button:hover{border-color:#fecaca;background:#fff7f7;color:#dc2626}.academic-item button svg{width:.78rem;height:.78rem}.academic-empty{display:flex;min-height:10rem;align-items:center;justify-content:center;flex-direction:column;border:1px dashed #dce4ed;border-radius:.65rem;background:#fbfcfd;text-align:center}.academic-empty strong{color:var(--ce-ink);font-size:.68rem}.academic-empty p{margin:.2rem 0 0;color:var(--ce-muted);font-size:.56rem}.academic-empty.is-error{border-color:#fecaca}.academic-add-form{margin-top:.9rem;border-top:1px solid #edf1f5;padding-top:.8rem}.academic-add-form label>div{display:flex;gap:.4rem}.academic-add-form input{flex:1}.class-editor-error{display:flex;min-height:20rem;align-items:center;justify-content:center;flex-direction:column;border:1px solid #fecaca;border-radius:.8rem;background:#fff}.class-editor-error strong{color:#102a43}.class-editor-error p{margin:.25rem 0;color:#718096;font-size:.7rem}.class-editor-error a{margin-top:.5rem;color:#1a4d8f;font-size:.68rem;font-weight:800}
+		:global(.dark) .class-editor{--ce-ink:#f8fafc;--ce-muted:#94a3b8;--ce-line:#334155}:global(.dark) .class-editor-heading h1{color:#fff}:global(.dark) .class-editor-heading>a,:global(.dark) .class-editor-country,:global(.dark) .class-editor-overview,:global(.dark) .class-editor-card,:global(.dark) .academic-item,:global(.dark) .class-data-form input,:global(.dark) .academic-add-form input,:global(.dark) .academic-item button{border-color:#334155;background:#0f2547;color:#cbd5e1}:global(.dark) .class-editor-stat{border-color:#334155}:global(.dark) .academic-empty{border-color:#40536a;background:#102744}
+		@media(max-width:800px){.class-editor-grid{grid-template-columns:1fr}.class-editor-overview{flex-wrap:wrap}.class-editor-overview>div:nth-child(2){min-width:calc(100% - 4rem)}.class-editor-stat{flex:1}.class-data-form{grid-template-columns:1fr 8rem}.class-data-form button{grid-column:1/-1}}
+		@media(max-width:600px){.class-editor-header{align-items:stretch;flex-direction:column}.class-editor-country{justify-content:center}.class-editor-overview{display:grid;grid-template-columns:auto 1fr}.class-editor-stat{border:0;border-top:1px solid #e8edf2;padding:.55rem 0 0}.class-data-form{grid-template-columns:1fr}.academic-list-card{min-height:21rem}.academic-add-form label>div{flex-direction:column}}
+	</style>
+</DashboardLayout>

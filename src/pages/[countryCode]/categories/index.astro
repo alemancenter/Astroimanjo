@@ -1,0 +1,36 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import '../../../styles/content-pages.css';
+import Breadcrumbs from '../../../components/ui/Breadcrumbs.astro';
+import CategoryCard from '../../../components/ui/CategoryCard.astro';
+import EmptyState from '../../../components/ui/EmptyState.astro';
+import ErrorState from '../../../components/ui/ErrorState.astro';
+import { apiFetchList, applyListStatus } from '../../../lib/api';
+import type { Category } from '../../../types/api';
+
+const countryCode = Astro.locals.countryCode!;
+const countryId = Astro.locals.countryId;
+const categoriesResult = await apiFetchList<Category>('/categories', { countryId });
+const { ok, items: categories, message } = categoriesResult;
+applyListStatus(Astro, categoriesResult);
+---
+
+<Layout title="الأقسام التعليمية" description="تصفح جميع الأقسام والمواضيع التعليمية." hreflangSafe>
+  <Breadcrumbs items={[{ label: 'الأقسام التعليمية' }]} />
+  <div class="page-shell">
+    <header class="page-heading"><span class="page-eyebrow">تصفح منظّم</span><h1 class="page-title">الأقسام التعليمية</h1><p class="page-description">اختر القسم الذي يهمك لتصل إلى المقالات والموارد المرتبطة به.</p></header>
+    {
+      !ok ? (
+        <ErrorState message={message} />
+      ) : categories.length > 0 ? (
+        <div class="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
+          {categories.map((cat, i: number) => (
+            <CategoryCard category={cat} href={`/${countryCode}/posts/category/${cat.slug || cat.id}`} index={i} />
+          ))}
+        </div>
+      ) : (
+        <EmptyState message="لا توجد أقسام متاحة حالياً." />
+      )
+    }
+  </div>
+</Layout>

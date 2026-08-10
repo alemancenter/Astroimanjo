@@ -1,0 +1,123 @@
+---
+import DashboardLayout from '../../../layouts/DashboardLayout.astro';
+import DashboardAlert from '../../../components/ui/DashboardAlert.astro';
+import { requireDashboard } from '../../../lib/auth';
+import { apiFetchList } from '../../../lib/api';
+
+const guard = await requireDashboard(Astro, 'manage roles');
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+const token = Astro.cookies.get('token')?.value;
+const authOptions = { countryId: Astro.locals.countryId, cookieHeader: `token=${token}` };
+const [permissionsResult, rolesResult] = await Promise.all([
+	apiFetchList<any>('/dashboard/permissions', authOptions),
+	apiFetchList<any>('/dashboard/roles', authOptions),
+]);
+
+const permissions = permissionsResult.items;
+const roles = rolesResult.items;
+const isSuperAdmin = user.roles?.some((role: any) => role.name === 'Super Admin') ?? false;
+const search = (Astro.url.searchParams.get('search') || '').trim();
+const selectedCategory = (Astro.url.searchParams.get('category') || '').trim();
+const labels: Record<string, string> = {
+	users: 'المستخدمون', roles: 'الأدوار', permissions: 'الصلاحيات', articles: 'المقالات', posts: 'المنشورات', categories: 'التصنيفات', comments: 'التعليقات', files: 'الملفات', settings: 'الإعدادات', dashboard: 'لوحة التحكم', security: 'الأمان', subscriptions: 'الاشتراكات', teachers: 'المعلمون', classes: 'الصفوف', subjects: 'المواد', lessons: 'الدروس', messages: 'الرسائل', notifications: 'الإشعارات', calendar: 'التقويم', other: 'أخرى',
+};
+
+function categoryOf(name: string): string {
+	const clean = String(name || '').trim().toLowerCase();
+	if (!clean) return 'other';
+	if (clean.includes('.')) return clean.split('.')[0];
+	const words = clean.split(/\s+/);
+	return words[words.length - 1] || 'other';
+}
+
+const usage = new Map<number, any[]>();
+for (const role of roles) {
+	for (const permission of role.permissions ?? []) {
+		const id = Number(permission.id);
+		usage.set(id, [...(usage.get(id) ?? []), role]);
+	}
+}
+const categories = [...new Set(permissions.map((permission: any) => categoryOf(permission.name)))]
+	.sort((a, b) => (labels[a] || a).localeCompare(labels[b] || b, 'ar'));
+const filteredPermissions = permissions.filter((permission: any) => {
+	const matchesSearch = !search || String(permission.name || '').toLocaleLowerCase().includes(search.toLocaleLowerCase());
+	const matchesCategory = !selectedCategory || categoryOf(permission.name) === selectedCategory;
+	return matchesSearch && matchesCategory;
+});
+const usedCount = permissions.filter((permission: any) => (usage.get(Number(permission.id))?.length ?? 0) > 0).length;
+const totalLinks = [...usage.values()].reduce((sum, linkedRoles) => sum + linkedRoles.length, 0);
+const averageUsage = permissions.length ? (totalLinks / permissions.length).toFixed(1) : '0';
+
+function formatDate(value: unknown): string {
+	if (!value) return 'غير متوفر';
+	const date = new Date(String(value));
+	return Number.isNaN(date.getTime()) ? 'غير متوفر' : date.toLocaleDateString('ar-JO', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+---
+
+<DashboardLayout title="إدارة الصلاحيات" user={user}>
+	<div class="permissions-page">
+		<DashboardAlert />
+		<header class="permissions-header">
+			<div><span>التحكم بالوصول / الصلاحيات</span><h1>الصلاحيات</h1><p>عرّف العمليات المتاحة في النظام ثم اربطها بالأدوار المناسبة.</p></div>
+			<div class="permissions-header-actions"><a href="/dashboard/roles"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" /><path d="m9 12 2 2 4-4" /></svg>العودة إلى الأدوار</a>{isSuperAdmin && <button type="button" data-open-permission><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>إضافة صلاحية</button>}</div>
+		</header>
+
+		<section class="permissions-stats">
+			<article><span class="blue"><svg viewBox="0 0 24 24"><circle cx="8" cy="15" r="4" /><path d="m11 12 8-8m-3 3 2 2m-5 1 2 2" /></svg></span><div><strong>{permissions.length.toLocaleString('ar-EG')}</strong><p>إجمالي الصلاحيات</p></div></article>
+			<article><span class="green"><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6" /></svg></span><div><strong>{usedCount.toLocaleString('ar-EG')}</strong><p>صلاحيات مستخدمة</p></div></article>
+			<article><span class="orange"><svg viewBox="0 0 24 24"><path d="M12 8v5m0 3h.01" /><circle cx="12" cy="12" r="9" /></svg></span><div><strong>{(permissions.length - usedCount).toLocaleString('ar-EG')}</strong><p>غير مرتبطة بدور</p></div></article>
+			<article><span class="graphite"><svg viewBox="0 0 24 24"><path d="M4 19V9m6 10V5m6 14v-7m4 7H2" /></svg></span><div><strong>{averageUsage}</strong><p>متوسط الأدوار</p></div></article>
+		</section>
+
+		{!isSuperAdmin && <div class="permissions-notice"><strong>وضع العرض فقط</strong><span>إنشاء الصلاحيات وتعديلها وحذفها متاح لحساب Super Admin فقط.</span></div>}
+
+		<section class="permissions-toolbar">
+			<form method="get" action="/dashboard/permissions">
+				<label class="permission-search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg><input type="search" name="search" value={search} placeholder="ابحث باسم الصلاحية..." /></label>
+				<label class="permission-category"><span>المجال</span><select name="category"><option value="">كل المجالات</option>{categories.map((category) => <option value={category} selected={selectedCategory === category}>{labels[category] || category}</option>)}</select></label>
+				<button type="submit">تطبيق</button>{(search || selectedCategory) && <a href="/dashboard/permissions">مسح</a>}
+			</form>
+			<div><strong>{filteredPermissions.length.toLocaleString('ar-EG')}</strong><span>نتيجة</span></div>
+		</section>
+
+		{!permissionsResult.ok ? <section class="permissions-empty error"><h2>تعذّر تحميل الصلاحيات</h2><p>{permissionsResult.message}</p><a href="/dashboard/permissions">إعادة المحاولة</a></section> : <section class="permissions-card">
+			<div class="permissions-card-head"><div><h2>قاموس صلاحيات النظام</h2><p>الأدوار المرتبطة تساعدك على معرفة أثر تعديل أو حذف كل صلاحية.</p></div><span>{categories.length} مجالات</span></div>
+			<div class="permissions-table-wrap"><table><thead><tr><th>الصلاحية</th><th>المجال</th><th>الأدوار المرتبطة</th><th>تاريخ الإنشاء</th><th><span class="sr-only">الإجراءات</span></th></tr></thead><tbody>{filteredPermissions.map((permission: any) => { const linkedRoles = usage.get(Number(permission.id)) ?? []; const category = categoryOf(permission.name); return <tr><td><div class="permission-identity"><span><svg viewBox="0 0 24 24"><circle cx="8" cy="15" r="4" /><path d="m11 12 8-8m-3 3 2 2m-5 1 2 2" /></svg></span><div><strong dir="ltr">{permission.name}</strong><small>#{permission.id} · {permission.guard_name || 'api'}</small></div></div></td><td><span class="category-badge">{labels[category] || category}</span></td><td>{linkedRoles.length ? <div class="linked-roles"><strong>{linkedRoles.length}</strong>{linkedRoles.slice(0, 3).map((role: any) => <a href={`/dashboard/roles/${role.id}/edit`}>{role.name}</a>)}{linkedRoles.length > 3 && <i>+{linkedRoles.length - 3}</i>}</div> : <span class="unused-permission">غير مستخدمة</span>}</td><td><time datetime={permission.created_at}>{formatDate(permission.created_at)}</time></td><td><div class="permission-actions">{isSuperAdmin && <button type="button" data-edit-permission data-id={permission.id} data-name={permission.name} aria-label={`تعديل ${permission.name}`}><svg viewBox="0 0 24 24"><path d="m4 20 4-.8L19 8l-3-3L4.8 16 4 20Z" /><path d="m14 7 3 3" /></svg></button>}{isSuperAdmin && <form method="post" action={`/api/dashboard/permissions/${permission.id}/delete`} data-delete-permission={permission.name} data-usage={linkedRoles.length}><button type="submit" aria-label={`حذف ${permission.name}`}><svg viewBox="0 0 24 24"><path d="M4 7h16m-10 4v6m4-6v6M9 7l1-3h4l1 3m3 0-1 13H7L6 7" /></svg></button></form>}</div></td></tr>; })}</tbody></table></div>
+			<div class="permissions-mobile">{filteredPermissions.map((permission: any) => { const linkedRoles = usage.get(Number(permission.id)) ?? []; const category = categoryOf(permission.name); return <article><div class="permission-mobile-head"><span><svg viewBox="0 0 24 24"><circle cx="8" cy="15" r="4" /><path d="m11 12 8-8m-3 3 2 2m-5 1 2 2" /></svg></span><div><strong dir="ltr">{permission.name}</strong><small>#{permission.id} · {labels[category] || category}</small></div><em>{linkedRoles.length} دور</em></div><div class="permission-mobile-roles">{linkedRoles.map((role: any) => <a href={`/dashboard/roles/${role.id}/edit`}>{role.name}</a>)}{!linkedRoles.length && <i>غير مرتبطة بأي دور</i>}</div>{isSuperAdmin && <div class="permission-mobile-actions"><button type="button" data-edit-permission data-id={permission.id} data-name={permission.name}>تعديل</button><form method="post" action={`/api/dashboard/permissions/${permission.id}/delete`} data-delete-permission={permission.name} data-usage={linkedRoles.length}><button type="submit">حذف</button></form></div>}</article>; })}</div>
+			{filteredPermissions.length === 0 && <div class="permissions-empty"><h2>لا توجد صلاحيات مطابقة</h2><p>عدّل عبارة البحث أو اختر مجالًا آخر.</p><a href="/dashboard/permissions">عرض الكل</a></div>}
+		</section>}
+
+		{isSuperAdmin && <dialog id="permission-dialog" class="permission-dialog"><form method="post" action="/api/dashboard/permissions/save"><input type="hidden" name="id" data-permission-id /><header><div><span data-dialog-eyebrow>صلاحية جديدة</span><h2 data-dialog-title>إضافة صلاحية</h2><p>استخدم اسمًا واضحًا ومتسقًا مثل: <b dir="ltr">manage articles</b></p></div><button type="button" data-close-permission aria-label="إغلاق"><svg viewBox="0 0 24 24"><path d="m7 7 10 10M17 7 7 17" /></svg></button></header><main><label for="permission-name">اسم الصلاحية</label><input id="permission-name" name="name" type="text" required minlength="2" maxlength="125" dir="ltr" placeholder="manage resource" data-permission-name /><small>الاسم التقني يستخدمه الباك إند للتحقق من الوصول؛ اختر صيغة قصيرة لا تتغير كثيرًا.</small></main><footer><button type="button" data-close-permission>إلغاء</button><button type="submit" data-submit-label>إنشاء الصلاحية</button></footer></form></dialog>}
+	</div>
+
+	<script>
+		const permissionDialog = document.querySelector<HTMLDialogElement>('#permission-dialog');
+		const idInput = document.querySelector<HTMLInputElement>('[data-permission-id]');
+		const nameInput = document.querySelector<HTMLInputElement>('[data-permission-name]');
+		const title = document.querySelector<HTMLElement>('[data-dialog-title]');
+		const eyebrow = document.querySelector<HTMLElement>('[data-dialog-eyebrow]');
+		const submitLabel = document.querySelector<HTMLButtonElement>('[data-submit-label]');
+		const openDialog = (id = '', name = '') => { if (idInput) idInput.value = id; if (nameInput) nameInput.value = name; if (title) title.textContent = id ? 'تعديل الصلاحية' : 'إضافة صلاحية'; if (eyebrow) eyebrow.textContent = id ? `الصلاحية #${id}` : 'صلاحية جديدة'; if (submitLabel) submitLabel.textContent = id ? 'حفظ التعديل' : 'إنشاء الصلاحية'; permissionDialog?.showModal(); window.setTimeout(() => nameInput?.focus(), 50); };
+		document.querySelector('[data-open-permission]')?.addEventListener('click', () => openDialog());
+		document.querySelectorAll<HTMLElement>('[data-edit-permission]').forEach((button) => button.addEventListener('click', () => openDialog(button.dataset.id || '', button.dataset.name || '')));
+		document.querySelectorAll('[data-close-permission]').forEach((button) => button.addEventListener('click', () => permissionDialog?.close()));
+		permissionDialog?.addEventListener('click', (event) => { if (event.target === permissionDialog) permissionDialog.close(); });
+		document.querySelectorAll<HTMLFormElement>('[data-delete-permission]').forEach((form) => form.addEventListener('submit', (event) => { const name = form.dataset.deletePermission || 'هذه الصلاحية'; const count = Number(form.dataset.usage || 0); const detail = count ? ` مرتبطة بـ ${count} دور وستُفصل عنها.` : ''; if (!window.confirm(`سيتم حذف «${name}» نهائيًا.${detail} هل تريد المتابعة؟`)) event.preventDefault(); }));
+	</script>
+
+	<style>
+		.permissions-page{--pm-blue:#1a4d8f;--pm-green:#0f8464;--pm-orange:#e8a244;--pm-ink:#172a43;--pm-muted:#758397;--pm-line:#dde5ed;max-width:1420px;margin:0 auto;color:var(--pm-ink)}
+		.permissions-header{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;margin-bottom:1rem}.permissions-header>div:first-child>span{color:var(--pm-blue);font-size:.72rem;font-weight:850}.permissions-header h1{margin:.1rem 0;color:#0b2342;font-size:1.6rem;font-weight:950}.permissions-header p{margin:0;color:var(--pm-muted);font-size:.82rem;line-height:1.7}.permissions-header-actions{display:flex;gap:.45rem}.permissions-header-actions>a,.permissions-header-actions>button{display:inline-flex;min-height:2.45rem;align-items:center;gap:.35rem;border:1px solid var(--pm-line);border-radius:.52rem;background:#fff;padding:.45rem .72rem;color:var(--pm-blue);font-family:inherit;font-size:.76rem;font-weight:850}.permissions-header-actions>button{border-color:#16437d;background:var(--pm-blue);color:#fff}.permissions-header-actions svg{width:.85rem;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;stroke-width:1.8}
+		.permissions-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:.7rem;margin-bottom:1rem}.permissions-stats article{display:flex;align-items:center;gap:.65rem;border:1px solid var(--pm-line);border-radius:.75rem;background:#fff;padding:.8rem;box-shadow:0 1px 2px rgb(15 35 60/.04)}.permissions-stats article>span{display:grid;width:2.35rem;height:2.35rem;place-items:center;border-radius:.55rem}.permissions-stats svg{width:1rem;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;stroke-width:1.8}.permissions-stats .blue{background:#edf4fb;color:var(--pm-blue)}.permissions-stats .green{background:#eaf8f3;color:var(--pm-green)}.permissions-stats .orange{background:#fff5e7;color:#b66b0d}.permissions-stats .graphite{background:#f0f3f6;color:#526376}.permissions-stats strong{display:block;color:#132b48;font-size:1.25rem;font-weight:950}.permissions-stats p{margin:.15rem 0 0;color:#53677d;font-size:.72rem;font-weight:750}.permissions-notice{display:flex;gap:.35rem;margin-bottom:1rem;border:1px solid #ead8bc;border-radius:.6rem;background:#fff9ef;padding:.65rem .75rem;color:#8b611f;font-size:.7rem}.permissions-notice strong{font-weight:900}.permissions-notice span{color:#9a7a4b}
+		.permissions-toolbar{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:.7rem;border:1px solid var(--pm-line);border-radius:.68rem;background:#fff;padding:.55rem .65rem}.permissions-toolbar>form{display:flex;min-width:0;flex:1;align-items:center;gap:.45rem}.permission-search{position:relative;min-width:14rem;flex:1}.permission-search svg{position:absolute;top:50%;right:.65rem;width:.8rem;transform:translateY(-50%);fill:none;stroke:#8592a1;stroke-linecap:round;stroke-linejoin:round;stroke-width:1.8}.permission-search input,.permission-category select{width:100%;min-height:2.25rem;border:1px solid #dce4ec;border-radius:.46rem;background:#fff;color:#31475e;font-family:inherit;font-size:.74rem}.permission-search input{padding:.4rem 2rem .4rem .55rem}.permission-category{display:flex;align-items:center;gap:.35rem}.permission-category>span{color:#768598;font-size:.68rem;font-weight:750}.permission-category select{width:10rem;padding:.35rem .5rem}.permissions-toolbar form>button,.permissions-toolbar form>a{border-radius:.42rem;padding:.42rem .62rem;font-family:inherit;font-size:.68rem;font-weight:800}.permissions-toolbar form>button{border:1px solid #b9cade;background:#f8fbfe;color:var(--pm-blue)}.permissions-toolbar form>a{color:#748396}.permissions-toolbar>div{display:flex;align-items:baseline;gap:.25rem;border-right:1px solid #e5eaf0;padding-right:.8rem}.permissions-toolbar>div strong{font-size:.86rem}.permissions-toolbar>div span{color:#8793a2;font-size:.65rem}
+		.permissions-card{overflow:hidden;border:1px solid var(--pm-line);border-radius:.8rem;background:#fff;box-shadow:0 1px 2px rgb(15 35 60/.045)}.permissions-card-head{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #edf1f5;padding:.78rem .9rem}.permissions-card-head h2{margin:0;color:#18324e;font-size:.92rem;font-weight:900}.permissions-card-head p{margin:.12rem 0 0;color:#8793a2;font-size:.66rem}.permissions-card-head>span{border:1px solid #dce4ec;border-radius:999px;background:#f8fafc;padding:.22rem .45rem;color:#6d7d8e;font-size:.62rem}.permissions-table-wrap{overflow-x:auto}.permissions-card table{width:100%;border-collapse:collapse}.permissions-card th{background:#f8fafc;padding:.68rem .72rem;color:#778597;font-size:.68rem;text-align:right}.permissions-card td{border-top:1px solid #edf1f5;padding:.68rem .72rem;color:#607286;font-size:.7rem;vertical-align:middle}.permissions-card tbody tr:hover{background:#fbfcfe}.permission-identity{display:flex;min-width:13rem;align-items:center;gap:.5rem}.permission-identity>span,.permission-mobile-head>span{display:grid;width:2.1rem;height:2.1rem;flex:none;place-items:center;border-radius:.48rem;background:#edf4fb;color:var(--pm-blue)}.permission-identity svg,.permission-mobile-head svg{width:.85rem;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;stroke-width:1.8}.permission-identity strong,.permission-identity small{display:block}.permission-identity strong{color:#263d55;font-size:.76rem}.permission-identity small{margin-top:.08rem;color:#96a1ad;font-size:.59rem}.category-badge{display:inline-flex;border-radius:999px;background:#eef6f3;padding:.22rem .4rem;color:var(--pm-green);font-size:.62rem;font-weight:750}.linked-roles{display:flex;align-items:center;gap:.25rem}.linked-roles>strong{display:grid;width:1.5rem;height:1.5rem;place-items:center;border-radius:50%;background:#edf4fb;color:var(--pm-blue);font-size:.6rem}.linked-roles a{border:1px solid #e0e6ed;border-radius:999px;padding:.2rem .36rem;color:#5f7286;font-size:.58rem}.linked-roles i{color:#8d99a6;font-size:.58rem;font-style:normal}.unused-permission{color:#a0712f;font-size:.62rem}.permissions-card time{font-size:.62rem;white-space:nowrap}.permission-actions{display:flex;justify-content:flex-end;gap:.25rem}.permission-actions button{display:grid;width:1.85rem;height:1.85rem;place-items:center;border:1px solid #dce4ec;border-radius:.42rem;background:#fff;color:#65778b}.permission-actions form:last-child button{color:#c54a54}.permission-actions svg{width:.75rem;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;stroke-width:1.7}
+		.permissions-mobile{display:none}.permissions-empty{display:flex;min-height:11rem;flex-direction:column;align-items:center;justify-content:center;padding:1rem;text-align:center}.permissions-empty h2{margin:0;color:#42566c;font-size:.85rem}.permissions-empty p{margin:.2rem 0 0;color:#919ca8;font-size:.68rem}.permissions-empty a{margin-top:.45rem;color:var(--pm-blue);font-size:.68rem;font-weight:800}.permissions-empty.error{border:1px solid #efcfd2;border-radius:.7rem;background:#fff}.permissions-empty.error h2{color:#b63d49}
+		.permission-dialog{width:min(92vw,32rem);max-width:none;border:0;border-radius:.85rem;background:transparent;padding:0}.permission-dialog::backdrop{background:rgb(4 17 35/.6);backdrop-filter:blur(2px)}.permission-dialog>form{overflow:hidden;border:1px solid #dce4ec;border-radius:.85rem;background:#fff;box-shadow:0 22px 60px rgb(4 20 42/.25)}.permission-dialog header{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;border-bottom:1px solid #edf1f5;padding:.95rem 1rem}.permission-dialog header span{color:var(--pm-blue);font-size:.67rem;font-weight:850}.permission-dialog header h2{margin:.12rem 0;color:#132d4a;font-size:1.08rem;font-weight:950}.permission-dialog header p{margin:0;color:#7e8c9d;font-size:.7rem;line-height:1.6}.permission-dialog header button{display:grid;width:2rem;height:2rem;place-items:center;border:1px solid #dce4ec;border-radius:.45rem;background:#fff;color:#6b7c8e}.permission-dialog header svg{width:.78rem;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;stroke-width:1.8}.permission-dialog main{padding:1rem}.permission-dialog main label{display:block;margin-bottom:.3rem;color:#40566e;font-size:.72rem;font-weight:850}.permission-dialog main input{width:100%;min-height:2.7rem;border:1px solid #d9e2eb;border-radius:.5rem;padding:.45rem .6rem;color:#223a53;font-family:inherit;font-size:.78rem;text-align:left}.permission-dialog main input:focus{border-color:#85a8d2;outline:0;box-shadow:0 0 0 3px rgb(26 77 143/.07)}.permission-dialog main small{display:block;margin-top:.35rem;color:#8592a1;font-size:.64rem;line-height:1.7}.permission-dialog footer{display:flex;justify-content:flex-end;gap:.4rem;border-top:1px solid #edf1f5;padding:.75rem 1rem}.permission-dialog footer button{min-height:2.3rem;border-radius:.45rem;padding:.4rem .75rem;font-family:inherit;font-size:.72rem;font-weight:850}.permission-dialog footer button:first-child{border:1px solid #dce4ec;background:#fff;color:#66778a}.permission-dialog footer button:last-child{border:1px solid #16437d;background:var(--pm-blue);color:#fff}
+		:global(.dark) .permissions-page{--pm-ink:#e5edf5;--pm-muted:#9aa9ba;--pm-line:#344458}.dark .permissions-header h1,.dark .permissions-stats strong,.dark .permissions-card-head h2{color:#eef5fb}.dark .permissions-header-actions>a,.dark .permissions-stats article,.dark .permissions-toolbar,.dark .permissions-card,.dark .permission-dialog>form,.dark .permissions-empty.error{background:#172334}.dark .permissions-card th{background:#111c2b}.dark .permissions-card td,.dark .permissions-card th,.dark .permissions-card-head{border-color:#344458}.dark .permission-identity strong{color:#dbe5ee}.dark .permission-search input,.dark .permission-category select,.dark .permission-dialog main input,.dark .permission-dialog header button,.dark .permission-dialog footer button:first-child{border-color:#405066;background:#111c2b;color:#d9e3ed}
+		@media(max-width:1000px){.permissions-stats{grid-template-columns:1fr 1fr}.linked-roles a:nth-of-type(n+3){display:none}}
+		@media(max-width:720px){.permissions-header{align-items:flex-start;flex-direction:column}.permissions-header-actions{width:100%}.permissions-header-actions>*{flex:1;justify-content:center}.permissions-toolbar{align-items:stretch;flex-direction:column}.permissions-toolbar>form{align-items:stretch;flex-wrap:wrap}.permission-search{min-width:100%}.permission-category{flex:1}.permission-category select{width:100%}.permissions-toolbar>div{border-top:1px solid #edf1f5;border-right:0;padding-top:.45rem;padding-right:0}.permissions-table-wrap{display:none}.permissions-mobile{display:grid;gap:.6rem;background:#f6f8fa;padding:.6rem}.permissions-mobile>article{border:1px solid #dfe6ed;border-radius:.65rem;background:#fff;padding:.8rem}.permission-mobile-head{display:flex;align-items:center;gap:.5rem}.permission-mobile-head>div{min-width:0;flex:1}.permission-mobile-head strong,.permission-mobile-head small{display:block}.permission-mobile-head strong{overflow:hidden;color:#263d55;font-size:.78rem;text-overflow:ellipsis;white-space:nowrap}.permission-mobile-head small{margin-top:.1rem;color:#919daa;font-size:.6rem}.permission-mobile-head em{border-radius:999px;background:#edf4fb;padding:.2rem .4rem;color:var(--pm-blue);font-size:.58rem;font-style:normal}.permission-mobile-roles{display:flex;flex-wrap:wrap;gap:.25rem;margin-top:.6rem;border-top:1px solid #edf1f5;padding-top:.55rem}.permission-mobile-roles a{border:1px solid #dfe6ed;border-radius:999px;padding:.22rem .38rem;color:#63768a;font-size:.58rem}.permission-mobile-roles i{color:#939eaa;font-size:.6rem;font-style:normal}.permission-mobile-actions{display:flex;gap:.35rem;margin-top:.6rem}.permission-mobile-actions button{border:1px solid #dce4ec;border-radius:.4rem;background:#fff;padding:.35rem .55rem;color:var(--pm-blue);font-family:inherit;font-size:.66rem;font-weight:800}.permission-mobile-actions form button{color:#c34952}.dark .permissions-mobile{background:#111c2b}.dark .permissions-mobile>article{border-color:#344458;background:#172334}.dark .permission-mobile-head strong{color:#dbe5ee}}
+		@media(max-width:430px){.permissions-stats{grid-template-columns:1fr}.permissions-header-actions{flex-direction:column}.permissions-toolbar form>button{flex:1}}
+	</style>
+</DashboardLayout>

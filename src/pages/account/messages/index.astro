@@ -1,0 +1,320 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import '../../../styles/auth-pages.css';
+import Breadcrumbs from '../../../components/ui/Breadcrumbs.astro';
+import DashboardAlert from '../../../components/ui/DashboardAlert.astro';
+import Pagination from '../../../components/ui/Pagination.astro';
+import { getCurrentUser } from '../../../lib/auth';
+import { apiFetch } from '../../../lib/api';
+import { assetUrl } from '../../../lib/assets';
+
+const currentUser = await getCurrentUser(Astro);
+if (!currentUser) return Astro.redirect(`/login?redirect_to=${encodeURIComponent('/account/messages')}`);
+
+const token = Astro.cookies.get('token')?.value;
+const query = Astro.url.searchParams;
+const allowedTabs = new Set(['inbox', 'sent', 'drafts']);
+const requestedTab = query.get('tab') || 'inbox';
+const tab = allowedTabs.has(requestedTab) ? requestedTab : 'inbox';
+const search = (query.get('q') || '').trim();
+const importantOnly = query.get('important') === '1';
+const page = Math.max(1, Number(query.get('page')) || 1);
+const endpoint = tab === 'sent' ? '/dashboard/messages/sent' : tab === 'drafts' ? '/dashboard/messages/drafts' : '/dashboard/messages/inbox';
+const authOptions = { countryId: Astro.locals.countryId, cookieHeader: `token=${token}` };
+
+const [messagesResult, statsResult] = await Promise.all([
+	apiFetch<any[]>(endpoint, {
+		...authOptions,
+		params: { q: search || undefined, important: importantOnly || undefined, page, per_page: 20 },
+	}),
+	apiFetch<Record<string, number>>('/dashboard/messages/stats', authOptions),
+]);
+
+const messages = Array.isArray(messagesResult.data) ? messagesResult.data : [];
+const meta = messagesResult.meta;
+const stats = statsResult.data ?? {
+	inbox: tab === 'inbox' ? meta?.total ?? messages.length : 0,
+	unread: 0,
+	sent: tab === 'sent' ? meta?.total ?? messages.length : 0,
+	drafts: tab === 'drafts' ? meta?.total ?? messages.length : 0,
+	important: 0,
+	today: 0,
+};
+const numberFormat = new Intl.NumberFormat('ar-JO');
+const dateTimeFormat = new Intl.DateTimeFormat('ar-JO', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+const formatDateTime = (value: string) => {
+	const date = new Date(value);
+	return Number.isNaN(date.getTime()) ? '—' : dateTimeFormat.format(date);
+};
+const excerpt = (value: string, max = 135) => {
+	const clean = String(value || '').replace(/\s+/g, ' ').trim();
+	return clean.length > max ? `${clean.slice(0, max).trim()}…` : clean;
+};
+const initials = (name: string) => (name || 'عضو').trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
+const messageParty = (message: any) => tab === 'inbox' ? message.sender : message.recipient;
+const redirectTo = `${Astro.url.pathname}${Astro.url.search}`;
+const filterUrl = (nextTab: string, important = importantOnly) => {
+	const url = new URL('/account/messages', Astro.url);
+	url.searchParams.set('tab', nextTab);
+	if (important) url.searchParams.set('important', '1');
+	if (search && nextTab === tab) url.searchParams.set('q', search);
+	return `${url.pathname}${url.search}`;
+};
+const tabs = [
+	{ key: 'inbox', label: 'الوارد', count: Number(stats.inbox || 0), icon: 'inbox' },
+	{ key: 'sent', label: 'المرسلة', count: Number(stats.sent || 0), icon: 'sent' },
+	{ key: 'drafts', label: 'المسودات', count: Number(stats.drafts || 0), icon: 'draft' },
+];
+---
+
+<Layout title="الرسائل" description="إدارة مراسلاتك الداخلية في موقع الإيمان التعليمي." noindex>
+	<Breadcrumbs items={[{ label: 'حسابي', href: '/account' }, { label: 'الرسائل' }]} />
+
+	<div class="account-messages-page">
+		<DashboardAlert />
+
+		<header class="messages-hero">
+			<div>
+				<span class="messages-kicker">التواصل الداخلي</span>
+				<h1>مركز الرسائل</h1>
+				<p>تابع رسائلك وتواصل مع أعضاء المنصة من مساحة شخصية مرتبة وواضحة.</p>
+			</div>
+			<div class="messages-hero-actions">
+				<a href="/account" class="messages-account-link">العودة إلى حسابي</a>
+				<button type="button" data-focus-compose>
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>
+					كتابة رسالة
+				</button>
+			</div>
+		</header>
+
+		<section class="messages-summary" aria-label="ملخص الرسائل">
+			<article class="summary-card is-blue"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 5h16v14H4zM4 7l8 6 8-6" /></svg></i><div><span>صندوق الوارد</span><strong>{numberFormat.format(Number(stats.inbox || 0))}</strong><small>{numberFormat.format(Number(stats.unread || 0))} غير مقروءة</small></div></article>
+			<article class="summary-card is-green"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m22 2-7 20-4-9-9-4Z" /><path d="m22 2-11 11" /></svg></i><div><span>الرسائل المرسلة</span><strong>{numberFormat.format(Number(stats.sent || 0))}</strong><small>رسالة تم إرسالها</small></div></article>
+			<article class="summary-card is-orange"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 3h9l3 3v15H6zM9 11h6m-6 4h4" /></svg></i><div><span>المسودات</span><strong>{numberFormat.format(Number(stats.drafts || 0))}</strong><small>بانتظار الإكمال</small></div></article>
+			<article class="summary-card is-graphite"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z" /></svg></i><div><span>الرسائل المهمة</span><strong>{numberFormat.format(Number(stats.important || 0))}</strong><small>{numberFormat.format(Number(stats.today || 0))} رسالة اليوم</small></div></article>
+		</section>
+
+		<div class="messages-workspace">
+			<main class="messages-inbox">
+				<section class="messages-toolbar">
+					<nav aria-label="صناديق الرسائل">
+						{tabs.map((item) => (
+							<a href={filterUrl(item.key, false)} class:list={{ 'is-active': tab === item.key }} aria-current={tab === item.key ? 'page' : undefined}>
+								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+									{item.icon === 'inbox' ? <><path d="M4 5h16v14H4zM4 7l8 6 8-6" /></> : item.icon === 'sent' ? <><path d="m22 2-7 20-4-9-9-4Z" /><path d="m22 2-11 11" /></> : <><path d="M6 3h9l3 3v15H6zM9 11h6m-6 4h4" /></>}
+								</svg>
+								<span>{item.label}</span><strong>{numberFormat.format(item.count)}</strong>
+							</a>
+						))}
+					</nav>
+					<form method="get" action="/account/messages" class="messages-filter-form">
+						<input type="hidden" name="tab" value={tab} />
+						<label><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg><input type="search" name="q" value={search} placeholder="ابحث بالاسم أو البريد أو موضوع الرسالة..." aria-label="البحث في الرسائل" /></label>
+						<button type="submit">بحث</button>
+						<a href={filterUrl(tab, !importantOnly)} class:list={{ 'is-active': importantOnly }}><svg viewBox="0 0 24 24" fill={importantOnly ? 'currentColor' : 'none'} stroke="currentColor" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z" /></svg>المهمة</a>
+						{(search || importantOnly) && <a href={`/account/messages?tab=${tab}`} class="messages-clear">مسح</a>}
+					</form>
+				</section>
+
+				{!messagesResult.ok ? (
+					<section class="messages-state is-error"><i>!</i><h2>تعذّر تحميل الرسائل</h2><p>{messagesResult.message || 'تحقق من اتصال الخادم ثم أعد المحاولة.'}</p><a href={redirectTo}>إعادة المحاولة</a></section>
+				) : messages.length === 0 ? (
+					<section class="messages-state"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 5h16v14H4zM4 7l8 6 8-6" /></svg></i><h2>{search ? 'لا توجد رسائل مطابقة' : importantOnly ? 'لا توجد رسائل مهمة هنا' : tab === 'inbox' ? 'صندوق الوارد فارغ' : tab === 'sent' ? 'لا توجد رسائل مرسلة' : 'لا توجد مسودات'}</h2><p>{search || importantOnly ? 'جرّب تعديل البحث أو إزالة عوامل التصفية.' : 'ستظهر الرسائل الجديدة في هذا القسم.'}</p>{(search || importantOnly) && <a href={`/account/messages?tab=${tab}`}>عرض جميع الرسائل</a>}</section>
+				) : (
+					<section class="messages-list-card">
+						<header><div><h2>{tab === 'inbox' ? 'الرسائل الواردة' : tab === 'sent' ? 'الرسائل المرسلة' : 'المسودات المحفوظة'}</h2><p>{numberFormat.format(meta?.total ?? messages.length)} رسالة في هذا القسم</p></div><span>صفحة {numberFormat.format(meta?.current_page ?? page)} من {numberFormat.format(meta?.last_page ?? 1)}</span></header>
+						<div class="messages-list">
+							{messages.map((message: any) => {
+								const party = messageParty(message) || {};
+								const photo = assetUrl(party.profile_photo_path, 80);
+								const unread = tab === 'inbox' && !message.read;
+								return (
+									<article class:list={['message-row', { 'is-unread': unread }]}>
+										<div class="message-avatar">{photo ? <img src={photo} alt="" loading="lazy" /> : <span class={`tone-${Number(message.id) % 4}`}>{initials(party.name)}</span>}<i class:list={{ 'is-visible': unread }}></i></div>
+										<button
+											type="button"
+											class="message-content"
+											data-open-message
+											data-message-id={message.id}
+											data-message-name={party.name || 'مستخدم'}
+											data-message-email={party.email || ''}
+											data-message-party-id={party.id || ''}
+											data-message-subject={message.subject || 'دون موضوع'}
+											data-message-body={message.body || ''}
+											data-message-date={formatDateTime(message.created_at)}
+											data-message-direction={tab === 'inbox' ? 'رسالة واردة' : tab === 'sent' ? 'رسالة مرسلة' : 'مسودة'}
+											data-can-reply={tab === 'inbox' ? 'true' : 'false'}
+										>
+											<span class="message-party"><strong>{party.name || 'مستخدم غير معروف'}</strong>{party.email && <small dir="ltr">{party.email}</small>}</span>
+											<span class="message-copy"><strong>{message.subject || 'دون موضوع'}</strong><small>{excerpt(message.body) || 'لا يوجد نص لهذه الرسالة.'}</small></span>
+											<time datetime={message.created_at}>{formatDateTime(message.created_at)}</time>
+										</button>
+										<div class="message-badges">{tab === 'inbox' && <span class:list={{ 'is-unread': unread }}>{unread ? 'جديدة' : 'مقروءة'}</span>}{message.is_important && <span class="is-important">مهمة</span>}{tab === 'drafts' && <span class="is-draft">مسودة</span>}</div>
+										<div class="message-actions">
+											{unread && <form method="post" action={`/api/account/messages/${message.id}/read`}><input type="hidden" name="redirect_to" value={redirectTo} /><button type="submit" title="تعليم كمقروءة" aria-label="تعليم الرسالة كمقروءة"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m4 12 4 4L18 6" /></svg></button></form>}
+											<form method="post" action={`/api/account/messages/${message.id}/important`}><input type="hidden" name="redirect_to" value={redirectTo} /><button type="submit" class:list={{ 'is-important': message.is_important }} title={message.is_important ? 'إلغاء التمييز' : 'تمييز كمهمة'} aria-label={message.is_important ? 'إلغاء تمييز الرسالة' : 'تمييز الرسالة كمهمة'}><svg viewBox="0 0 24 24" fill={message.is_important ? 'currentColor' : 'none'} stroke="currentColor"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z" /></svg></button></form>
+											<form method="post" action={`/api/account/messages/${message.id}/delete`} data-confirm-delete><input type="hidden" name="redirect_to" value={redirectTo} /><button type="submit" class="is-delete" title="حذف الرسالة" aria-label="حذف الرسالة"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 7h16m-10 4v6m4-6v6M9 7l1-3h4l1 3m3 0-1 14H7L6 7" /></svg></button></form>
+										</div>
+									</article>
+								);
+							})}
+						</div>
+					</section>
+				)}
+				{meta && meta.last_page > 1 && <Pagination currentPage={meta.current_page} lastPage={meta.last_page} url={Astro.url} />}
+			</main>
+
+			<aside class="message-compose-card" id="message-compose-card">
+				<header><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg></i><div><span>رسالة جديدة</span><h2>اكتب رسالتك</h2><p>ابحث عن العضو بالاسم أو البريد الإلكتروني.</p></div></header>
+				<form method="post" action="/api/account/messages/send" data-compose-form>
+					<input type="hidden" name="recipient_id" data-recipient-id />
+					<label class="recipient-field"><span>المستلم</span><div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="10" cy="8" r="3" /><path d="M4 20c.5-4 2.5-6 6-6s5.5 2 6 6m1-10h5m-2.5-2.5v5" /></svg><input type="search" placeholder="اكتب حرفين من اسم العضو أو بريده..." autocomplete="off" data-recipient-search /></div><div class="recipient-results" data-recipient-results hidden></div><small data-recipient-hint>اختر عضوًا من نتائج البحث.</small></label>
+					<label><span>موضوع الرسالة</span><input type="text" name="subject" required maxlength="255" placeholder="موضوع واضح ومختصر..." data-compose-subject /></label>
+					<label><span>نص الرسالة</span><textarea name="body" rows="8" required maxlength="5000" placeholder="اكتب رسالتك هنا..." data-message-body></textarea><small class="compose-counter"><b data-body-count>0</b> / 5000</small></label>
+					<footer><button type="submit" formaction="/api/account/messages/draft" formnovalidate><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 4h12l2 2v14H5zM8 4v6h8V4M8 20v-6h8v6" /></svg>حفظ مسودة</button><button type="submit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m22 2-7 20-4-9-9-4Z" /><path d="m22 2-11 11" /></svg>إرسال الرسالة</button></footer>
+				</form>
+			</aside>
+		</div>
+	</div>
+
+	<dialog class="message-reader-dialog" id="message-reader-dialog" aria-labelledby="message-reader-title">
+		<div class="message-reader-card">
+			<header><div class="message-reader-avatar" data-reader-avatar>م</div><div><span data-reader-direction>رسالة</span><h2 id="message-reader-title" data-reader-subject>موضوع الرسالة</h2><p><strong data-reader-name>المستخدم</strong><small data-reader-email dir="ltr"></small></p></div><button type="button" data-close-reader aria-label="إغلاق"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m6 6 12 12M18 6 6 18" /></svg></button></header>
+			<div class="message-reader-meta"><span>تاريخ الرسالة</span><time data-reader-date></time></div>
+			<div class="message-reader-body" data-reader-body></div>
+			<footer><button type="button" data-close-reader>إغلاق</button><button type="button" class="reader-reply" data-reader-reply hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m9 14-5-5 5-5M4 9h9a7 7 0 0 1 7 7v2" /></svg>الرد على الرسالة</button></footer>
+		</div>
+	</dialog>
+
+	<dialog class="message-delete-dialog" id="message-delete-dialog" aria-labelledby="message-delete-title">
+		<div class="message-delete-card"><button type="button" data-close-delete aria-label="إغلاق"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m6 6 12 12M18 6 6 18" /></svg></button><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 7h16m-10 4v6m4-6v6M9 7l1-3h4l1 3m3 0-1 14H7L6 7" /></svg></i><span>تأكيد الحذف</span><h2 id="message-delete-title">حذف هذه الرسالة؟</h2><p>ستُحذف الرسالة من صندوقك ولن تظهر ضمن الرسائل مرة أخرى.</p><div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 9v4m0 4h.01M10.3 4.3 2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0Z" /></svg><span><strong>تنبيه مهم</strong> لا يمكن التراجع عن هذه العملية.</span></div><footer><button type="button" data-close-delete>إلغاء</button><button type="button" data-confirm-delete-action>حذف الرسالة</button></footer></div>
+	</dialog>
+
+	<script>
+		const readerDialog = document.getElementById('message-reader-dialog') as HTMLDialogElement | null;
+		const composeCard = document.getElementById('message-compose-card');
+		const recipientSearch = document.querySelector<HTMLInputElement>('[data-recipient-search]');
+		const recipientID = document.querySelector<HTMLInputElement>('[data-recipient-id]');
+		const recipientResults = document.querySelector<HTMLElement>('[data-recipient-results]');
+		const recipientHint = document.querySelector<HTMLElement>('[data-recipient-hint]');
+		const subjectField = document.querySelector<HTMLInputElement>('[data-compose-subject]');
+		let replyData = { id: '', name: '', email: '', subject: '' };
+
+		const selectRecipient = (id: string, name: string, email: string) => {
+			if (recipientID) recipientID.value = id;
+			if (recipientSearch) { recipientSearch.value = name; recipientSearch.setCustomValidity(''); }
+			if (recipientHint) { recipientHint.textContent = `${email} · العضو #${id}`; recipientHint.classList.add('is-selected'); }
+			if (recipientResults) recipientResults.hidden = true;
+		};
+
+		document.querySelectorAll<HTMLElement>('[data-open-message]').forEach((button) => button.addEventListener('click', () => {
+			if (!readerDialog) return;
+			const set = (selector: string, value: string) => { const element = readerDialog.querySelector<HTMLElement>(selector); if (element) element.textContent = value; };
+			set('[data-reader-direction]', button.dataset.messageDirection || 'رسالة');
+			set('[data-reader-subject]', button.dataset.messageSubject || 'دون موضوع');
+			set('[data-reader-name]', button.dataset.messageName || 'مستخدم');
+			set('[data-reader-email]', button.dataset.messageEmail || '');
+			set('[data-reader-date]', button.dataset.messageDate || '');
+			set('[data-reader-body]', button.dataset.messageBody || 'لا يوجد نص للرسالة.');
+			set('[data-reader-avatar]', (button.dataset.messageName || 'م').trim().charAt(0));
+			replyData = { id: button.dataset.messagePartyId || '', name: button.dataset.messageName || '', email: button.dataset.messageEmail || '', subject: button.dataset.messageSubject || '' };
+			const replyButton = readerDialog.querySelector<HTMLButtonElement>('[data-reader-reply]');
+			if (replyButton) replyButton.hidden = button.dataset.canReply !== 'true' || !replyData.id;
+			readerDialog.showModal();
+		}));
+		document.querySelectorAll('[data-close-reader]').forEach((button) => button.addEventListener('click', () => readerDialog?.close()));
+		readerDialog?.addEventListener('click', (event) => { if (event.target === readerDialog) readerDialog.close(); });
+		readerDialog?.querySelector('[data-reader-reply]')?.addEventListener('click', () => {
+			selectRecipient(replyData.id, replyData.name, replyData.email);
+			if (subjectField) subjectField.value = replyData.subject.startsWith('رد:') ? replyData.subject : `رد: ${replyData.subject}`;
+			readerDialog.close();
+			composeCard?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+			window.setTimeout(() => subjectField?.focus(), 350);
+		});
+
+		const deleteDialog = document.getElementById('message-delete-dialog') as HTMLDialogElement | null;
+		let pendingDeleteForm: HTMLFormElement | null = null;
+		document.querySelectorAll<HTMLFormElement>('[data-confirm-delete]').forEach((form) => form.addEventListener('submit', (event) => {
+			if (form.dataset.confirmed === 'true') return;
+			event.preventDefault();
+			pendingDeleteForm = form;
+			deleteDialog?.showModal();
+		}));
+		document.querySelectorAll('[data-close-delete]').forEach((button) => button.addEventListener('click', () => deleteDialog?.close()));
+		deleteDialog?.addEventListener('click', (event) => { if (event.target === deleteDialog) deleteDialog.close(); });
+		deleteDialog?.addEventListener('close', () => { pendingDeleteForm = null; });
+		deleteDialog?.querySelector('[data-confirm-delete-action]')?.addEventListener('click', () => {
+			if (!pendingDeleteForm) return;
+			const form = pendingDeleteForm;
+			form.dataset.confirmed = 'true';
+			form.requestSubmit();
+		});
+
+		let recipientTimer: number | undefined;
+		const renderRecipients = (items: any[]) => {
+			if (!recipientResults) return;
+			recipientResults.replaceChildren();
+			items.forEach((item) => {
+				const button = document.createElement('button');
+				button.type = 'button';
+				button.className = 'recipient-option';
+				const avatar = document.createElement('span'); avatar.textContent = String(item.name || 'م').trim().charAt(0);
+				const text = document.createElement('div');
+				const name = document.createElement('strong'); name.textContent = String(item.name || 'مستخدم');
+				const email = document.createElement('small'); email.dir = 'ltr'; email.textContent = String(item.email || '');
+				text.append(name, email); button.append(avatar, text);
+				button.addEventListener('click', () => selectRecipient(String(item.id), String(item.name || 'مستخدم'), String(item.email || '')));
+				recipientResults.append(button);
+			});
+			if (!items.length) {
+				const empty = document.createElement('p'); empty.className = 'recipient-empty'; empty.textContent = 'لا توجد نتائج مطابقة.'; recipientResults.append(empty);
+			}
+			recipientResults.hidden = false;
+		};
+		recipientSearch?.addEventListener('input', () => {
+			if (recipientID) recipientID.value = '';
+			if (recipientHint) { recipientHint.textContent = 'اختر عضوًا من نتائج البحث.'; recipientHint.classList.remove('is-selected'); }
+			window.clearTimeout(recipientTimer);
+			const value = recipientSearch.value.trim();
+			if (value.length < 2) { if (recipientResults) recipientResults.hidden = true; return; }
+			recipientTimer = window.setTimeout(async () => {
+				try {
+					const response = await fetch(`/api/account/messages/recipients?q=${encodeURIComponent(value)}`);
+					const json = await response.json();
+					renderRecipients(Array.isArray(json?.data) ? json.data : []);
+				} catch {
+					if (recipientHint) recipientHint.textContent = 'تعذّر البحث عن الأعضاء الآن.';
+				}
+			}, 280);
+		});
+		document.addEventListener('click', (event) => { if (recipientResults && !recipientResults.contains(event.target as Node) && event.target !== recipientSearch) recipientResults.hidden = true; });
+		const composeForm = document.querySelector<HTMLFormElement>('[data-compose-form]');
+		composeForm?.addEventListener('submit', (event) => {
+			if (!recipientID?.value) {
+				event.preventDefault();
+				recipientSearch?.setCustomValidity('اختر مستلمًا من نتائج البحث.');
+				recipientSearch?.reportValidity();
+				recipientSearch?.focus();
+			}
+		});
+		document.querySelector('[data-focus-compose]')?.addEventListener('click', () => { composeCard?.scrollIntoView({ behavior: 'smooth', block: 'center' }); window.setTimeout(() => recipientSearch?.focus(), 350); });
+		const bodyField = document.querySelector<HTMLTextAreaElement>('[data-message-body]');
+		const bodyCount = document.querySelector<HTMLElement>('[data-body-count]');
+		bodyField?.addEventListener('input', () => { if (bodyCount) bodyCount.textContent = String(bodyField.value.length); });
+	</script>
+
+	<style>
+		.account-messages-page{--ink:#132f4c;--muted:#64748b;--line:#dfe7ef;max-width:1280px;margin-inline:auto;padding:2.25rem 1rem 4rem}.messages-hero{display:flex;align-items:flex-end;justify-content:space-between;gap:1.5rem;margin-bottom:1.25rem}.messages-kicker{display:block;margin-bottom:.25rem;color:#1a4d8f;font-size:.78rem;font-weight:850}.messages-hero h1{margin:0;color:#071d3d;font-size:clamp(1.75rem,1.4rem + 1vw,2.5rem);font-weight:950;letter-spacing:-.03em}.messages-hero p{margin:.4rem 0 0;color:var(--muted);font-size:.92rem;line-height:1.8}.messages-hero-actions{display:flex;align-items:center;gap:.65rem}.messages-hero-actions a,.messages-hero-actions button{display:inline-flex;min-height:2.8rem;align-items:center;justify-content:center;gap:.45rem;border-radius:.7rem;padding:.6rem 1rem;font-family:inherit;font-size:.82rem;font-weight:850}.messages-account-link{border:1px solid var(--line);background:#fff;color:#42566c}.messages-hero-actions button{border:1px solid #16427d;background:#1a4d8f;color:#fff}.messages-hero-actions svg{width:1rem;height:1rem}
+		.messages-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.8rem;margin-bottom:1rem}.summary-card{display:flex;min-width:0;align-items:center;gap:.8rem;border:1px solid var(--line);border-radius:.85rem;background:#fff;padding:1rem;box-shadow:0 4px 14px rgb(15 23 42/.045)}.summary-card>i{display:grid;width:2.75rem;height:2.75rem;flex:none;place-items:center;border-radius:.7rem}.summary-card svg{width:1.15rem;height:1.15rem;stroke-width:1.8}.summary-card div{min-width:0}.summary-card span,.summary-card small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.summary-card span{color:#52667c;font-size:.73rem;font-weight:750}.summary-card strong{display:block;margin:.06rem 0;color:var(--ink);font-size:1.35rem;font-weight:950}.summary-card small{color:#8796a8;font-size:.67rem}.summary-card.is-blue i{background:#edf4fc;color:#1a4d8f}.summary-card.is-green i{background:#eaf8f3;color:#0f8464}.summary-card.is-orange i{background:#fff5e7;color:#b96d14}.summary-card.is-graphite i{background:#eef1f4;color:#2e3540}
+		.messages-workspace{display:grid;grid-template-columns:minmax(0,1fr) 340px;align-items:start;gap:1rem}.messages-inbox{min-width:0}.messages-toolbar,.messages-list-card,.message-compose-card,.messages-state{border:1px solid var(--line);border-radius:.85rem;background:#fff;box-shadow:0 4px 14px rgb(15 23 42/.045)}.messages-toolbar{overflow:hidden;margin-bottom:.8rem}.messages-toolbar nav{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid var(--line)}.messages-toolbar nav a{display:flex;min-height:3.4rem;align-items:center;justify-content:center;gap:.45rem;border-left:1px solid #edf1f5;color:#64748b;font-size:.8rem;font-weight:800}.messages-toolbar nav a:last-child{border-left:0}.messages-toolbar nav a.is-active{background:#f1f6fc;color:#1a4d8f;box-shadow:inset 0 -3px #1a4d8f}.messages-toolbar nav svg{width:1rem;height:1rem}.messages-toolbar nav strong{min-width:1.4rem;border-radius:999px;background:#edf1f5;padding:.1rem .36rem;text-align:center;font-size:.67rem}.messages-filter-form{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;gap:.5rem;padding:.7rem}.messages-filter-form label{position:relative}.messages-filter-form label svg{position:absolute;top:50%;right:.8rem;width:1rem;height:1rem;color:#8a97a6;transform:translateY(-50%)}.messages-filter-form input{width:100%;min-height:2.65rem;border:1px solid #d9e2ec;border-radius:.6rem;background:#fff;padding:.55rem 2.25rem .55rem .75rem;color:var(--ink);font-family:inherit;font-size:.78rem}.messages-filter-form>button,.messages-filter-form>a{display:inline-flex;min-height:2.65rem;align-items:center;justify-content:center;gap:.3rem;border:1px solid #d9e2ec;border-radius:.6rem;background:#fff;padding:.5rem .75rem;color:#52667c;font-family:inherit;font-size:.73rem;font-weight:800}.messages-filter-form>button{border-color:#1a4d8f;background:#1a4d8f;color:#fff}.messages-filter-form>a.is-active{border-color:#e4aa52;background:#fff8ec;color:#a56613}.messages-filter-form>a svg{width:.9rem;height:.9rem}.messages-filter-form .messages-clear{border-color:transparent;padding-inline:.35rem;color:#b34848}
+		.messages-list-card{overflow:hidden}.messages-list-card>header{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);padding:.85rem 1rem}.messages-list-card h2{margin:0;color:var(--ink);font-size:1rem;font-weight:900}.messages-list-card header p{margin:.18rem 0 0;color:#8796a8;font-size:.7rem}.messages-list-card header>span{color:#8796a8;font-size:.68rem}.message-row{display:grid;grid-template-columns:2.9rem minmax(0,1fr) auto auto;align-items:center;gap:.7rem;border-bottom:1px solid #edf1f5;padding:.78rem .9rem;transition:background .18s}.message-row:last-child{border-bottom:0}.message-row:hover{background:#f8fafc}.message-row.is-unread{background:#f3f7fc}.message-avatar{position:relative}.message-avatar img,.message-avatar>span{display:grid;width:2.65rem;height:2.65rem;place-items:center;border-radius:.68rem;object-fit:cover;color:#fff;font-size:.72rem;font-weight:900}.message-avatar .tone-0{background:#1a4d8f}.message-avatar .tone-1{background:#0f8464}.message-avatar .tone-2{background:#b96d14}.message-avatar .tone-3{background:#596579}.message-avatar i{position:absolute;right:-.12rem;bottom:-.12rem;width:.7rem;height:.7rem;border:2px solid #fff;border-radius:50%;background:#1a4d8f;opacity:0}.message-avatar i.is-visible{opacity:1}.message-content{display:grid;min-width:0;grid-template-columns:minmax(8rem,.7fr) minmax(12rem,1.3fr) auto;align-items:center;gap:.8rem;border:0;background:transparent;padding:0;color:inherit;font-family:inherit;text-align:right}.message-party,.message-copy{min-width:0}.message-party strong,.message-party small,.message-copy strong,.message-copy small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.message-party strong{color:var(--ink);font-size:.8rem;font-weight:850}.message-party small{margin-top:.12rem;color:#8a97a6;font-size:.64rem;text-align:right}.message-copy strong{color:#344b63;font-size:.79rem;font-weight:800}.message-copy small{margin-top:.15rem;color:#7b8b9d;font-size:.69rem}.message-content time{color:#8796a8;font-size:.65rem;white-space:nowrap}.message-badges{display:flex;flex-direction:column;gap:.25rem}.message-badges span{border-radius:999px;background:#eef2f6;padding:.2rem .45rem;color:#68798c;font-size:.58rem;font-weight:800;text-align:center}.message-badges span.is-unread{background:#eaf2fc;color:#1a4d8f}.message-badges span.is-important{background:#fff4df;color:#a56613}.message-badges span.is-draft{background:#e9f7f2;color:#0f8464}.message-actions{display:flex;gap:.25rem}.message-actions button{display:grid;width:2rem;height:2rem;place-items:center;border:1px solid #e1e7ee;border-radius:.5rem;background:#fff;color:#718096}.message-actions button:hover{border-color:#9bb8dc;color:#1a4d8f}.message-actions button.is-important{border-color:#f0cf9a;background:#fff8ec;color:#b96d14}.message-actions button.is-delete:hover{border-color:#efb7bd;background:#fff5f5;color:#be3442}.message-actions svg{width:.85rem;height:.85rem;stroke-width:1.8}
+		.messages-state{display:grid;min-height:18rem;place-items:center;align-content:center;padding:2rem;text-align:center}.messages-state>i{display:grid;width:3.5rem;height:3.5rem;place-items:center;border-radius:50%;background:#edf4fc;color:#1a4d8f;font-style:normal;font-weight:900}.messages-state svg{width:1.4rem;height:1.4rem}.messages-state h2{margin:.8rem 0 .2rem;color:var(--ink);font-size:1.05rem;font-weight:900}.messages-state p{margin:0;color:#7b8b9d;font-size:.78rem}.messages-state a{margin-top:.8rem;color:#1a4d8f;font-size:.75rem;font-weight:850}.messages-state.is-error>i{background:#fff0f1;color:#c5303e}
+		.message-compose-card{position:sticky;top:1rem;overflow:visible}.message-compose-card>header{display:flex;gap:.7rem;border-bottom:1px solid #edf1f5;padding:1rem}.message-compose-card>header>i{display:grid;width:2.7rem;height:2.7rem;flex:none;place-items:center;border-radius:.65rem;background:#edf4fc;color:#1a4d8f}.message-compose-card>header svg{width:1.1rem;height:1.1rem}.message-compose-card>header span{color:#1a4d8f;font-size:.68rem;font-weight:850}.message-compose-card h2{margin:.08rem 0;color:var(--ink);font-size:.95rem;font-weight:900}.message-compose-card header p{margin:.1rem 0 0;color:#7b8b9d;font-size:.67rem}.message-compose-card form{display:grid;gap:.85rem;padding:1rem}.message-compose-card label{position:relative}.message-compose-card label>span{display:block;margin-bottom:.32rem;color:#344b63;font-size:.72rem;font-weight:850}.message-compose-card input,.message-compose-card textarea{width:100%;border:1px solid #d9e2ec;border-radius:.58rem;background:#fff;padding:.62rem .7rem;color:var(--ink);font-family:inherit;font-size:.75rem}.message-compose-card input{min-height:2.7rem}.message-compose-card textarea{resize:vertical;line-height:1.8}.message-compose-card input:focus,.message-compose-card textarea:focus{border-color:#81a7da;outline:0;box-shadow:0 0 0 3px rgb(26 77 143/.08)}.recipient-field>div:first-of-type{position:relative}.recipient-field>div:first-of-type svg{position:absolute;top:50%;right:.7rem;width:1rem;height:1rem;color:#8796a8;transform:translateY(-50%)}.recipient-field>div:first-of-type input{padding-right:2.15rem}.recipient-field>small,.compose-counter{display:block;margin-top:.28rem;color:#8a97a6;font-size:.63rem}.recipient-field>small.is-selected{color:#0f8464;font-weight:750}.compose-counter{text-align:left}.recipient-results{position:absolute;z-index:20;top:4.45rem;right:0;left:0;max-height:14rem;overflow:auto;border:1px solid #d7e1ec;border-radius:.65rem;background:#fff;padding:.3rem;box-shadow:0 16px 36px rgb(15 23 42/.18)}.recipient-results[hidden]{display:none}:global(.recipient-option){display:grid;width:100%;grid-template-columns:2rem minmax(0,1fr);align-items:center;gap:.55rem;border:0;border-radius:.5rem;background:transparent;padding:.52rem;color:var(--ink);font-family:inherit;text-align:right}:global(.recipient-option:hover){background:#f3f7fb}:global(.recipient-option>span){display:grid;width:2rem;height:2rem;place-items:center;border-radius:.5rem;background:#edf4fc;color:#1a4d8f;font-size:.67rem;font-weight:900}:global(.recipient-option div){min-width:0}:global(.recipient-option strong),:global(.recipient-option small){display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}:global(.recipient-option strong){font-size:.7rem}:global(.recipient-option small){margin-top:.08rem;color:#8796a8;font-size:.59rem;text-align:right}:global(.recipient-empty){margin:0;padding:.8rem;text-align:center;color:#8796a8;font-size:.68rem}.message-compose-card form>footer{display:grid;grid-template-columns:1fr 1.25fr;gap:.5rem;border-top:1px solid #edf1f5;padding-top:.8rem}.message-compose-card footer button{display:inline-flex;min-height:2.65rem;align-items:center;justify-content:center;gap:.38rem;border-radius:.55rem;font-family:inherit;font-size:.7rem;font-weight:850}.message-compose-card footer button:first-child{border:1px solid #d9e2ec;background:#fff;color:#52667e}.message-compose-card footer button:last-child{border:1px solid #16427d;background:#1a4d8f;color:#fff}.message-compose-card footer svg{width:.9rem;height:.9rem}
+		.message-reader-dialog,.message-delete-dialog{max-width:none;border:0;background:transparent;padding:0}.message-reader-dialog{width:min(92vw,42rem)}.message-delete-dialog{width:min(92vw,29rem)}.message-reader-dialog::backdrop,.message-delete-dialog::backdrop{background:rgb(4 16 35/.62);backdrop-filter:blur(3px)}.message-reader-card,.message-delete-card{overflow:hidden;border:1px solid #dce4ed;border-radius:1rem;background:#fff;box-shadow:0 28px 70px rgb(6 26 58/.28)}.message-reader-card>header{display:flex;align-items:center;gap:.8rem;border-bottom:1px solid #edf1f5;padding:1.1rem}.message-reader-avatar{display:grid;width:3rem;height:3rem;flex:none;place-items:center;border-radius:.72rem;background:#edf4fc;color:#1a4d8f;font-weight:900}.message-reader-card header>div:nth-child(2){min-width:0;flex:1}.message-reader-card header span{color:#1a4d8f;font-size:.68rem;font-weight:850}.message-reader-card h2{overflow:hidden;margin:.08rem 0;color:var(--ink);font-size:1.05rem;font-weight:900;text-overflow:ellipsis;white-space:nowrap}.message-reader-card header p{display:flex;gap:.4rem;margin:0;color:#718096;font-size:.7rem}.message-reader-card header button,.message-delete-card>button{display:grid;width:2.25rem;height:2.25rem;place-items:center;border:1px solid #dfe6ee;border-radius:.52rem;background:#fff;color:#718096}.message-reader-card header button svg,.message-delete-card>button svg{width:.9rem;height:.9rem}.message-reader-meta{display:flex;justify-content:space-between;border-bottom:1px solid #edf1f5;background:#f8fafc;padding:.65rem 1.1rem;color:#8a97a6;font-size:.7rem}.message-reader-body{min-height:13rem;padding:1.25rem;color:#344b63;font-size:.86rem;line-height:2;white-space:pre-wrap;overflow-wrap:anywhere}.message-reader-card>footer{display:flex;justify-content:flex-end;gap:.5rem;border-top:1px solid #edf1f5;padding:.8rem 1.1rem}.message-reader-card>footer button{display:inline-flex;min-height:2.45rem;align-items:center;gap:.4rem;border:1px solid #d9e2ec;border-radius:.55rem;background:#fff;padding:.4rem .9rem;color:#52667e;font-family:inherit;font-size:.72rem;font-weight:850}.message-reader-card>footer .reader-reply{border-color:#1a4d8f;background:#1a4d8f;color:#fff}.reader-reply svg{width:.9rem;height:.9rem}.message-delete-card{position:relative;padding:1.6rem;text-align:center}.message-delete-card::before{position:absolute;top:0;right:0;left:0;height:.28rem;background:#c5303e;content:""}.message-delete-card>button{position:absolute;top:.85rem;left:.85rem}.message-delete-card>i{display:grid;width:4rem;height:4rem;margin:.15rem auto .8rem;place-items:center;border-radius:50%;background:#fff1f2;color:#c5303e;box-shadow:0 0 0 .45rem #fff8f8}.message-delete-card>i svg{width:1.55rem;height:1.55rem}.message-delete-card>span{color:#c5303e;font-size:.7rem;font-weight:900}.message-delete-card h2{margin:.2rem 0;color:var(--ink);font-size:1.15rem;font-weight:950}.message-delete-card>p{margin:.35rem 0;color:#718096;font-size:.76rem}.message-delete-card>div{display:flex;align-items:center;gap:.55rem;margin-top:1rem;border:1px solid #f5d9bd;border-radius:.65rem;background:#fff9f1;padding:.7rem;color:#94602a;text-align:right}.message-delete-card>div svg{width:1.05rem;height:1.05rem;flex:none}.message-delete-card>div span{font-size:.68rem}.message-delete-card>div strong{display:block}.message-delete-card footer{display:grid;grid-template-columns:1fr 1.2fr;gap:.5rem;margin-top:1.1rem}.message-delete-card footer button{min-height:2.65rem;border-radius:.55rem;font-family:inherit;font-size:.74rem;font-weight:900}.message-delete-card footer button:first-child{border:1px solid #d9e2ec;background:#fff;color:#52667e}.message-delete-card footer button:last-child{border:1px solid #aa2b38;background:#c5303e;color:#fff}
+		:global(.dark) .account-messages-page{--ink:#f8fafc;--muted:#94a3b8;--line:#334155}:global(.dark) .messages-hero h1{color:#fff}:global(.dark) .messages-account-link,:global(.dark) .summary-card,:global(.dark) .messages-toolbar,:global(.dark) .messages-filter-form input,:global(.dark) .messages-filter-form>a,:global(.dark) .messages-list-card,:global(.dark) .message-actions button,:global(.dark) .message-compose-card,:global(.dark) .message-compose-card input,:global(.dark) .message-compose-card textarea,:global(.dark) .message-compose-card footer button:first-child,:global(.dark) .messages-state,:global(.dark) .message-reader-card,:global(.dark) .message-delete-card{border-color:#334155;background:#0f2547;color:#cbd5e1}:global(.dark) .messages-toolbar nav,:global(.dark) .messages-toolbar nav a,:global(.dark) .messages-list-card>header,:global(.dark) .message-row,:global(.dark) .message-compose-card>header,:global(.dark) .message-compose-card form>footer,:global(.dark) .message-reader-card>header,:global(.dark) .message-reader-meta,:global(.dark) .message-reader-card>footer{border-color:#263b56}:global(.dark) .messages-toolbar nav a.is-active,:global(.dark) .message-row.is-unread,:global(.dark) .message-row:hover{background:#122b4c}:global(.dark) .recipient-results{border-color:#334155;background:#0b1e38}:global(.dark) .recipient-option:hover,:global(.dark) .message-reader-meta{background:#132943}:global(.dark) .message-reader-body{color:#d3dce7}:global(.dark) .message-delete-card>div{border-color:#6b4c2b;background:#2a241e;color:#e9c79f}
+		@media(max-width:1080px){.messages-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.messages-workspace{grid-template-columns:1fr}.message-compose-card{position:static}.message-content{grid-template-columns:minmax(8rem,.7fr) minmax(10rem,1.3fr) auto}}
+		@media(max-width:760px){.account-messages-page{padding-top:1.5rem}.messages-hero{align-items:flex-start;flex-direction:column}.messages-hero-actions{width:100%}.messages-hero-actions>*{flex:1}.messages-filter-form{grid-template-columns:1fr auto auto}.messages-filter-form label{grid-column:1/-1}.messages-filter-form .messages-clear{padding-inline:.6rem}.message-row{grid-template-columns:2.7rem minmax(0,1fr) auto;padding:.8rem}.message-content{display:block}.message-party strong{font-size:.82rem}.message-copy{display:block;margin-top:.28rem}.message-copy strong{font-size:.78rem}.message-content time{display:block;margin-top:.3rem}.message-badges{display:none}.message-actions{grid-column:2/-1;justify-content:flex-end}.messages-list-card>header>span{display:none}}
+		@media(max-width:480px){.messages-summary{grid-template-columns:1fr 1fr;gap:.55rem}.summary-card{padding:.75rem}.summary-card>i{width:2.35rem;height:2.35rem}.summary-card strong{font-size:1.1rem}.summary-card small{display:none}.messages-toolbar nav a{flex-direction:column;gap:.15rem;padding:.35rem}.messages-toolbar nav svg{display:none}.messages-filter-form{grid-template-columns:1fr 1fr}.messages-filter-form label{grid-column:1/-1}.messages-filter-form .messages-clear{display:none}.message-reader-card header p{flex-direction:column}.message-reader-card>footer,.message-delete-card footer,.message-compose-card form>footer{display:grid;grid-template-columns:1fr}.messages-hero-actions{flex-direction:column}.messages-hero-actions>*{width:100%}}
+	</style>
+</Layout>

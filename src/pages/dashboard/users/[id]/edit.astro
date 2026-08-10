@@ -1,0 +1,256 @@
+---
+import DashboardLayout from '../../../../layouts/DashboardLayout.astro';
+import DashboardAlert from '../../../../components/ui/DashboardAlert.astro';
+import { requireDashboard, hasPermission } from '../../../../lib/auth';
+import { apiFetch, apiFetchList } from '../../../../lib/api';
+import { assetUrl } from '../../../../lib/assets';
+
+const guard = await requireDashboard(Astro, 'manage users');
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+
+const { id } = Astro.params;
+const token = Astro.cookies.get('token')?.value;
+const requestOptions = { countryId: Astro.locals.countryId, cookieHeader: `token=${token}` };
+const [userResult, rolesResult, permissionsResult, activityResult] = await Promise.all([
+	apiFetch<any>(`/dashboard/users/${id}`, requestOptions),
+	apiFetchList<any>('/dashboard/roles', requestOptions),
+	apiFetchList<any>('/dashboard/permissions', requestOptions),
+	apiFetch<any>(`/dashboard/users/${id}/activity`, { ...requestOptions, params: { limit: 30 } }),
+]);
+
+const targetUser = userResult.data;
+const roles = rolesResult.items;
+const permissions = permissionsResult.items;
+const activity = activityResult.data ?? { sessions: [], security_events: [], activity_logs: [] };
+const sessions = Array.isArray(activity.sessions) ? activity.sessions : [];
+const securityEvents = Array.isArray(activity.security_events) ? activity.security_events : [];
+const activityLogs = Array.isArray(activity.activity_logs) ? activity.activity_logs : [];
+const latestSession = sessions[0] ?? null;
+const assignedRoleIds = new Set((targetUser?.roles ?? []).map((item: any) => Number(item.id)));
+const assignedPermissionIds = new Set((targetUser?.permissions ?? []).map((item: any) => Number(item.id)));
+const isSelf = String(user.id) === String(id);
+const canManageRoles = hasPermission(user, 'manage roles');
+const photo = assetUrl(targetUser?.profile_photo_path, 160);
+
+const statusLabels: Record<string, string> = { active: 'نشط', inactive: 'غير نشط', banned: 'محظور' };
+const genderLabels: Record<string, string> = { male: 'ذكر', female: 'أنثى', other: 'آخر' };
+const databaseLabels: Record<string, string> = { jo: 'الأردن', sa: 'السعودية', eg: 'مصر', ps: 'فلسطين' };
+const severityLabels: Record<string, string> = { info: 'معلومة', warning: 'تنبيه', danger: 'خطر', critical: 'حرج' };
+
+function formatDate(value: unknown, withTime = true): string {
+	if (!value) return 'غير متوفر';
+	const date = new Date(String(value));
+	if (Number.isNaN(date.getTime())) return 'غير متوفر';
+	return new Intl.DateTimeFormat('ar-JO', withTime
+		? { dateStyle: 'medium', timeStyle: 'short' }
+		: { dateStyle: 'medium' }).format(date);
+}
+
+function display(value: unknown): string {
+	if (value === null || value === undefined || String(value).trim() === '') return 'غير مُدخل';
+	return String(value);
+}
+
+function initials(name: string): string {
+	return String(name || 'م').trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join('');
+}
+
+function locationText(session: any): string {
+	return [session?.city, session?.country].filter(Boolean).join('، ') || 'موقع غير متوفر';
+}
+
+function coordinates(session: any): string {
+	if (session?.latitude == null || session?.longitude == null) return 'غير متوفرة';
+	return `${Number(session.latitude).toFixed(5)}, ${Number(session.longitude).toFixed(5)}`;
+}
+---
+
+<DashboardLayout title={targetUser ? `ملف ${targetUser.name}` : 'تفاصيل المستخدم'} user={user}>
+	<div class="user-profile-page">
+		<DashboardAlert />
+		{
+			!userResult.ok || !targetUser ? (
+				<section class="profile-empty">
+					<h1>تعذّر فتح ملف المستخدم</h1>
+					<p>{userResult.ok ? 'المستخدم غير موجود أو تم حذفه.' : userResult.message}</p>
+					<a href="/dashboard/users">العودة إلى المستخدمين</a>
+				</section>
+			) : (
+				<>
+					<header class="profile-header">
+						<div class="profile-heading">
+							<a class="profile-back" href="/dashboard/users" aria-label="العودة إلى المستخدمين">
+								<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+							</a>
+							<div>
+								<span>إدارة المستخدمين / الملف الكامل</span>
+								<h1>بطاقة معلومات العضو</h1>
+								<p>بيانات الحساب، الصلاحيات، الموقع والجلسات المسجلة في مكان واحد.</p>
+							</div>
+						</div>
+						<a class="profile-list-link" href="/dashboard/users">كل المستخدمين</a>
+					</header>
+
+					<section class="profile-identity-card">
+						<div class="profile-avatar-wrap">
+							{photo ? <img src={photo} alt={`صورة ${targetUser.name}`} /> : <span>{initials(targetUser.name)}</span>}
+							<i class={targetUser.status === 'active' ? 'is-online' : ''}></i>
+						</div>
+						<div class="profile-identity">
+							<div class="profile-name-row">
+								<h2>{targetUser.name}</h2>
+								{isSelf && <span class="profile-self">حسابك</span>}
+							</div>
+							<p dir="ltr">{targetUser.email}</p>
+							<div class="profile-badges">
+								<span class={`profile-status is-${targetUser.status || 'inactive'}`}><i></i>{statusLabels[targetUser.status] || 'غير نشط'}</span>
+								<span class={targetUser.email_verified_at ? 'is-verified' : 'is-unverified'}>
+									<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 12 2 2 4-4" /><circle cx="12" cy="12" r="9" /></svg>
+									{targetUser.email_verified_at ? 'البريد موثّق' : 'البريد غير موثّق'}
+								</span>
+								{(targetUser.roles ?? []).map((role: any) => <span class="profile-role">{role.name}</span>)}
+							</div>
+						</div>
+						<div class="profile-facts">
+							<div><span>رقم العضو</span><strong dir="ltr">#{targetUser.id}</strong></div>
+							<div><span>تاريخ الانضمام</span><strong>{formatDate(targetUser.created_at, false)}</strong></div>
+							<div><span>آخر نشاط</span><strong>{formatDate(targetUser.last_activity || targetUser.last_seen)}</strong></div>
+							<div><span>الجلسات المسجلة</span><strong>{sessions.length}</strong></div>
+						</div>
+					</section>
+
+					<div class="profile-layout">
+						<main class="profile-main">
+							<section class="profile-card">
+								<div class="profile-card-head"><div><span>الملف الشخصي</span><h2>المعلومات الأساسية</h2></div><small>تظهر الحقول غير المكتملة بوضوح</small></div>
+								<div class="profile-data-grid">
+									<div><span>الاسم الكامل</span><strong>{display(targetUser.name)}</strong></div>
+									<div><span>البريد الإلكتروني</span><strong dir="ltr">{display(targetUser.email)}</strong></div>
+									<div><span>الهاتف</span><strong dir="ltr" class:list={{ 'is-empty': !targetUser.phone }}>{display(targetUser.phone)}</strong></div>
+									<div><span>المسمى الوظيفي</span><strong class:list={{ 'is-empty': !targetUser.job_title }}>{display(targetUser.job_title)}</strong></div>
+									<div><span>الجنس</span><strong class:list={{ 'is-empty': !targetUser.gender }}>{targetUser.gender ? (genderLabels[targetUser.gender] || targetUser.gender) : 'غير مُدخل'}</strong></div>
+									<div><span>بلد الملف الشخصي</span><strong class:list={{ 'is-empty': !targetUser.country }}>{display(targetUser.country)}</strong></div>
+									<div class="profile-data-wide"><span>النبذة</span><strong class:list={{ 'is-empty': !targetUser.bio }}>{display(targetUser.bio)}</strong></div>
+								</div>
+							</section>
+
+							<section class="profile-card">
+								<div class="profile-card-head"><div><span>الاتصال الأخير</span><h2>الموقع والجهاز وIP</h2></div><small>{activityResult.ok ? 'بيانات فعلية من سجل الزيارات' : 'تعذّر جلب سجل الزيارات'}</small></div>
+								{latestSession ? (
+									<>
+										<div class="location-summary">
+											<div class="location-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z" /><circle cx="12" cy="10" r="2.5" /></svg></div>
+											<div><span>آخر موقع معروف</span><h3>{locationText(latestSession)}</h3><p>{databaseLabels[latestSession.database] || latestSession.database} · {formatDate(latestSession.last_activity)}</p></div>
+											<code dir="ltr">{display(latestSession.ip_address)}</code>
+										</div>
+										<div class="profile-data-grid location-data">
+											<div><span>عنوان IP</span><strong dir="ltr">{display(latestSession.ip_address)}</strong></div>
+											<div><span>الإحداثيات</span><strong dir="ltr" class:list={{ 'is-empty': latestSession.latitude == null }}>{coordinates(latestSession)}</strong></div>
+											<div><span>المتصفح</span><strong class:list={{ 'is-empty': !latestSession.browser }}>{display(latestSession.browser)}</strong></div>
+											<div><span>نظام التشغيل</span><strong class:list={{ 'is-empty': !latestSession.os }}>{display(latestSession.os)}</strong></div>
+											<div><span>حالة الاستجابة</span><strong dir="ltr" class:list={{ 'is-empty': latestSession.status_code == null }}>{latestSession.status_code ?? 'غير متوفرة'}</strong></div>
+											<div><span>زمن الاستجابة</span><strong dir="ltr" class:list={{ 'is-empty': latestSession.response_time == null }}>{latestSession.response_time == null ? 'غير متوفر' : `${latestSession.response_time} ms`}</strong></div>
+											<div class="profile-data-wide"><span>آخر رابط</span><strong dir="ltr" class:list={{ 'is-empty': !latestSession.url }}>{display(latestSession.url)}</strong></div>
+											<div class="profile-data-wide"><span>مصدر الزيارة</span><strong dir="ltr" class:list={{ 'is-empty': !latestSession.referer }}>{display(latestSession.referer)}</strong></div>
+											<div class="profile-data-wide"><span>User Agent</span><strong dir="ltr" class:list={{ 'is-empty': !latestSession.user_agent }}>{display(latestSession.user_agent)}</strong></div>
+										</div>
+									</>
+								) : <div class="profile-no-data"><strong>لا توجد جلسة مسجلة</strong><span>ستظهر معلومات IP والموقع والجهاز هنا عند توفرها في سجل الزيارات.</span></div>}
+							</section>
+
+							<section class="profile-card">
+								<div class="profile-card-head"><div><span>سجل الاستخدام</span><h2>الجلسات الأخيرة</h2></div><small>{sessions.length} جلسة</small></div>
+								<div class="sessions-list">
+									{sessions.map((session: any) => (
+										<article class="session-row">
+											<span class="session-device"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2" /><path d="M8 21h8M12 17v4" /></svg></span>
+											<div><strong>{session.browser || 'متصفح غير معروف'} · {session.os || 'نظام غير معروف'}</strong><span>{locationText(session)} · {databaseLabels[session.database] || session.database}</span></div>
+											<code dir="ltr">{display(session.ip_address)}</code>
+											<time>{formatDate(session.last_activity)}</time>
+										</article>
+									))}
+									{sessions.length === 0 && <div class="profile-no-data compact"><strong>لا توجد جلسات</strong><span>لم يسجل النظام أي جلسة لهذا العضو بعد.</span></div>}
+								</div>
+							</section>
+
+							<div class="profile-two-columns">
+								<section class="profile-card">
+									<div class="profile-card-head"><div><span>الأمان</span><h2>أحداث الأمان</h2></div><small>{securityEvents.length}</small></div>
+									<div class="timeline-list">
+										{securityEvents.slice(0, 8).map((event: any) => <article><i class={`severity-${event.severity || 'info'}`}></i><div><strong>{event.description || event.event_type}</strong><span>{severityLabels[event.severity] || event.severity} · {event.ip_address || 'IP غير متوفر'}</span></div><time>{formatDate(event.created_at)}</time></article>)}
+										{securityEvents.length === 0 && <div class="profile-no-data compact"><strong>لا توجد أحداث أمنية</strong><span>لا توجد تنبيهات مرتبطة بهذا العضو.</span></div>}
+									</div>
+								</section>
+								<section class="profile-card">
+									<div class="profile-card-head"><div><span>النشاط</span><h2>سجل العمليات</h2></div><small>{activityLogs.length}</small></div>
+									<div class="timeline-list">
+										{activityLogs.slice(0, 8).map((log: any) => <article><i class="activity-dot"></i><div><strong>{display(log.description)}</strong><span>{log.event || log.log_name || 'نشاط إداري'}</span></div><time>{formatDate(log.created_at)}</time></article>)}
+										{activityLogs.length === 0 && <div class="profile-no-data compact"><strong>لا توجد عمليات</strong><span>لا يوجد نشاط إداري مسجل لهذا العضو.</span></div>}
+									</div>
+								</section>
+							</div>
+						</main>
+
+						<aside class="profile-aside">
+							<section class="profile-card sticky-card">
+								<div class="profile-card-head"><div><span>إدارة الحساب</span><h2>تعديل بيانات العضو</h2></div></div>
+								<form class="profile-edit-form" method="post" action={`/api/dashboard/users/${targetUser.id}/profile`}>
+									<label><span>الاسم الكامل</span><input type="text" name="name" value={targetUser.name} required minlength="2" /></label>
+									<label><span>رقم الهاتف</span><input type="text" name="phone" value={targetUser.phone || ''} placeholder="غير مُدخل" dir="ltr" /></label>
+									<label><span>المسمى الوظيفي</span><input type="text" name="job_title" value={targetUser.job_title || ''} placeholder="غير مُدخل" /></label>
+									<div class="form-pair">
+										<label><span>الجنس</span><select name="gender"><option value="">غير مُدخل</option><option value="male" selected={targetUser.gender === 'male'}>ذكر</option><option value="female" selected={targetUser.gender === 'female'}>أنثى</option><option value="other" selected={targetUser.gender === 'other'}>آخر</option></select></label>
+										<label><span>البلد</span><input type="text" name="country" value={targetUser.country || ''} placeholder="غير مُدخل" /></label>
+									</div>
+									<label><span>حالة الحساب</span><select name="status" disabled={isSelf}><option value="active" selected={targetUser.status === 'active'}>نشط</option><option value="inactive" selected={targetUser.status === 'inactive'}>غير نشط</option><option value="banned" selected={targetUser.status === 'banned'}>محظور</option></select>{isSelf && <small>لا يمكنك تعطيل حسابك الحالي.</small>}</label>
+									<label><span>كلمة مرور جديدة</span><input type="password" name="password" minlength="8" placeholder="اتركها فارغة دون تغيير" autocomplete="new-password" /></label>
+									<button type="submit">حفظ بيانات الحساب</button>
+								</form>
+							</section>
+
+							<section class="profile-card">
+								<div class="profile-card-head"><div><span>البريد والأمان</span><h2>حالة الحساب التقنية</h2></div></div>
+								<div class="security-facts">
+									<div><span>توثيق البريد</span><strong class={targetUser.email_verified_at ? 'ok' : 'warn'}>{targetUser.email_verified_at ? 'موثّق' : 'غير موثّق'}</strong><small>{formatDate(targetUser.email_verified_at)}</small></div>
+									<div><span>حالة الارتداد</span><strong>{display(targetUser.email_bounce_status)}</strong><small>{targetUser.email_bounce_count ?? 0} محاولة ارتداد</small></div>
+									<div><span>آخر ارتداد</span><strong>{formatDate(targetUser.email_last_bounce_at)}</strong><small>{display(targetUser.email_bounce_reason)}</small></div>
+									<div><span>Google</span><strong class={targetUser.google_id ? 'ok' : ''}>{targetUser.google_id ? 'مرتبط' : 'غير مرتبط'}</strong></div>
+									<div><span>Facebook</span><strong class={targetUser.facebook_id ? 'ok' : ''}>{targetUser.facebook_id ? 'مرتبط' : 'غير مرتبط'}</strong></div>
+									<div><span>آخر تحديث</span><strong>{formatDate(targetUser.updated_at)}</strong></div>
+								</div>
+								<p class="security-note">لأمان الحساب لا يعرض النظام كلمة المرور المشفرة، أسرار المصادقة الثنائية، رموز الاستعادة أو رموز الجلسات.</p>
+							</section>
+
+							{canManageRoles && <section class="profile-card">
+								<div class="profile-card-head"><div><span>التحكم بالوصول</span><h2>الأدوار والصلاحيات</h2></div><small>{assignedRoleIds.size} دور · {assignedPermissionIds.size} مباشرة</small></div>
+								{isSelf ? <p class="profile-warning">لا يمكنك تعديل أدوارك أو صلاحياتك بنفسك.</p> : <form class="access-form" method="post" action={`/api/dashboard/users/${targetUser.id}/roles`}>
+									<fieldset><legend>الأدوار</legend><div class="access-options">{roles.map((role: any) => <label><input type="checkbox" name="roles" value={role.id} checked={assignedRoleIds.has(Number(role.id))} /><span>{role.name}</span></label>)}</div></fieldset>
+									<fieldset><legend>الصلاحيات المباشرة</legend><div class="permission-options">{permissions.map((permission: any) => <label><input type="checkbox" name="permissions" value={permission.id} checked={assignedPermissionIds.has(Number(permission.id))} /><span>{permission.name}</span></label>)}</div></fieldset>
+									<button type="submit">حفظ الوصول والصلاحيات</button>
+								</form>}
+							</section>}
+						</aside>
+					</div>
+				</>
+			)
+		}
+	</div>
+
+	<style>
+		.user-profile-page{--up-blue:#1a4d8f;--up-green:#0f8464;--up-orange:#e8a244;--up-ink:#17263a;--up-muted:#738196;--up-line:#dfe6ee;max-width:1420px;margin:0 auto;color:var(--up-ink)}
+		.profile-header{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:1rem}.profile-heading{display:flex;align-items:center;gap:.75rem}.profile-back{display:grid;width:2.35rem;height:2.35rem;flex:none;place-items:center;border:1px solid var(--up-line);border-radius:.6rem;background:#fff;color:var(--up-blue)}.profile-back svg{width:1rem;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;stroke-width:2}.profile-heading span{color:var(--up-blue);font-size:.56rem;font-weight:800}.profile-heading h1{margin:.12rem 0;color:#0c2443;font-size:1.28rem;font-weight:950}.profile-heading p{margin:0;color:var(--up-muted);font-size:.62rem}.profile-list-link{border:1px solid var(--up-line);border-radius:.55rem;background:#fff;padding:.55rem .8rem;color:#53657a;font-size:.6rem;font-weight:800}
+		.profile-identity-card{display:grid;grid-template-columns:auto minmax(12rem,1fr) minmax(30rem,1.35fr);align-items:center;gap:1rem;margin-bottom:1rem;border:1px solid var(--up-line);border-radius:.9rem;background:#fff;padding:1.15rem 1.25rem;box-shadow:0 1px 2px rgb(15 35 60/.05)}.profile-avatar-wrap{position:relative}.profile-avatar-wrap img,.profile-avatar-wrap>span{display:grid;width:4.2rem;height:4.2rem;place-items:center;border:3px solid #fff;border-radius:50%;background:#eaf2fb;box-shadow:0 0 0 1px #dbe5ef;color:var(--up-blue);font-size:1.05rem;font-weight:950;object-fit:cover}.profile-avatar-wrap>i{position:absolute;right:.18rem;bottom:.15rem;width:.75rem;height:.75rem;border:2px solid #fff;border-radius:50%;background:#98a4b2}.profile-avatar-wrap>i.is-online{background:var(--up-green)}.profile-name-row{display:flex;align-items:center;gap:.4rem}.profile-identity h2{margin:0;color:#0b2342;font-size:1rem;font-weight:950}.profile-self{border-radius:999px;background:#eaf2fb;padding:.12rem .32rem;color:var(--up-blue);font-size:.44rem;font-weight:800}.profile-identity>p{margin:.15rem 0 .45rem;color:#6e7e91;font-size:.59rem;text-align:right}.profile-badges{display:flex;flex-wrap:wrap;gap:.28rem}.profile-badges>span{display:inline-flex;align-items:center;gap:.2rem;border-radius:999px;padding:.22rem .4rem;font-size:.48rem;font-weight:800}.profile-badges svg{width:.66rem;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;stroke-width:2}.profile-status i{width:.27rem;height:.27rem;border-radius:50%;background:currentColor}.profile-status.is-active,.is-verified{background:#eaf8f3;color:var(--up-green)}.profile-status.is-inactive{background:#f1f4f7;color:#768598}.profile-status.is-banned,.is-unverified{background:#fff2e3;color:#b96d10}.profile-role{border:1px solid #dce4ed;background:#fafbfd;color:#52677f}.profile-facts{display:grid;grid-template-columns:repeat(4,1fr);overflow:hidden;border:1px solid #e5eaf0;border-radius:.7rem}.profile-facts>div{min-width:0;border-left:1px solid #e5eaf0;padding:.65rem .75rem}.profile-facts>div:last-child{border-left:0}.profile-facts span{display:block;margin-bottom:.2rem;color:#8491a2;font-size:.48rem}.profile-facts strong{display:block;overflow:hidden;color:#273b52;font-size:.61rem;font-weight:850;text-overflow:ellipsis;white-space:nowrap}
+		.profile-layout{display:grid;grid-template-columns:minmax(0,1fr) 20rem;align-items:start;gap:1rem}.profile-main,.profile-aside{display:grid;gap:1rem}.profile-card{overflow:hidden;border:1px solid var(--up-line);border-radius:.85rem;background:#fff;box-shadow:0 1px 2px rgb(15 35 60/.045)}.profile-card-head{display:flex;align-items:center;justify-content:space-between;gap:1rem;border-bottom:1px solid #edf1f5;padding:.78rem .95rem}.profile-card-head>div>span{color:var(--up-blue);font-size:.47rem;font-weight:850}.profile-card-head h2{margin:.12rem 0 0;color:#172f4d;font-size:.76rem;font-weight:900}.profile-card-head>small{color:#8794a4;font-size:.48rem}.profile-data-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0;border-top:0}.profile-data-grid>div{min-width:0;border-bottom:1px solid #edf1f5;padding:.72rem .95rem}.profile-data-grid>div:nth-child(odd):not(.profile-data-wide){border-left:1px solid #edf1f5}.profile-data-grid>div:last-child{border-bottom:0}.profile-data-grid span{display:block;margin-bottom:.22rem;color:#8491a2;font-size:.49rem}.profile-data-grid strong{display:block;overflow-wrap:anywhere;color:#31475e;font-size:.6rem;font-weight:780;line-height:1.6}.profile-data-grid strong.is-empty{color:#a4adb8;font-weight:600}.profile-data-wide{grid-column:1/-1}
+		.location-summary{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:.7rem;margin:.9rem;border:1px solid #dce9e4;border-radius:.7rem;background:#f5fbf9;padding:.75rem}.location-icon{display:grid;width:2.35rem;height:2.35rem;place-items:center;border-radius:.55rem;background:#e5f5ef;color:var(--up-green)}.location-icon svg{width:1rem;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;stroke-width:1.8}.location-summary span{color:#6f857c;font-size:.46rem}.location-summary h3{margin:.1rem 0;color:#183d34;font-size:.68rem;font-weight:900}.location-summary p{margin:0;color:#789087;font-size:.47rem}.location-summary code{border:1px solid #cfe1da;border-radius:.4rem;background:#fff;padding:.34rem .48rem;color:#126f57;font-size:.55rem}.location-data{border-top:1px solid #edf1f5}
+		.sessions-list{padding:.25rem .85rem}.session-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:.6rem;border-bottom:1px solid #edf1f5;padding:.65rem .15rem}.session-row:last-child{border-bottom:0}.session-device{display:grid;width:1.9rem;height:1.9rem;place-items:center;border-radius:.45rem;background:#eef4fb;color:var(--up-blue)}.session-device svg{width:.8rem;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;stroke-width:1.8}.session-row div strong,.session-row div span{display:block}.session-row div strong{color:#334a62;font-size:.56rem}.session-row div span{margin-top:.1rem;color:#8794a3;font-size:.46rem}.session-row code{color:#526b82;font-size:.5rem}.session-row time{color:#8996a5;font-size:.47rem;white-space:nowrap}
+		.profile-two-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}.timeline-list{padding:.28rem .85rem}.timeline-list article{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:.5rem;border-bottom:1px solid #edf1f5;padding:.62rem 0}.timeline-list article:last-child{border-bottom:0}.timeline-list article>i{width:.42rem;height:.42rem;border-radius:50%;background:#7890aa}.timeline-list i.severity-warning{background:var(--up-orange)}.timeline-list i.severity-danger,.timeline-list i.severity-critical{background:#d14343}.timeline-list i.activity-dot{background:var(--up-green)}.timeline-list strong,.timeline-list span{display:block}.timeline-list strong{overflow:hidden;color:#3a5068;font-size:.52rem;text-overflow:ellipsis;white-space:nowrap}.timeline-list span{margin-top:.1rem;color:#8996a5;font-size:.44rem}.timeline-list time{color:#98a3b0;font-size:.43rem;white-space:nowrap}
+		.profile-no-data{display:flex;min-height:8rem;flex-direction:column;align-items:center;justify-content:center;padding:1rem;color:#95a1af;text-align:center}.profile-no-data strong{color:#65778a;font-size:.62rem}.profile-no-data span{margin-top:.2rem;font-size:.5rem}.profile-no-data.compact{min-height:5rem}.sticky-card{position:sticky;top:1rem}.profile-edit-form{display:grid;gap:.62rem;padding:.85rem}.profile-edit-form label>span,.access-form legend{display:block;margin-bottom:.25rem;color:#51657b;font-size:.51rem;font-weight:800}.profile-edit-form input,.profile-edit-form select{width:100%;min-height:2.15rem;border:1px solid #dce4ec;border-radius:.46rem;background:#fff;padding:.4rem .55rem;color:#263d55;font-family:inherit;font-size:.56rem}.profile-edit-form input:focus,.profile-edit-form select:focus{border-color:#86a9d5;outline:0;box-shadow:0 0 0 3px rgb(26 77 143/.07)}.profile-edit-form select:disabled{background:#f4f6f8;color:#8793a1}.profile-edit-form label>small{display:block;margin-top:.18rem;color:#b66c13;font-size:.43rem}.form-pair{display:grid;grid-template-columns:1fr 1fr;gap:.45rem}.profile-edit-form>button,.access-form>button{min-height:2.25rem;border:1px solid #16437e;border-radius:.48rem;background:var(--up-blue);color:#fff;font-family:inherit;font-size:.56rem;font-weight:850}
+		.security-facts{display:grid;grid-template-columns:1fr 1fr;padding:.35rem .85rem}.security-facts>div{border-bottom:1px solid #edf1f5;padding:.55rem 0}.security-facts>div:nth-child(odd){padding-left:.45rem}.security-facts>div:nth-child(even){border-right:1px solid #edf1f5;padding-right:.45rem}.security-facts span,.security-facts strong,.security-facts small{display:block}.security-facts span{color:#8a96a5;font-size:.45rem}.security-facts strong{margin-top:.12rem;color:#3a5068;font-size:.54rem}.security-facts strong.ok{color:var(--up-green)}.security-facts strong.warn{color:#b96d10}.security-facts small{overflow-wrap:anywhere;margin-top:.08rem;color:#a0a9b4;font-size:.41rem}.security-note{margin:.1rem .85rem .8rem;border-radius:.45rem;background:#f6f8fa;padding:.55rem;color:#778596;font-size:.45rem;line-height:1.7}
+		.profile-warning{margin:.8rem;border:1px solid #f0d9b8;border-radius:.5rem;background:#fff8ed;padding:.65rem;color:#9b641e;font-size:.52rem}.access-form{display:grid;gap:.8rem;padding:.85rem}.access-form fieldset{min-width:0;border:0;margin:0;padding:0}.access-options{display:flex;flex-wrap:wrap;gap:.3rem}.access-options label{position:relative}.access-options input{position:absolute;opacity:0}.access-options span{display:inline-flex;border:1px solid #dce4ec;border-radius:999px;padding:.28rem .48rem;color:#607387;font-size:.48rem;font-weight:750}.access-options input:checked+span{border-color:#9ab7db;background:#edf4fb;color:var(--up-blue)}.permission-options{display:grid;max-height:14rem;grid-template-columns:1fr 1fr;gap:.25rem;overflow:auto;border:1px solid #e4e9ef;border-radius:.5rem;padding:.4rem}.permission-options label{display:flex;align-items:flex-start;gap:.3rem;border-radius:.35rem;padding:.28rem;color:#607186;font-size:.45rem}.permission-options label:hover{background:#f6f8fa}.permission-options input{width:.7rem;height:.7rem;flex:none;accent-color:var(--up-blue)}
+		.profile-empty{border:1px solid var(--up-line);border-radius:.8rem;background:#fff;padding:2rem;text-align:center}.profile-empty h1{margin:0;color:#233b55;font-size:1rem}.profile-empty p{color:#7d8a9a;font-size:.62rem}.profile-empty a{display:inline-block;margin-top:.5rem;border-radius:.45rem;background:var(--up-blue);padding:.5rem .8rem;color:#fff;font-size:.55rem;font-weight:800}
+		:global(.dark) .user-profile-page{--up-ink:#e6edf5;--up-muted:#98a7b9;--up-line:#334357}.dark .profile-header h1,.dark .profile-identity h2,.dark .profile-card-head h2{color:#eff5fb}.dark .profile-back,.dark .profile-list-link,.dark .profile-identity-card,.dark .profile-card,.dark .profile-empty{background:#172334}.dark .profile-facts,.dark .profile-data-grid>div,.dark .profile-card-head,.dark .session-row,.dark .timeline-list article,.dark .security-facts>div{border-color:#334154}.dark .profile-facts strong,.dark .profile-data-grid strong,.dark .session-row div strong,.dark .timeline-list strong,.dark .security-facts strong{color:#d7e0ea}.dark .profile-edit-form input,.dark .profile-edit-form select,.dark .location-summary code{border-color:#3c4c60;background:#111c2b;color:#d7e0ea}.dark .location-summary{border-color:#285047;background:#142d29}.dark .permission-options{border-color:#344559}.dark .security-note{background:#111c2b}
+		@media(max-width:1100px){.profile-identity-card{grid-template-columns:auto 1fr}.profile-facts{grid-column:1/-1}.profile-layout{grid-template-columns:1fr}.profile-aside{grid-template-columns:repeat(2,minmax(0,1fr))}.profile-aside>section:last-child{grid-column:1/-1}.sticky-card{position:static}}
+		@media(max-width:720px){.profile-header{align-items:flex-start}.profile-heading p,.profile-list-link{display:none}.profile-heading h1{font-size:1rem}.profile-identity-card{grid-template-columns:auto 1fr;padding:.85rem}.profile-avatar-wrap img,.profile-avatar-wrap>span{width:3.4rem;height:3.4rem}.profile-facts{grid-template-columns:1fr 1fr}.profile-facts>div:nth-child(2){border-left:0}.profile-facts>div:nth-child(-n+2){border-bottom:1px solid #e5eaf0}.profile-layout,.profile-main,.profile-aside{gap:.75rem}.profile-aside,.profile-two-columns{grid-template-columns:1fr}.profile-aside>section:last-child{grid-column:auto}.profile-data-grid{grid-template-columns:1fr}.profile-data-grid>div:nth-child(odd):not(.profile-data-wide){border-left:0}.profile-data-wide{grid-column:auto}.location-summary{grid-template-columns:auto 1fr}.location-summary code{grid-column:1/-1;text-align:center}.session-row{grid-template-columns:auto 1fr auto}.session-row code{display:none}.session-row time{grid-column:2/-1}.profile-card-head{padding:.72rem .8rem}.profile-card-head>small{max-width:8rem;text-align:left}.permission-options{grid-template-columns:1fr}}
+	</style>
+</DashboardLayout>

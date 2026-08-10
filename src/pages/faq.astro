@@ -1,0 +1,125 @@
+---
+import Layout from '../layouts/Layout.astro';
+import '../styles/misc-pages.css';
+import Breadcrumbs from '../components/ui/Breadcrumbs.astro';
+
+export const prerender = true;
+
+const groups = [
+	{
+		id: 'account', title: 'الحساب', color: 'royal',
+		items: [
+			['كيف أقوم بإنشاء حساب جديد؟', 'يمكنك إنشاء حساب من زر دخول / تسجيل في أعلى الصفحة. أدخل بياناتك بشكل صحيح، ثم اتبع خطوات التحقق إذا كانت مفعلة في الموقع.'],
+			['لا أستطيع تسجيل الدخول، ماذا أفعل؟', 'تأكد من كتابة البريد الإلكتروني وكلمة المرور بشكل صحيح. إذا استمرت المشكلة استخدم خيار استعادة كلمة المرور، أو تواصل معنا من صفحة اتصل بنا مع ذكر البريد المستخدم.'],
+			['نسيت كلمة المرور، كيف أستعيدها؟', 'من صفحة تسجيل الدخول اختر استعادة كلمة المرور، ثم أدخل بريدك الإلكتروني. ستصلك رسالة تحتوي على رابط إعادة التعيين إذا كان البريد مسجلاً.'],
+			['كيف أعدل بياناتي الشخصية؟', 'بعد تسجيل الدخول انتقل إلى حسابك أو لوحة الملف الشخصي، ثم عدل الاسم أو الصورة أو البيانات المتاحة حسب الصلاحيات المفعلة لحسابك.'],
+			['كيف أراسل الإدارة أو أحد المشرفين؟', 'يمكنك استخدام صفحة اتصل بنا. اكتب عنوانًا واضحًا للرسالة واشرح المشكلة بالتفصيل.'],
+		],
+	},
+	{
+		id: 'content', title: 'المحتوى', color: 'emerald',
+		items: [
+			['كيف أختار صفي الدراسي؟', 'من الصفحة الرئيسية أو صفحة الصفوف اختر الصف الدراسي المناسب، ثم ستظهر المواد والأقسام التعليمية المرتبطة به.'],
+			['لا أجد المادة التي أبحث عنها، ما الحل؟', 'تأكد أولاً من اختيار الصف الصحيح. إذا كانت المادة غير موجودة فقد لا تكون مضافة بعد، ويمكنك إرسال اقتراح للإدارة.'],
+			['ما أنواع الملفات الموجودة في الموقع؟', 'يحتوي الموقع على خطط دراسية، أوراق عمل، اختبارات، ملخصات، كتب، أدلة معلم، ومقالات تعليمية حسب الصف والمادة والفصل.'],
+			['هل المحتوى يتم تحديثه باستمرار؟', 'نعم، يتم تحديث المحتوى حسب توفر الملفات والمصادر التعليمية.'],
+			['وجدت ملفًا خاطئًا أو رابطًا غير مناسب، كيف أبلغ عنه؟', 'أرسل رابط الصفحة من خلال صفحة اتصل بنا مع وصف المشكلة.'],
+		],
+	},
+	{
+		id: 'downloads', title: 'التحميل', color: 'sunset',
+		items: [
+			['كيف أحمل ملفًا تعليميًا؟', 'افتح صفحة الملف المطلوب ثم اضغط زر التحميل.'],
+			['زر التحميل لا يعمل، ماذا أفعل؟', 'جرب تحديث الصفحة، إيقاف مانع الإعلانات مؤقتًا، أو استخدام متصفح آخر. إذا بقيت المشكلة أرسل رابط الملف للإدارة لفحصه.'],
+			['الملف تم تحميله لكنه لا يفتح لدي، ما السبب؟', 'قد تحتاج إلى تطبيق يدعم صيغة الملف مثل PDF أو Word. تأكد أيضًا أن التحميل اكتمل بالكامل.'],
+			['هل توجد حدود على التحميل؟', 'قد توجد قيود مؤقتة للحماية من الاستخدام المفرط. إذا ظهرت رسالة منع انتظر قليلاً ثم حاول مرة أخرى.'],
+		],
+	},
+	{
+		id: 'search', title: 'البحث', color: 'royal',
+		items: [
+			['كيف أستخدم البحث السريع؟', 'اكتب كلمة من اسم الدرس أو الملف، ثم اختر المادة والفصل الدراسي عند الحاجة.'],
+			['لم تظهر نتائج في البحث، ماذا يعني ذلك؟', 'قد تكون الكلمة مختلفة عن العنوان الموجود في الموقع. جرب كلمة أقصر أو ابحث باسم المادة فقط.'],
+		],
+	},
+	{
+		id: 'technical', title: 'مشاكل تقنية', color: 'emerald',
+		items: [
+			['الموقع بطيء على الجوال، ماذا أفعل؟', 'تأكد من اتصال الإنترنت، أغلق الصفحات الثقيلة، ثم حدث الصفحة.'],
+			['ظهرت صفحة خطأ أو 404، ما الحل؟', 'قد يكون الرابط قديمًا أو تم نقل المحتوى. ارجع للصفحة الرئيسية وابحث عن الملف من جديد.'],
+			['ما أفضل متصفح لاستخدام الموقع؟', 'ننصح باستخدام آخر إصدار من Chrome أو Edge أو Safari على الجوال.'],
+		],
+	},
+	{
+		id: 'privacy', title: 'الخصوصية', color: 'sunset',
+		items: [
+			['هل بياناتي الشخصية محفوظة؟', 'نستخدم البيانات فقط لتشغيل الحساب والخدمات المرتبطة به وفق سياسة الخصوصية.'],
+			['لماذا يستخدم الموقع ملفات تعريف الارتباط؟', 'تُستخدم لتحسين التجربة، حفظ بعض التفضيلات، وقياس الأداء وفق سياسة ملفات تعريف الارتباط.'],
+			['هل يمكنني طلب حذف حسابي أو بياناتي؟', 'نعم، يمكنك إرسال طلب من صفحة اتصل بنا مع ذكر البريد المرتبط بالحساب.'],
+		],
+	},
+];
+---
+
+<Layout title="الأسئلة الشائعة" description="إجابات واضحة عن الحساب والمحتوى والتحميل والبحث والخصوصية والمشاكل التقنية.">
+	<Breadcrumbs items={[{ label: 'الأسئلة الشائعة' }]} />
+	<div class="container-shell py-10 sm:py-14">
+		<header class="relative overflow-hidden rounded-[2rem] bg-graphite-950 px-6 py-10 text-white shadow-lifted sm:px-10 sm:py-14">
+			<div class="absolute -left-20 -top-24 size-64 rounded-full bg-royal-600/40 blur-3xl" aria-hidden="true"></div>
+			<div class="absolute -bottom-28 right-10 size-60 rounded-full bg-emerald-brand-600/25 blur-3xl" aria-hidden="true"></div>
+			<div class="relative mx-auto max-w-3xl text-center">
+				<span class="mb-4 inline-flex rounded-full bg-sunset-400/15 px-3 py-1.5 text-xs font-bold text-sunset-200">مركز المساعدة</span>
+				<h1 class="text-3xl font-black sm:text-4xl">كيف يمكننا مساعدتك؟</h1>
+				<p class="mt-4 leading-8 text-graphite-300">إجابات سريعة ومنظمة عن استخدام الحساب، والوصول إلى المحتوى، وتحميل الملفات، وحماية بياناتك.</p>
+				<label class="relative mx-auto mt-7 block max-w-xl">
+					<span class="sr-only">ابحث في الأسئلة الشائعة</span>
+					<input id="faq-search" type="search" class="w-full rounded-2xl border border-white/10 bg-white px-5 py-4 text-sm font-semibold text-graphite-950 shadow-xl outline-none placeholder:text-graphite-400 focus:ring-4 focus:ring-royal-400/30" placeholder="اكتب كلمة من سؤالك…" />
+				</label>
+			</div>
+		</header>
+
+		<nav class="mt-6 flex gap-2 overflow-x-auto pb-2" aria-label="أقسام الأسئلة الشائعة">
+			{groups.map((group) => <a href={`#${group.id}`} class="shrink-0 rounded-full border border-graphite-200 bg-white px-4 py-2 text-sm font-bold text-graphite-700 shadow-sm transition hover:border-royal-300 hover:text-royal-700 dark:border-graphite-700 dark:bg-graphite-900 dark:text-graphite-200">{group.title}</a>)}
+		</nav>
+
+		<div id="faq-groups" class="mt-8 grid gap-7 lg:grid-cols-2 lg:items-start">
+			{groups.map((group) => (
+				<section id={group.id} class="faq-group scroll-mt-28 rounded-2xl border border-graphite-200 bg-white p-5 shadow-soft sm:p-6 dark:border-graphite-700 dark:bg-graphite-900">
+					<div class="mb-5 flex items-center gap-3">
+						<span class:list={['size-3 rounded-full', group.color === 'royal' && 'bg-royal-600', group.color === 'emerald' && 'bg-emerald-brand-600', group.color === 'sunset' && 'bg-sunset-400']}></span>
+						<h2 class="text-xl font-extrabold text-graphite-950 dark:text-white">{group.title}</h2>
+						<span class="mr-auto rounded-full bg-graphite-100 px-2.5 py-1 text-xs font-bold text-graphite-500 dark:bg-graphite-800 dark:text-graphite-300">{group.items.length}</span>
+					</div>
+					<div class="space-y-3">
+						{group.items.map(([question, answer]) => (
+							<details class="faq-item group rounded-xl border border-graphite-200 bg-graphite-50/70 open:border-royal-200 open:bg-royal-50/60 dark:border-graphite-700 dark:bg-graphite-950/40 dark:open:border-royal-800 dark:open:bg-royal-950/40" data-search={`${question} ${answer}`}>
+								<summary class="flex cursor-pointer list-none items-center gap-3 px-4 py-4 text-sm font-extrabold leading-7 text-graphite-900 marker:hidden dark:text-white">
+									<span class="flex-1">{question}</span><span class="flex size-7 shrink-0 items-center justify-center rounded-full bg-white text-lg text-royal-700 shadow-sm transition group-open:rotate-45 dark:bg-graphite-800 dark:text-royal-300">+</span>
+								</summary>
+								<p class="border-t border-graphite-200 px-4 py-4 text-sm leading-7 text-graphite-600 dark:border-graphite-700 dark:text-graphite-300">{answer}</p>
+							</details>
+						))}
+					</div>
+				</section>
+			))}
+		</div>
+		<p id="faq-empty" class="surface-card mt-8 p-8 text-center font-bold text-graphite-600 dark:text-graphite-300" hidden>لم نجد سؤالًا مطابقًا. جرّب كلمة أقصر أو <a class="text-royal-600 underline" href="/contact-us">تواصل معنا</a>.</p>
+	</div>
+	<script>
+		const input = document.querySelector<HTMLInputElement>('#faq-search');
+		const items = [...document.querySelectorAll<HTMLElement>('.faq-item')];
+		const groups = [...document.querySelectorAll<HTMLElement>('.faq-group')];
+		const empty = document.querySelector<HTMLElement>('#faq-empty');
+		input?.addEventListener('input', () => {
+			const query = input.value.trim().toLocaleLowerCase('ar');
+			let visible = 0;
+			items.forEach((item) => {
+				const matches = !query || (item.dataset.search || '').toLocaleLowerCase('ar').includes(query);
+				item.hidden = !matches;
+				if (matches) visible += 1;
+			});
+			groups.forEach((group) => { group.hidden = !group.querySelector('.faq-item:not([hidden])'); });
+			if (empty) empty.hidden = visible !== 0;
+		});
+	</script>
+</Layout>

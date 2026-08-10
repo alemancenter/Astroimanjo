@@ -1,0 +1,38 @@
+---
+interface Props {
+	name?: string;
+	class?: string;
+}
+
+const { name = 'dashboard', class: className = 'size-4' } = Astro.props;
+
+const paths: Record<string, string[]> = {
+	dashboard: ['M4 13h6V4H4v9Zm0 7h6v-3H4v3Zm10 0h6v-9h-6v9Zm0-13h6V4h-6v3Z'],
+	analytics: ['M4 19V9M9 19V5M15 19v-7M20 19V3', 'M3 21h18'],
+	article: ['M7 3h7l5 5v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z', 'M14 3v6h5M9 13h6M9 17h6'],
+	post: ['M4 5h16v14H4V5Z', 'M8 9h8M8 13h5M8 17h3'],
+	folder: ['M3 7h7l2 2h9v10H3V7Z', 'M3 7V5h7l2 2'],
+	comments: ['M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8Z', 'M8 9h8M8 13h5'],
+	files: ['M8 3h9a2 2 0 0 1 2 2v12H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z', 'M6 7H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-2'],
+	academic: ['m12 3 9 4.5-9 4.5-9-4.5L12 3Z', 'M5 10v5l7 4 7-4v-5'],
+	users: ['M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2', 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM17 11a4 4 0 0 0 0-8M22 21v-2a4 4 0 0 0-3-3.87'],
+	roles: ['M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z', 'm9 12 2 2 4-4'],
+	permissions: ['M7 14a4 4 0 1 1 3.5 3.96L8 20H5v-3l2.04-2.04A4.03 4.03 0 0 1 7 14Z', 'm14 10 7-7M18 3l3 3M15.5 8.5l2 2'],
+	calendar: ['M5 5h14a2 2 0 0 1 2 2v12H3V7a2 2 0 0 1 2-2ZM8 3v4M16 3v4M3 10h18'],
+	mail: ['M3 5h18v14H3V5Z', 'm3 7 9 6 9-6'],
+	bell: ['M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4'],
+	subscription: ['M4 6h16v12H4V6Z', 'M4 10h16M8 15h3'],
+	settings: ['M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z', 'M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6V20h-4v-.09a1.7 1.7 0 0 0-1-.6 1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1H4v-4h.09a1.7 1.7 0 0 0 .6-1 1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6V4h4v.09a1.7 1.7 0 0 0 1 .6 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 .6 1H20v4h-.09a1.7 1.7 0 0 0-.51 1Z'],
+	sitemap: ['M12 3v5M5 21v-5h14v5M5 16v-4h14v4M12 8v4'],
+	security: ['M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z', 'M12 8v4M12 16h.01'],
+	bot: ['M12 3v3M5 9h14v10H5V9ZM9 13h.01M15 13h.01M9 17h6', 'M3 13H1M23 13h-2'],
+	audit: ['M9 3h6l1 3h4v15H4V6h4l1-3Z', 'm8 14 2 2 5-5M8 10h4'],
+	database: ['M20 6c0 1.66-3.58 3-8 3S4 7.66 4 6s3.58-3 8-3 8 1.34 8 3Z', 'M4 6v6c0 1.66 3.58 3 8 3s8-1.34 8-3V6M4 12v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6'],
+};
+
+const iconPaths = paths[name] ?? paths.dashboard;
+---
+
+<svg class={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+	{iconPaths.map((path) => <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d={path} />)}
+</svg>

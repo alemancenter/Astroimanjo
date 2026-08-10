@@ -1,0 +1,23 @@
+---
+// Rendered via context.rewrite('/maintenance') from src/middleware.ts when maintenance_mode
+// is on — never linked to directly, and prerender must stay off since it needs Astro.locals
+// (set earlier in the same middleware pass) to render with the right country's branding.
+export const prerender = false;
+
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="الموقع تحت الصيانة" description="نعمل حاليًا على تحسين الموقع، سنعود قريبًا." noindex>
+	<div class="mx-auto flex min-h-[70vh] max-w-lg flex-col items-center justify-center px-4 py-16 text-center">
+		<span class="mb-6 flex size-20 items-center justify-center rounded-2xl bg-royal-50 text-royal-600 dark:bg-royal-950 dark:text-royal-300">
+			<svg class="size-10" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 0 0-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 0 0-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 0 0-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 0 0-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 0 0 1.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065Z" />
+				<circle cx="12" cy="12" r="3" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" />
+			</svg>
+		</span>
+		<h1 class="text-2xl font-black text-graphite-950 sm:text-3xl dark:text-white">الموقع تحت الصيانة حاليًا</h1>
+		<p class="mt-4 text-sm leading-7 text-graphite-600 sm:text-base dark:text-graphite-300">
+			نعمل على تحسين الموقع وإضافة تحديثات جديدة. الموقع سيعود للعمل خلال وقت قصير، شكرًا لصبركم.
+		</p>
+	</div>
+</Layout>

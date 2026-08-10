@@ -1,0 +1,32 @@
+---
+interface Props {
+	class?: string;
+}
+
+const { class: className = 'size-10' } = Astro.props;
+---
+
+<svg class={className} viewBox="0 0 64 64" fill="none" aria-hidden="true">
+	<defs>
+		<linearGradient id="brand-front" x1="15" y1="12" x2="50" y2="54" gradientUnits="userSpaceOnUse">
+			<stop stop-color="#F5B927" />
+			<stop offset=".55" stop-color="#E86E1F" />
+			<stop offset="1" stop-color="#C92E2E" />
+		</linearGradient>
+		<linearGradient id="brand-back" x1="15" y1="10" x2="51" y2="53" gradientUnits="userSpaceOnUse">
+			<stop stop-color="#EA3B3B" />
+			<stop offset="1" stop-color="#A9162A" />
+		</linearGradient>
+	</defs>
+	<g transform="rotate(45 32 32)">
+		<rect x="10" y="10" width="44" height="44" rx="5" fill="white" />
+		<rect x="14" y="14" width="36" height="36" rx="3" fill="url(#brand-back)" />
+	</g>
+	<g transform="rotate(5 32 32)">
+		<rect x="11" y="12" width="42" height="42" rx="4" fill="url(#brand-front)" />
+		<path d="M18 23c7-1 12 1 16 6v15c-4-5-9-7-16-6V23Z" fill="white" fill-opacity=".98" />
+		<path d="M46 23c-7-1-12 1-16 6v15c4-5 9-7 16-6V23Z" fill="white" fill-opacity=".88" />
+		<path d="M30 29v15" stroke="#F5B927" stroke-width="2" stroke-linecap="round" />
+		<path d="M19 19c6-.5 11 1 15 5M45 19c-6-.5-11 1-15 5" stroke="white" stroke-width="2.3" stroke-linecap="round" />
+	</g>
+</svg>

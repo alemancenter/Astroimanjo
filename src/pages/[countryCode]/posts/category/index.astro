@@ -1,0 +1,6 @@
+---
+// Bare /{countryCode}/posts/category (no category id) — same gap as posts/keyword/index.astro.
+// Send it to the categories listing instead of a dead end.
+const { countryCode } = Astro.params;
+return Astro.redirect(`/${countryCode}/categories`, 307);
+---

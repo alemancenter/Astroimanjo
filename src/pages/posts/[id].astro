@@ -1,0 +1,8 @@
+---
+// Legacy bare path — the canonical post page lives at /{countryCode}/posts/{id}.
+import { getCountryById } from '../../lib/countries';
+
+const { id } = Astro.params;
+const countryCode = getCountryById(Astro.locals.countryId).code;
+return Astro.redirect(`/${countryCode}/posts/${id}`, 307);
+---

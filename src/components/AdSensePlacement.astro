@@ -1,0 +1,150 @@
+---
+interface AdConfig {
+	ad_slot: string;
+	format?: string;
+	responsive?: boolean;
+	ad_layout?: string;
+	ad_layout_key?: string;
+	ad_type?: string;
+	matched_content_ui_type?: string;
+	matched_content_rows_num?: string;
+	matched_content_columns_num?: string;
+}
+
+interface Props {
+	client?: string;
+	desktopConfig?: string;
+	mobileConfig?: string;
+	placement: string;
+	label?: string;
+	class?: string;
+}
+
+const {
+	client = '',
+	desktopConfig = '',
+	mobileConfig = '',
+	placement,
+	label = 'إعلان',
+	class: className = '',
+} = Astro.props;
+
+const allowedKeys = new Set([
+	'ad_slot', 'format', 'responsive', 'ad_layout', 'ad_layout_key', 'ad_type',
+	'matched_content_ui_type', 'matched_content_rows_num', 'matched_content_columns_num',
+]);
+
+function parseConfig(raw: string): AdConfig | null {
+	if (!raw.trim()) return null;
+	try {
+		const parsed = JSON.parse(raw);
+		if (!parsed || typeof parsed !== 'object' || !/^\d+$/.test(String(parsed.ad_slot || ''))) return null;
+		const clean: Record<string, string | boolean> = {};
+		for (const [key, value] of Object.entries(parsed)) {
+			if (!allowedKeys.has(key) || !['string', 'boolean', 'number'].includes(typeof value)) continue;
+			clean[key] = typeof value === 'number' ? String(value) : value as string | boolean;
+		}
+		return clean as unknown as AdConfig;
+	} catch {
+		return null;
+	}
+}
+
+const desktop = parseConfig(desktopConfig);
+const mobile = parseConfig(mobileConfig) || desktop;
+const validClient = /^ca-pub-\d+$/.test(client.trim());
+const shouldRender = validClient && Boolean(desktop || mobile);
+---
+
+{shouldRender && (
+	<aside
+		class:list={['adsense-placement', className]}
+		aria-label={label}
+		data-adsense-placement={placement}
+		data-ad-client={client}
+		data-desktop-config={desktop ? JSON.stringify(desktop) : ''}
+		data-mobile-config={mobile ? JSON.stringify(mobile) : ''}
+	>
+		<span class="adsense-placement__label">{label}</span>
+		<div class="adsense-placement__mount" data-ad-mount></div>
+	</aside>
+)}
+
+<script>
+	const supportedDataKeys: Record<string, string> = {
+		ad_slot: 'adSlot', format: 'adFormat', responsive: 'fullWidthResponsive',
+		ad_layout: 'adLayout', ad_layout_key: 'adLayoutKey', ad_type: 'adType',
+		matched_content_ui_type: 'matchedContentUiType', matched_content_rows_num: 'matchedContentRowsNum',
+		matched_content_columns_num: 'matchedContentColumnsNum',
+	};
+
+	document.querySelectorAll<HTMLElement>('[data-adsense-placement]').forEach((placement) => {
+		if (placement.dataset.adInitialized === '1') return;
+		const isDesktop = window.matchMedia('(min-width: 1024px)').matches;
+		const raw = isDesktop ? placement.dataset.desktopConfig : placement.dataset.mobileConfig;
+		const mount = placement.querySelector<HTMLElement>('[data-ad-mount]');
+		if (!raw || !mount) {
+			placement.hidden = true;
+			return;
+		}
+
+		try {
+			const config = JSON.parse(raw) as Record<string, string | boolean>;
+			const unit = document.createElement('ins');
+			unit.className = 'adsbygoogle';
+			unit.style.display = 'block';
+			unit.dataset.adClient = placement.dataset.adClient || '';
+			for (const [key, value] of Object.entries(config)) {
+				const dataKey = supportedDataKeys[key];
+				if (dataKey) unit.dataset[dataKey] = String(value);
+			}
+			if (!unit.dataset.adFormat) unit.dataset.adFormat = 'auto';
+			if (!unit.dataset.fullWidthResponsive) unit.dataset.fullWidthResponsive = 'true';
+			mount.append(unit);
+			placement.dataset.adInitialized = '1';
+			const adsWindow = window as typeof window & { adsbygoogle?: Record<string, unknown>[] };
+			(adsWindow.adsbygoogle = adsWindow.adsbygoogle || []).push({});
+		} catch {
+			placement.hidden = true;
+		}
+	});
+</script>
+
+<style>
+	.adsense-placement {
+		position: relative;
+		isolation: isolate;
+		width: 100%;
+		min-height: 7.5rem;
+		padding: 1.75rem 1rem 1rem;
+		border: 1px solid var(--color-graphite-200);
+		border-radius: 1rem;
+		background: color-mix(in srgb, var(--color-white) 88%, var(--color-graphite-50));
+		overflow: hidden;
+	}
+
+	.adsense-placement__label {
+		position: absolute;
+		top: .55rem;
+		inset-inline-start: 50%;
+		transform: translateX(50%);
+		font-size: .625rem;
+		font-weight: 700;
+		letter-spacing: .04em;
+		color: var(--color-graphite-400);
+	}
+
+	.adsense-placement__mount {
+		width: 100%;
+		min-height: 5rem;
+	}
+
+	:global(.dark) .adsense-placement {
+		border-color: var(--color-graphite-700);
+		background: var(--color-graphite-900);
+	}
+
+	@media (max-width: 639px) {
+		.adsense-placement { min-height: 6.5rem; padding-inline: .5rem; }
+	}
+</style>

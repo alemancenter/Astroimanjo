@@ -1,0 +1,65 @@
+---
+import Layout from '../../../../../../../layouts/Layout.astro';
+import '../../../../../../../styles/lesson-pages.css';
+import SubjectCategoryDetail from '../../../../../../../components/SubjectCategoryDetail.astro';
+import ErrorState from '../../../../../../../components/ui/ErrorState.astro';
+import { apiFetch, applyNotFoundStatus } from '../../../../../../../lib/api';
+import { getSubjectFileCategory } from '../../../../../../../lib/subject-categories';
+
+const { subjectId, semesterId, categoryId } = Astro.params;
+const countryCode = Astro.locals.countryCode!;
+const countryId = Astro.locals.countryId;
+const category = getSubjectFileCategory(categoryId);
+const page = Math.max(1, Number(Astro.url.searchParams.get('page')) || 1);
+const PER_PAGE = 24;
+
+const semestersResult = await apiFetch<any>(`/filter/semesters/${subjectId}`, { countryId });
+const subject = semestersResult.data?.subject;
+const semesters: any[] = semestersResult.data?.semesters ?? [];
+const semester = semesters.find((item: any) => String(item.id) === String(semesterId));
+const classId = semestersResult.data?.class_id || subject?.grade_level;
+
+const [classResult, articlesResult] = await Promise.all([
+	classId ? apiFetch<any>(`/school-classes/${classId}`, { countryId }) : Promise.resolve({ data: null } as any),
+	category && semester
+		? apiFetch<any[]>('/articles', {
+				countryId,
+				params: {
+					subject_id: subjectId,
+					semester_id: semesterId,
+					file_category: category.key,
+					page,
+					per_page: PER_PAGE,
+				},
+			})
+		: Promise.resolve({ ok: false, data: [], message: '', meta: null, status: 404 } as any),
+]);
+
+const isValid = semestersResult.ok && subject && semester && category;
+// applyNotFoundStatus only looks at semestersResult.status: a successful (200) call where the
+// subject/semester/category simply doesn't match anything correctly falls back to a plain,
+// cacheable 404; an actual failed call (5xx/timeout) maps to 502/503 and skips the cache.
+if (!isValid) applyNotFoundStatus(Astro, semestersResult);
+const pageTitle = isValid ? `${category.label} - ${subject.subject_name}` : 'التصنيف غير موجود';
+const description = isValid ? `ملفات ${category.label} لمادة ${subject.subject_name} - ${semester.semester_name}.` : undefined;
+---
+
+<Layout title={pageTitle} description={description} noindex={!isValid}>
+	{isValid ? (
+		<SubjectCategoryDetail
+			countryCode={countryCode}
+			subject={subject}
+			semester={semester}
+			schoolClass={classResult.data}
+			category={category}
+			articles={Array.isArray(articlesResult.data) ? articlesResult.data : []}
+			articlesOk={articlesResult.ok}
+			articlesMessage={articlesResult.message}
+			currentPage={page}
+			lastPage={articlesResult.meta?.last_page ?? 1}
+			pageUrl={Astro.url}
+		/>
+	) : (
+		<div class="container-shell py-14"><ErrorState message={!category ? 'التصنيف المطلوب غير معروف.' : !semester ? 'الفصل الدراسي المطلوب غير موجود لهذه المادة.' : 'المادة الدراسية غير موجودة.'} /></div>
+	)}
+</Layout>

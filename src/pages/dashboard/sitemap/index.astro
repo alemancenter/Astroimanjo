@@ -1,0 +1,142 @@
+---
+import DashboardLayout from '../../../layouts/DashboardLayout.astro';
+import { requireDashboard } from '../../../lib/auth';
+import { apiFetch } from '../../../lib/api';
+import { getCountryById } from '../../../lib/countries';
+
+const guard = await requireDashboard(Astro, 'manage sitemap');
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+
+const token = Astro.cookies.get('token')?.value;
+const currentCountry = getCountryById(Astro.locals.countryId);
+const database = currentCountry.code;
+const result = await apiFetch<any>('/dashboard/sitemap/status', {
+	countryId: Astro.locals.countryId,
+	cookieHeader: `token=${token}`,
+	params: { database },
+});
+
+const rawSitemaps: Record<string, any> = result.data?.sitemaps ?? {};
+const order = ['index', 'articles', 'post', 'static'];
+const sitemapItems = order.map((type) => ({ type, ...(rawSitemaps[type] ?? { exists: false }) }));
+const existingCount = sitemapItems.filter((item) => item.exists).length;
+const missingCount = sitemapItems.length - existingCount;
+const indexedUrls = sitemapItems.filter((item) => item.type !== 'index').reduce((total, item) => total + Number(item.entries || 0), 0);
+const totalSize = sitemapItems.reduce((total, item) => total + Number(item.size_bytes || 0), 0);
+const modifiedDates = sitemapItems.filter((item) => item.exists && item.last_modified).map((item) => new Date(item.last_modified).getTime()).filter(Number.isFinite);
+const lastGenerated = modifiedDates.length ? new Date(Math.max(...modifiedDates)) : null;
+const allReady = existingCount === sitemapItems.length;
+const redirectTo = '/dashboard/sitemap';
+const success = Astro.url.searchParams.get('success');
+const error = Astro.url.searchParams.get('error');
+
+const labels: Record<string, { title: string; description: string; accent: string }> = {
+	index: { title: 'الفهرس الرئيسي', description: 'الملف المركزي الذي يعرّف محركات البحث بجميع الخرائط الفرعية.', accent: 'royal' },
+	articles: { title: 'خريطة المقالات', description: 'روابط المقالات التعليمية المنشورة والقابلة للأرشفة.', accent: 'emerald' },
+	post: { title: 'خريطة المنشورات', description: 'المنشورات العامة والأخبار والمحتوى المتجدد في المنصة.', accent: 'orange' },
+	static: { title: 'الصفحات والتصنيفات', description: 'الرئيسية والتصنيفات والصفوف والصفحات الهيكلية المهمة.', accent: 'graphite' },
+};
+
+const numberFormat = new Intl.NumberFormat('ar-EG');
+const dateFormat = new Intl.DateTimeFormat('ar-EG', { dateStyle: 'medium', timeStyle: 'short' });
+const formatDate = (value?: string | Date | null) => value ? dateFormat.format(new Date(value)) : 'لم تُولّد بعد';
+const formatBytes = (bytes: number) => {
+	if (!bytes) return '0 كيلوبايت';
+	if (bytes < 1024) return `${numberFormat.format(bytes)} بايت`;
+	if (bytes < 1024 * 1024) return `${numberFormat.format(Math.round(bytes / 1024))} كيلوبايت`;
+	return `${new Intl.NumberFormat('ar-EG', { maximumFractionDigits: 1 }).format(bytes / 1024 / 1024)} ميجابايت`;
+};
+const fileName = (type: string) => `sitemap_${type}_${database}.xml`;
+---
+
+<DashboardLayout title="خريطة الموقع" user={user}>
+	<div class="sitemap-page">
+		{error && <div class="sitemap-alert is-error" role="alert"><i>!</i><div><strong>تعذّر تنفيذ العملية</strong><span>{error}</span></div><a href={redirectTo} aria-label="إغلاق">×</a></div>}
+		{success && <div class="sitemap-alert is-success" role="status"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m5 12 4 4L19 6"/></svg></i><div><strong>{success === 'deleted' ? 'تم حذف ملف الخريطة' : 'تم تحديث خرائط الموقع بنجاح'}</strong><span>{success === 'deleted' ? 'يمكنك إعادة توليد الملفات في أي وقت.' : 'أصبحت ملفات الفهرسة محدثة وجاهزة لمحركات البحث.'}</span></div><a href={redirectTo} aria-label="إغلاق">×</a></div>}
+
+		<header class="sitemap-hero">
+			<div class="sitemap-hero-copy">
+				<span class="sitemap-eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>تحسين الظهور في محركات البحث</span>
+				<h1>إدارة خريطة الموقع</h1>
+				<p>راقب ملفات XML الخاصة بمنصة {currentCountry.name} وحدّثها من مكان واحد لضمان وصول محركات البحث إلى المحتوى المنشور.</p>
+			</div>
+			<div class:list={['sitemap-health', allReady && 'is-ready']}>
+				<i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 3 4 6v5c0 5 3.4 8.2 8 10 4.6-1.8 8-5 8-10V6Z"/><path d={allReady ? 'm9 12 2 2 4-5' : 'M12 8v5m0 3h.01'}/></svg></i>
+				<div><strong>{allReady ? 'الخريطة مكتملة وجاهزة' : `${numberFormat.format(missingCount)} ملفات تحتاج إلى توليد`}</strong><span>{lastGenerated ? `آخر تحديث ${formatDate(lastGenerated)}` : 'لم يتم توليد ملفات لهذه الدولة بعد'}</span></div>
+			</div>
+		</header>
+
+		<section class="sitemap-stats" aria-label="ملخص خريطة الموقع">
+			<article><i class="is-blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 3h10l4 4v14H5zM15 3v5h5M8 13h8m-8 4h6"/></svg></i><div><span>الملفات الجاهزة</span><strong>{numberFormat.format(existingCount)} <small>من {numberFormat.format(sitemapItems.length)}</small></strong></div></article>
+			<article><i class="is-green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 6h16M4 12h16M4 18h10"/></svg></i><div><span>الروابط المفهرسة</span><strong>{numberFormat.format(indexedUrls)}</strong></div></article>
+			<article><i class="is-orange"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 3v18M5 8h14M5 16h14"/></svg></i><div><span>الحجم الإجمالي</span><strong>{formatBytes(totalSize)}</strong></div></article>
+			<article><i class="is-dark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></i><div><span>آخر عملية توليد</span><strong class="is-date">{formatDate(lastGenerated)}</strong></div></article>
+		</section>
+
+		<section class="sitemap-workspace">
+			<main class="sitemap-files">
+				<header class="section-heading"><div><span>ملفات XML</span><h2>حالة ملفات الخريطة</h2><p>كل ملف يخدم جزءًا محددًا من بنية المحتوى.</p></div><span class="database-badge">{currentCountry.flag} قاعدة {database.toUpperCase()}</span></header>
+				{result.ok ? <div class="sitemap-file-grid">
+					{sitemapItems.map((item) => {
+						const meta = labels[item.type] || { title: item.type, description: '', accent: 'royal' };
+						return <article class:list={['sitemap-file', `is-${meta.accent}`, !item.exists && 'is-missing']}>
+							<header><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 3h10l4 4v18H5zM15 3v5h5"/><path d="m9 13-2 2 2 2m6-4 2 2-2 2m-2-6-2 8"/></svg></i><span class:list={['file-status', item.exists && 'is-live']}><b></b>{item.exists ? 'متاح الآن' : 'غير موجود'}</span></header>
+							<div class="file-copy"><h3>{meta.title}</h3><p>{meta.description}</p></div>
+							<div class="file-name" dir="ltr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M8 12h8m-8 4h5M6 3h9l3 3v15H6z"/></svg><code>{fileName(item.type)}</code></div>
+							<dl><div><dt>{item.type === 'index' ? 'الخرائط المرتبطة' : 'عدد الروابط'}</dt><dd>{item.exists ? numberFormat.format(Number(item.entries || 0)) : '—'}</dd></div><div><dt>حجم الملف</dt><dd>{item.exists ? formatBytes(Number(item.size_bytes || 0)) : '—'}</dd></div><div class="is-wide"><dt>آخر تحديث</dt><dd>{formatDate(item.last_modified)}</dd></div></dl>
+							<footer>{item.exists ? <><a href={item.url} target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 5h5v5m0-5-8 8M19 13v6H5V5h6"/></svg>فتح الملف</a><button type="button" class="is-delete" data-delete-file data-type={item.type} data-title={meta.title}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 7h16m-10 4v6m4-6v6M9 7l1-3h4l1 3m3 0-1 14H7L6 7"/></svg>حذف</button><form method="post" action={`/api/dashboard/sitemap/${item.type}/${database}/delete`} data-delete-form={item.type}><input type="hidden" name="redirect_to" value={redirectTo}/></form></> : <span class="file-unavailable"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 8v5m0 3h.01M4 20h16L12 4z"/></svg>سيتم إنشاؤه عند التوليد التالي</span>}</footer>
+						</article>;
+					})}
+				</div> : <div class="sitemap-empty is-error"><i>!</i><h2>تعذّر تحميل حالة الخرائط</h2><p>{result.message || 'تحقق من اتصال الخادم ثم أعد المحاولة.'}</p><a href={redirectTo}>إعادة المحاولة</a></div>}
+			</main>
+
+			<aside class="sitemap-sidebar">
+				<section class="generation-card">
+					<header><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 3v4m0 10v4M3 12h4m10 0h4M5.6 5.6l2.8 2.8m7.2 7.2 2.8 2.8m0-12.8-2.8 2.8m-7.2 7.2-2.8 2.8"/></svg></i><div><span>إجراء رئيسي</span><h2>تحديث جميع الخرائط</h2></div></header>
+					<p>يعيد النظام قراءة المحتوى المنشور وإنشاء الملفات الأربعة الخاصة بقاعدة <strong>{currentCountry.name}</strong>.</p>
+					<ul><li><i></i>المقالات والمنشورات المنشورة فقط</li><li><i></i>الصفوف والتصنيفات النشطة</li><li><i></i>تحديث الفهرس الرئيسي تلقائيًا</li></ul>
+					<form method="post" action="/api/dashboard/sitemap/generate" data-generate-form><input type="hidden" name="database" value={database}/><input type="hidden" name="redirect_to" value={redirectTo}/><button type="submit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 9a7 7 0 0 1 11.7-2L20 9M4 15l2.2 2a7 7 0 0 0 11.7-2"/></svg>{existingCount ? 'إعادة توليد الخرائط' : 'توليد الخرائط الآن'}</button></form>
+					<small><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 8v4m0 4h.01"/></svg>لن يؤثر التوليد في المحتوى أو روابط الموقع الحالية.</small>
+				</section>
+
+				<section class="seo-checklist">
+					<header><span>فحص الجاهزية</span><strong>{allReady ? 'مكتمل' : `${numberFormat.format(existingCount)}/${numberFormat.format(sitemapItems.length)}`}</strong></header>
+					<div>{sitemapItems.map((item) => <div class:list={{ 'is-complete': item.exists }}><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d={item.exists ? 'm5 12 4 4L19 6' : 'M6 12h12'}/></svg></i><span>{labels[item.type]?.title || item.type}</span><b>{item.exists ? 'جاهز' : 'ناقص'}</b></div>)}</div>
+					<footer><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 5h16v14H4zM8 9h8m-8 4h5"/></svg><p><strong>نصيحة للفهرسة</strong><span>بعد التوليد، أرسل رابط الفهرس الرئيسي إلى Google Search Console.</span></p></footer>
+				</section>
+			</aside>
+		</section>
+	</div>
+
+	<dialog id="sitemap-confirm" class="sitemap-confirm" aria-labelledby="sitemap-confirm-title"><div><button type="button" data-close-confirm aria-label="إغلاق">×</button><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 9v4m0 4h.01M10.3 4.3 2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0Z"/></svg></i><span>تأكيد الحذف</span><h2 id="sitemap-confirm-title">حذف ملف الخريطة؟</h2><p data-confirm-message></p><aside><strong>ماذا سيحدث؟</strong><small>سيتوقف الملف عن الظهور لمحركات البحث حتى تعيد توليد الخرائط.</small></aside><footer><button type="button" data-close-confirm>إلغاء</button><button type="button" data-confirm-delete>حذف الملف</button></footer></div></dialog>
+
+	<script>
+		const confirmDialog = document.getElementById('sitemap-confirm') as HTMLDialogElement | null;
+		let pendingDeleteForm: HTMLFormElement | null = null;
+		document.querySelectorAll<HTMLButtonElement>('[data-delete-file]').forEach((button) => button.addEventListener('click', () => {
+			pendingDeleteForm = document.querySelector<HTMLFormElement>(`[data-delete-form="${button.dataset.type}"]`);
+			const message = confirmDialog?.querySelector<HTMLElement>('[data-confirm-message]');
+			if (message) message.textContent = `سيتم حذف ${button.dataset.title || 'ملف الخريطة'} من الخادم نهائيًا.`;
+			confirmDialog?.showModal();
+		}));
+		document.querySelectorAll<HTMLButtonElement>('[data-close-confirm]').forEach((button) => button.addEventListener('click', () => { pendingDeleteForm = null; confirmDialog?.close(); }));
+		confirmDialog?.querySelector<HTMLButtonElement>('[data-confirm-delete]')?.addEventListener('click', () => pendingDeleteForm?.requestSubmit());
+		confirmDialog?.addEventListener('click', (event) => { if (event.target === confirmDialog) { pendingDeleteForm = null; confirmDialog.close(); } });
+	</script>
+
+	<style>
+		.sitemap-page{--sm-blue:#1a4d8f;--sm-green:#0f8464;--sm-orange:#e8a244;--sm-ink:#18283d;--sm-muted:#66758a;--sm-line:#dce4ed;padding:.15rem;direction:rtl}.sitemap-page *{box-sizing:border-box}.sitemap-alert{display:flex;align-items:center;gap:.75rem;margin-bottom:.8rem;border:1px solid;border-radius:.8rem;padding:.72rem .85rem}.sitemap-alert>i{display:grid;width:2rem;height:2rem;flex:none;place-items:center;border-radius:.55rem;font-style:normal;font-weight:900}.sitemap-alert svg{width:1rem;height:1rem;stroke-width:2.2}.sitemap-alert div{display:grid;gap:.1rem}.sitemap-alert strong{font-size:.8rem}.sitemap-alert span{font-size:.7rem}.sitemap-alert>a{margin-inline-start:auto;color:inherit;font-size:1.2rem}.sitemap-alert.is-error{border-color:#f1c8cc;background:#fff6f7;color:#a52d39}.sitemap-alert.is-error>i{background:#ffe6e9}.sitemap-alert.is-success{border-color:#bce5d7;background:#f2fbf7;color:#087255}.sitemap-alert.is-success>i{background:#ddf5eb}
+		.sitemap-hero{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:.85rem;border:1px solid var(--sm-line);border-radius:1rem;background:#fff;padding:1.15rem 1.25rem;box-shadow:0 3px 12px rgb(23 43 77/.05)}.sitemap-eyebrow{display:flex;align-items:center;gap:.35rem;color:var(--sm-blue);font-size:.7rem;font-weight:850}.sitemap-eyebrow svg{width:1rem;height:1rem;stroke-width:1.8}.sitemap-hero h1{margin:.25rem 0 .2rem;color:var(--sm-ink);font-size:1.45rem;font-weight:950;letter-spacing:-.025em}.sitemap-hero p{max-width:46rem;margin:0;color:var(--sm-muted);font-size:.78rem;line-height:1.75}.sitemap-health{display:flex;min-width:19rem;align-items:center;gap:.65rem;border:1px solid #f2d3b2;border-radius:.75rem;background:#fff9f2;padding:.72rem .8rem;color:#9a5d1d}.sitemap-health>i{display:grid;width:2.5rem;height:2.5rem;flex:none;place-items:center;border-radius:.65rem;background:#fff0dc}.sitemap-health svg{width:1.25rem;height:1.25rem;stroke-width:1.9}.sitemap-health div{display:grid;gap:.13rem}.sitemap-health strong{font-size:.73rem}.sitemap-health span{color:#97734e;font-size:.63rem}.sitemap-health.is-ready{border-color:#bce4d5;background:#f3fbf8;color:#08765a}.sitemap-health.is-ready>i{background:#ddf5eb}.sitemap-health.is-ready span{color:#538174}
+		.sitemap-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.65rem;margin-bottom:.85rem}.sitemap-stats article{display:flex;min-width:0;align-items:center;gap:.7rem;border:1px solid var(--sm-line);border-radius:.8rem;background:#fff;padding:.85rem;box-shadow:0 2px 8px rgb(23 43 77/.035)}.sitemap-stats article>i{display:grid;width:2.65rem;height:2.65rem;flex:none;place-items:center;border-radius:.7rem}.sitemap-stats svg{width:1.15rem;height:1.15rem;stroke-width:1.8}.sitemap-stats .is-blue{background:#eaf1fa;color:var(--sm-blue)}.sitemap-stats .is-green{background:#e7f7f1;color:var(--sm-green)}.sitemap-stats .is-orange{background:#fff3e2;color:#b97116}.sitemap-stats .is-dark{background:#edf0f4;color:#39485b}.sitemap-stats article>div{display:grid;min-width:0;gap:.16rem}.sitemap-stats span{color:var(--sm-muted);font-size:.68rem}.sitemap-stats strong{overflow:hidden;color:var(--sm-ink);font-size:1.05rem;font-weight:950;text-overflow:ellipsis;white-space:nowrap}.sitemap-stats strong small{color:#8290a2;font-size:.6rem}.sitemap-stats strong.is-date{font-size:.7rem}
+		.sitemap-workspace{display:grid;grid-template-columns:minmax(0,1fr) 19rem;align-items:start;gap:.8rem}.sitemap-files,.generation-card,.seo-checklist{border:1px solid var(--sm-line);border-radius:.9rem;background:#fff;box-shadow:0 3px 12px rgb(23 43 77/.045)}.sitemap-files{padding:1rem}.section-heading{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:.8rem}.section-heading>div>span,.generation-card header span,.seo-checklist>header>span{color:var(--sm-blue);font-size:.65rem;font-weight:850}.section-heading h2{margin:.12rem 0;color:var(--sm-ink);font-size:1rem;font-weight:950}.section-heading p{margin:0;color:var(--sm-muted);font-size:.68rem}.database-badge{display:flex;align-items:center;border:1px solid #d9e4f0;border-radius:.55rem;background:#f6f9fd;padding:.45rem .65rem;color:#3e5875;font-size:.68rem;font-weight:850}
+		.sitemap-file-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.7rem}.sitemap-file{--file-color:var(--sm-blue);--file-bg:#eef4fb;display:flex;min-height:18rem;flex-direction:column;overflow:hidden;border:1px solid var(--sm-line);border-radius:.78rem;background:#fff;padding:.85rem;position:relative}.sitemap-file::before{position:absolute;top:0;right:0;left:0;height:.2rem;background:var(--file-color);content:""}.sitemap-file.is-emerald{--file-color:var(--sm-green);--file-bg:#e9f7f2}.sitemap-file.is-orange{--file-color:#c57a1f;--file-bg:#fff4e5}.sitemap-file.is-graphite{--file-color:#475569;--file-bg:#eef1f5}.sitemap-file.is-missing{filter:saturate(.45);opacity:.82}.sitemap-file>header{display:flex;align-items:center;justify-content:space-between}.sitemap-file>header>i{display:grid;width:2.55rem;height:2.55rem;place-items:center;border-radius:.65rem;background:var(--file-bg);color:var(--file-color)}.sitemap-file>header svg{width:1.2rem;height:1.2rem;stroke-width:1.7}.file-status{display:flex;align-items:center;gap:.3rem;border-radius:99rem;background:#f1f3f6;padding:.3rem .5rem;color:#7d8998;font-size:.6rem;font-weight:850}.file-status b{width:.42rem;height:.42rem;border-radius:50%;background:#9ba5b1}.file-status.is-live{background:#e7f7f1;color:#08765a}.file-status.is-live b{background:#11a779;box-shadow:0 0 0 .18rem #ccefe3}.file-copy{margin:.65rem 0 .55rem}.file-copy h3{margin:0 0 .18rem;color:var(--sm-ink);font-size:.88rem;font-weight:950}.file-copy p{min-height:2.7rem;margin:0;color:var(--sm-muted);font-size:.66rem;line-height:1.7}.file-name{display:flex;align-items:center;gap:.4rem;border:1px solid #e2e8f0;border-radius:.5rem;background:#f8fafc;padding:.42rem .48rem;color:#57708c}.file-name svg{width:.85rem;height:.85rem;flex:none;stroke-width:1.8}.file-name code{overflow:hidden;font-size:.62rem;text-overflow:ellipsis}.sitemap-file dl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.35rem;margin:.55rem 0}.sitemap-file dl>div{border:1px solid #edf1f5;border-radius:.45rem;padding:.4rem}.sitemap-file dl>div.is-wide{grid-column:1/-1}.sitemap-file dt{color:#8a97a6;font-size:.58rem}.sitemap-file dd{margin:.1rem 0 0;color:var(--sm-ink);font-size:.68rem;font-weight:850}.sitemap-file footer{display:flex;align-items:center;gap:.4rem;margin-top:auto}.sitemap-file footer a,.sitemap-file footer button{display:flex;min-height:2.2rem;align-items:center;justify-content:center;gap:.3rem;border-radius:.45rem;padding:.35rem .65rem;font-family:inherit;font-size:.64rem;font-weight:850}.sitemap-file footer a{flex:1;border:1px solid color-mix(in srgb,var(--file-color) 28%,white);background:var(--file-bg);color:var(--file-color)}.sitemap-file footer button{border:1px solid #f0cdd1;background:#fff7f8;color:#b53542}.sitemap-file footer svg{width:.85rem;height:.85rem;stroke-width:1.9}.sitemap-file footer form{display:none}.file-unavailable{display:flex;align-items:center;gap:.35rem;color:#7e8b9a;font-size:.63rem}.file-unavailable svg{width:.9rem;height:.9rem}
+		.sitemap-sidebar{display:grid;gap:.8rem}.generation-card,.seo-checklist{padding:.9rem}.generation-card>header{display:flex;align-items:center;gap:.55rem;border-bottom:1px solid #edf1f5;padding-bottom:.7rem}.generation-card header>i{display:grid;width:2.4rem;height:2.4rem;place-items:center;border-radius:.62rem;background:#eaf1fa;color:var(--sm-blue)}.generation-card header svg{width:1.1rem;height:1.1rem;stroke-width:1.8}.generation-card h2{margin:.08rem 0 0;color:var(--sm-ink);font-size:.88rem;font-weight:950}.generation-card>p{margin:.7rem 0;color:var(--sm-muted);font-size:.68rem;line-height:1.8}.generation-card>ul{display:grid;gap:.45rem;margin:0 0 .8rem;padding:0;list-style:none}.generation-card li{display:flex;align-items:center;gap:.4rem;color:#52667d;font-size:.64rem}.generation-card li i{width:.42rem;height:.42rem;border-radius:50%;background:var(--sm-green);box-shadow:0 0 0 .16rem #dff4ec}.generation-card form button{display:flex;width:100%;min-height:2.65rem;align-items:center;justify-content:center;gap:.4rem;border:1px solid #15427c;border-radius:.55rem;background:var(--sm-blue);color:#fff;font-family:inherit;font-size:.7rem;font-weight:900;box-shadow:0 7px 16px rgb(26 77 143/.18)}.generation-card form button:hover{background:#153f75}.generation-card form svg{width:1rem;height:1rem;stroke-width:2}.generation-card>small{display:flex;align-items:flex-start;gap:.35rem;margin-top:.6rem;color:#8793a2;font-size:.57rem;line-height:1.6}.generation-card>small svg{width:.8rem;height:.8rem;flex:none;margin-top:.08rem}.seo-checklist>header{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #edf1f5;padding-bottom:.65rem}.seo-checklist>header strong{border-radius:.35rem;background:#e8f6f1;padding:.25rem .42rem;color:var(--sm-green);font-size:.6rem}.seo-checklist>div{display:grid;padding:.45rem 0}.seo-checklist>div>div{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:.42rem;border-bottom:1px solid #f0f3f6;padding:.46rem 0}.seo-checklist>div>div:last-child{border:0}.seo-checklist>div>div>i{display:grid;width:1.35rem;height:1.35rem;place-items:center;border-radius:50%;background:#f0f2f5;color:#8c98a6}.seo-checklist>div>div.is-complete>i{background:#e3f5ee;color:var(--sm-green)}.seo-checklist>div svg{width:.7rem;height:.7rem;stroke-width:2.2}.seo-checklist>div span{color:#42566e;font-size:.64rem;font-weight:750}.seo-checklist>div b{color:#9aa4b0;font-size:.56rem}.seo-checklist>div .is-complete b{color:var(--sm-green)}.seo-checklist>footer{display:flex;align-items:flex-start;gap:.45rem;border-radius:.55rem;background:#f5f8fc;padding:.55rem;color:var(--sm-blue)}.seo-checklist>footer>svg{width:1rem;height:1rem;flex:none;margin-top:.12rem;stroke-width:1.8}.seo-checklist>footer p{display:grid;gap:.08rem;margin:0}.seo-checklist>footer strong{font-size:.61rem}.seo-checklist>footer span{color:#64778d;font-size:.56rem;line-height:1.6}
+		.sitemap-empty{display:grid;min-height:18rem;place-items:center;align-content:center;text-align:center}.sitemap-empty>i{display:grid;width:3rem;height:3rem;place-items:center;border-radius:50%;background:#fff0f2;color:#b53542;font-style:normal;font-weight:950}.sitemap-empty h2{margin:.6rem 0 .15rem;color:var(--sm-ink);font-size:.9rem}.sitemap-empty p{margin:0;color:var(--sm-muted);font-size:.7rem}.sitemap-empty a{margin-top:.6rem;color:var(--sm-blue);font-size:.68rem;font-weight:850}
+		.sitemap-confirm{width:min(92vw,27rem);max-width:none;border:0;background:transparent;padding:0}.sitemap-confirm::backdrop{background:rgb(5 20 39/.62);backdrop-filter:blur(3px)}.sitemap-confirm>div{position:relative;overflow:hidden;border:1px solid #dbe3ec;border-radius:.9rem;background:#fff;padding:1.25rem;text-align:center;box-shadow:0 30px 70px rgb(6 26 58/.3)}.sitemap-confirm>div::before{position:absolute;top:0;right:0;left:0;height:.25rem;background:#c23845;content:""}.sitemap-confirm>div>button{position:absolute;top:.65rem;left:.65rem;width:1.8rem;height:1.8rem;border:1px solid #dde4ec;border-radius:.4rem;background:#fff;color:#738093;font-size:1rem}.sitemap-confirm>div>i{display:grid;width:3.4rem;height:3.4rem;margin:.2rem auto .6rem;place-items:center;border-radius:50%;background:#fff0f2;color:#c23845;box-shadow:0 0 0 .35rem #fff8f8}.sitemap-confirm>div>i svg{width:1.35rem;height:1.35rem;stroke-width:1.8}.sitemap-confirm>div>span{color:#c23845;font-size:.62rem;font-weight:900}.sitemap-confirm h2{margin:.12rem 0;color:var(--sm-ink);font-size:1rem;font-weight:950}.sitemap-confirm>div>p{margin:.3rem 0;color:var(--sm-muted);font-size:.7rem}.sitemap-confirm aside{margin-top:.7rem;border:1px solid #f1d2b2;border-radius:.55rem;background:#fff9f2;padding:.55rem;text-align:right}.sitemap-confirm aside strong,.sitemap-confirm aside small{display:block}.sitemap-confirm aside strong{color:#945b20;font-size:.65rem}.sitemap-confirm aside small{margin-top:.08rem;color:#9b744c;font-size:.59rem}.sitemap-confirm footer{display:grid;grid-template-columns:1fr 1.2fr;gap:.45rem;margin-top:.85rem}.sitemap-confirm footer button{min-height:2.45rem;border-radius:.48rem;font-family:inherit;font-size:.68rem;font-weight:900}.sitemap-confirm footer button:first-child{border:1px solid #dce3eb;background:#fff;color:#64748b}.sitemap-confirm footer button:last-child{border:1px solid #a92c38;background:#c23845;color:#fff}
+		:global(.dark) .sitemap-page{--sm-ink:#f4f7fb;--sm-muted:#9eacc0;--sm-line:#30445d}:global(.dark) .sitemap-hero,:global(.dark) .sitemap-stats article,:global(.dark) .sitemap-files,:global(.dark) .generation-card,:global(.dark) .seo-checklist,:global(.dark) .sitemap-file,:global(.dark) .sitemap-confirm>div{border-color:#30445d;background:#0f2547}:global(.dark) .file-name,:global(.dark) .sitemap-file dl>div{border-color:#334a66;background:#122a49}:global(.dark) .generation-card>header,:global(.dark) .seo-checklist>header,:global(.dark) .seo-checklist>div>div{border-color:#29405c}:global(.dark) .database-badge,:global(.dark) .seo-checklist>footer{border-color:#304760;background:#132c4c;color:#c4d1e2}:global(.dark) .sitemap-file footer button,:global(.dark) .sitemap-confirm>div>button{background:#102744}:global(.dark) .sitemap-confirm aside{border-color:#6b4c2b;background:#2b251e}
+		@media(max-width:1050px){.sitemap-workspace{grid-template-columns:1fr}.sitemap-sidebar{grid-template-columns:repeat(2,minmax(0,1fr))}.sitemap-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+		@media(max-width:720px){.sitemap-hero{align-items:stretch;flex-direction:column}.sitemap-health{min-width:0}.sitemap-file-grid,.sitemap-sidebar{grid-template-columns:1fr}.section-heading{align-items:flex-start;flex-direction:column}.sitemap-file{min-height:0}}
+		@media(max-width:480px){.sitemap-stats{grid-template-columns:1fr}.sitemap-hero{padding:1rem}.sitemap-hero h1{font-size:1.25rem}.sitemap-files{padding:.75rem}.sitemap-confirm footer{grid-template-columns:1fr}}
+	</style>
+</DashboardLayout>

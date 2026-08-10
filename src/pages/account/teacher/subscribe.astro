@@ -1,0 +1,121 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import '../../../styles/auth-pages.css';
+import Breadcrumbs from '../../../components/ui/Breadcrumbs.astro';
+import { getCurrentUser } from '../../../lib/auth';
+import { apiFetch, apiFetchList } from '../../../lib/api';
+
+const currentUser = await getCurrentUser(Astro);
+if (!currentUser) {
+	return Astro.redirect(`/login?redirect_to=${encodeURIComponent('/account/teacher/subscribe')}`);
+}
+
+const countryId = Astro.locals.countryId;
+const [designResult, { items: paymentMethods }, settingsResult] = await Promise.all([
+	apiFetch<any>('/teacher-subscription/design', { countryId }),
+	apiFetchList<any>('/teacher-subscription/payment-settings', { countryId }),
+	apiFetch<Record<string, string>>('/front/settings', { countryId }),
+]);
+if (settingsResult.data?.enable_teacher_subscriptions === '0') {
+	return Astro.redirect('/teachers');
+}
+const plan = designResult.data;
+
+const error = Astro.url.searchParams.get('error');
+---
+
+<Layout title="اشتراك المعلم" description="أكمل بيانات طلب اشتراكك كمعلم." noindex>
+	<Breadcrumbs items={[{ label: 'حسابي', href: '/account' }, { label: 'منطقة المعلم', href: '/account/teacher' }, { label: 'الاشتراك' }]} />
+
+	<div class="mx-auto max-w-3xl px-4 py-10 sm:px-6 sm:py-14">
+		<header class="page-heading"><span class="page-eyebrow">الخطوة الأخيرة</span><h1 class="page-title">طلب اشتراك معلم</h1>
+		{plan && (
+			<p class="page-description">
+				{plan.name} — {plan.price_jod} {plan.currency} لمدة {plan.duration_days} يوماً
+			</p>
+		)}
+		</header>
+
+		{error && (
+			<div class="alert-error mb-6" role="alert">
+				{error}
+			</div>
+		)}
+
+		<form method="post" action="/api/teacher/subscribe" enctype="multipart/form-data" class="surface-card space-y-7 p-6 sm:p-8">
+			<div>
+				<label for="subjects" class="form-label">
+					المواد التي تدرّسها (حتى 3، مفصولة بفاصلة)
+				</label>
+				<input
+					id="subjects"
+					type="text"
+					name="subjects"
+					required
+					placeholder="رياضيات، علوم، لغة عربية"
+					class="form-control"
+				/>
+			</div>
+
+			<div class="grid sm:grid-cols-2 gap-5">
+				<div>
+					<label for="school" class="form-label">المدرسة</label>
+					<input id="school" type="text" name="school" class="form-control" />
+				</div>
+				<div>
+					<label for="city" class="form-label">المدينة</label>
+					<input id="city" type="text" name="city" class="form-control" />
+				</div>
+			</div>
+
+			<div>
+				<label for="phone" class="form-label">رقم الهاتف</label>
+				<input id="phone" type="tel" name="phone" required class="form-control" />
+			</div>
+
+			<div>
+				<span class="form-label mb-3">طريقة الدفع</span>
+				<div class="space-y-3">
+					{paymentMethods.map((method: any, i: number) => (
+						<label class="flex cursor-pointer items-start gap-3 rounded-xl border border-graphite-200 p-4 transition hover:border-royal-400 has-[:checked]:border-royal-500 has-[:checked]:bg-royal-50 dark:border-graphite-700 dark:has-[:checked]:bg-royal-950">
+							<input type="radio" name="payment_method" value={method.provider} required checked={i === 0} class="mt-1" />
+							<span>
+								<span class="block text-sm font-bold text-graphite-950 dark:text-white">{method.display_name}</span>
+								<span class="mt-0.5 block text-sm text-graphite-500 dark:text-graphite-400">{method.instructions}</span>
+							</span>
+						</label>
+					))}
+				</div>
+			</div>
+
+			<div class="grid sm:grid-cols-2 gap-5">
+				<div>
+					<label for="payer_name" class="form-label">اسم المُحوِّل</label>
+					<input id="payer_name" type="text" name="payer_name" class="form-control" />
+				</div>
+				<div>
+					<label for="payment_reference" class="form-label">رقم العملية</label>
+					<input id="payment_reference" type="text" name="payment_reference" class="form-control" />
+				</div>
+			</div>
+
+			<div>
+				<label for="payment_proof" class="form-label">إثبات الدفع (صورة أو PDF)</label>
+				<input
+					id="payment_proof"
+					type="file"
+					name="payment_proof"
+					accept="image/*,application/pdf"
+					class="form-control text-sm file:ml-4 file:rounded-lg file:border-0 file:bg-royal-50 file:px-4 file:py-2 file:font-bold file:text-royal-700 dark:file:bg-royal-950 dark:file:text-royal-200"
+				/>
+			</div>
+
+			<button
+				type="submit"
+				class="btn-primary w-full py-3.5"
+			>
+				إرسال طلب الاشتراك
+			</button>
+		</form>
+	</div>
+</Layout>

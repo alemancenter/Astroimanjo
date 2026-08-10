@@ -1,0 +1,55 @@
+---
+import Layout from '../layouts/Layout.astro';
+import '../styles/auth-pages.css';
+import AuthShell from '../components/ui/AuthShell.astro';
+import SocialLoginButtons from '../components/ui/SocialLoginButtons.astro';
+import { apiFetch } from '../lib/api';
+import { safeRedirectPath } from '../lib/safe-redirect';
+import { getCurrentUser } from '../lib/auth';
+
+const params = Astro.url.searchParams;
+const error = params.get('error');
+const redirectTo = safeRedirectPath(params.get('redirect_to') || '', '/');
+
+// Already signed in — a valid session visiting /login directly (or via a stale link)
+// should land wherever it was headed, not see the login form again.
+const currentUser = await getCurrentUser(Astro);
+if (currentUser) return Astro.redirect(redirectTo);
+const settings = (await apiFetch<Record<string, string>>('/front/settings', {
+	countryId: Astro.locals.countryId,
+})).data ?? {};
+const googleClientId = settings.google_client_id?.trim() || '';
+const facebookAppId = settings.facebook_app_id?.trim() || '';
+---
+
+<Layout title="تسجيل الدخول" description="سجّل الدخول إلى حسابك في موقع الإيمان التعليمي." noindex>
+	<AuthShell title="تسجيل الدخول" eyebrow="مرحبًا بعودتك" description="سجّل الدخول لمتابعة رحلتك التعليمية والوصول إلى حسابك.">
+		{error && <div class="alert-error mb-6" role="alert">{error}</div>}
+		<SocialLoginButtons googleClientId={googleClientId} facebookAppId={facebookAppId} redirectTo={redirectTo} />
+
+		{(googleClientId || facebookAppId) && (
+			<div class="my-6 flex items-center gap-4" aria-hidden="true">
+				<span class="h-px flex-1 bg-graphite-200 dark:bg-graphite-700"></span>
+				<span class="text-xs font-bold text-graphite-400 dark:text-graphite-500">أو عبر البريد الإلكتروني</span>
+				<span class="h-px flex-1 bg-graphite-200 dark:bg-graphite-700"></span>
+			</div>
+		)}
+
+		<form method="post" action="/api/auth/login" class="space-y-5">
+			<input type="hidden" name="redirect_to" value={redirectTo} />
+			<div>
+				<label for="email" class="form-label">البريد الإلكتروني</label>
+				<input id="email" type="email" name="email" required autocomplete="email" inputmode="email" dir="ltr" class="form-control text-left" placeholder="name@example.com" />
+			</div>
+			<div>
+				<div class="mb-2 flex items-center justify-between gap-4">
+					<label for="password" class="m-0 text-sm font-bold text-graphite-700 dark:text-graphite-200">كلمة المرور</label>
+					<a href="/forgot-password" class="text-sm font-bold text-royal-600 transition hover:text-royal-700 hover:underline dark:text-royal-300">نسيت كلمة المرور؟</a>
+				</div>
+				<input id="password" type="password" name="password" required autocomplete="current-password" dir="ltr" class="form-control text-left" placeholder="••••••••" />
+			</div>
+			<button type="submit" class="btn-primary w-full py-3.5">تسجيل الدخول</button>
+			<p class="text-center text-sm text-graphite-600 dark:text-graphite-300">ليس لديك حساب؟ <a href="/register" class="font-bold text-royal-600 hover:underline dark:text-royal-300">إنشاء حساب جديد</a></p>
+		</form>
+	</AuthShell>
+</Layout>

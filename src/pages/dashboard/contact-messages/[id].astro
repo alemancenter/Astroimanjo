@@ -1,0 +1,70 @@
+---
+import DashboardLayout from '../../../layouts/DashboardLayout.astro';
+import DashboardAlert from '../../../components/ui/DashboardAlert.astro';
+import { requireDashboard } from '../../../lib/auth';
+import { apiFetch } from '../../../lib/api';
+
+const guard = await requireDashboard(Astro, 'manage settings');
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+
+const { id } = Astro.params;
+const result = await apiFetch<any>(`/dashboard/contact-messages/${id}`, {
+	countryId: Astro.locals.countryId,
+	cookieHeader: `token=${Astro.cookies.get('token')?.value}`,
+});
+const message = result.data;
+const dateTimeFormat = new Intl.DateTimeFormat('ar-EG', { year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+const formattedDate = message?.created_at && !Number.isNaN(new Date(message.created_at).getTime()) ? dateTimeFormat.format(new Date(message.created_at)) : '—';
+const initials = (name: string) => (name || 'زائر').trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
+const safePageUrl = (() => {
+	if (!message?.page_url) return null;
+	try { const url = new URL(message.page_url, Astro.url.origin); return ['http:', 'https:'].includes(url.protocol) ? url.toString() : null; }
+	catch { return null; }
+})();
+---
+
+<DashboardLayout title="تفاصيل رسالة التواصل" user={user}>
+	<div class="contact-detail-page">
+		<DashboardAlert />
+		<a href="/dashboard/contact-messages" class="contact-detail-back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m9 18 6-6-6-6"/></svg>العودة إلى صندوق الوارد</a>
+
+		{!result.ok || !message ? (
+			<section class="contact-detail-error"><span>!</span><h1>الرسالة غير موجودة</h1><p>{result.ok ? 'ربما حُذفت الرسالة أو أن الرابط غير صحيح.' : result.message}</p><a href="/dashboard/contact-messages">العودة إلى الرسائل</a></section>
+		) : (
+			<>
+				<header class="contact-detail-header">
+					<div><span>رسالة تواصل #{message.id}</span><h1>{message.subject || 'رسالة دون موضوع'}</h1><p>وصلت في {formattedDate}</p></div>
+					<div class="contact-detail-header-actions">
+						<a href={`mailto:${message.email}?subject=${encodeURIComponent(`رد: ${message.subject || 'رسالة التواصل'}`)}`} class="is-reply"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 17 4 12l5-5m-5 5h9a7 7 0 0 1 7 7"/></svg>الرد عبر البريد</a>
+						<form method="post" action={`/api/dashboard/contact-messages/${message.id}/delete`} data-confirm-delete><input type="hidden" name="redirect_to" value="/dashboard/contact-messages"/><button type="submit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16m-10 4v6m4-6v6M9 7l1-3h4l1 3m3 0-1 14H7L6 7"/></svg>حذف</button></form>
+					</div>
+				</header>
+
+				<div class="contact-detail-layout">
+					<main class="contact-message-card">
+						<div class="contact-message-card-head"><div class="contact-detail-avatar">{initials(message.name)}</div><div><strong>{message.name || 'زائر دون اسم'}</strong><a href={`mailto:${message.email}`} dir="ltr">{message.email}</a></div><span><i></i>تمت القراءة</span></div>
+						<div class="contact-message-subject"><small>الموضوع</small><h2>{message.subject || 'دون موضوع'}</h2></div>
+						<div class="contact-message-body"><small>نص الرسالة</small><p>{message.message || 'لا يوجد نص للرسالة.'}</p></div>
+					</main>
+
+					<aside class="contact-detail-sidebar">
+						<section><header><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></span><div><h2>بيانات المرسل</h2><p>وسائل التواصل المتاحة</p></div></header><dl><div><dt>الاسم</dt><dd>{message.name || '—'}</dd></div><div><dt>البريد الإلكتروني</dt><dd><a href={`mailto:${message.email}`} dir="ltr">{message.email}</a></dd></div><div><dt>رقم الهاتف</dt><dd>{message.phone ? <a href={`tel:${message.phone}`} dir="ltr">{message.phone}</a> : <span>غير مضاف</span>}</dd></div></dl></section>
+						<section><header><span class="is-orange"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 21s7-5.5 7-12a7 7 0 0 0-14 0c0 6.5 7 12 7 12Z"/><circle cx="12" cy="9" r="2"/></svg></span><div><h2>مصدر الرسالة</h2><p>مكان إرسال نموذج التواصل</p></div></header><dl><div><dt>الصفحة</dt><dd>{safePageUrl ? <a href={safePageUrl} target="_blank" rel="noopener" class="source-link">{message.page_url}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 5h5v5m0-5-8 8M19 14v5H5V5h5"/></svg></a> : <span>{message.page_url || 'نموذج التواصل العام'}</span>}</dd></div><div><dt>تاريخ الوصول</dt><dd>{formattedDate}</dd></div></dl></section>
+					</aside>
+				</div>
+			</>
+		)}
+	</div>
+
+	<script>
+		document.querySelector<HTMLFormElement>('[data-confirm-delete]')?.addEventListener('submit', (event) => { if (!window.confirm('سيتم حذف هذه الرسالة نهائيًا ولا يمكن التراجع. هل تريد المتابعة؟')) event.preventDefault(); });
+	</script>
+
+	<style>
+		.contact-detail-page{--cd-ink:#102a43;--cd-muted:#718096;--cd-line:#dfe6ee;max-width:1250px;margin-inline:auto;padding-bottom:2rem}.contact-detail-back{display:inline-flex;align-items:center;gap:.25rem;margin-bottom:.8rem;color:#64748b;font-size:.72rem;font-weight:800}.contact-detail-back:hover{color:#1a4d8f}.contact-detail-back svg{width:.9rem;height:.9rem}.contact-detail-header{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;margin-bottom:1rem}.contact-detail-header>div:first-child>span{display:block;color:#1a4d8f;font-size:.72rem;font-weight:850}.contact-detail-header h1{margin:.18rem 0 0;color:#061a3a;font-size:clamp(1.35rem,1.1rem + .65vw,1.8rem);font-weight:900;line-height:1.35}.contact-detail-header p{margin:.25rem 0 0;color:var(--cd-muted);font-size:.75rem}.contact-detail-header-actions{display:flex;gap:.4rem}.contact-detail-header-actions a,.contact-detail-header-actions button{display:inline-flex;min-height:2.45rem;align-items:center;justify-content:center;gap:.35rem;border:1px solid #d7e1ec;border-radius:.52rem;background:#fff;padding:.45rem .72rem;color:#c5303e;font-family:inherit;font-size:.7rem;font-weight:850}.contact-detail-header-actions a.is-reply{border-color:#16427d;background:#1a4d8f;color:#fff}.contact-detail-header-actions svg{width:.85rem;height:.85rem}.contact-detail-layout{display:grid;grid-template-columns:minmax(0,1.75fr) minmax(17rem,.75fr);gap:.75rem}.contact-message-card,.contact-detail-sidebar section{border:1px solid var(--cd-line);border-radius:.78rem;background:#fff;box-shadow:0 1px 2px rgb(15 23 42/.05)}.contact-message-card-head{display:flex;align-items:center;gap:.62rem;border-bottom:1px solid #edf1f5;padding:.9rem}.contact-detail-avatar{display:grid;width:2.6rem;height:2.6rem;flex:none;place-items:center;border-radius:.62rem;background:#edf4fc;color:#1a4d8f;font-size:.72rem;font-weight:900}.contact-message-card-head>div:nth-child(2){min-width:0}.contact-message-card-head strong{display:block;color:var(--cd-ink);font-size:.78rem}.contact-message-card-head a{display:block;overflow:hidden;margin-top:.06rem;color:#718096;font-size:.66rem;text-overflow:ellipsis;white-space:nowrap}.contact-message-card-head>span{display:inline-flex;align-items:center;gap:.25rem;margin-right:auto;border-radius:999px;background:#edf9f5;padding:.25rem .48rem;color:#0f8464;font-size:.62rem;font-weight:850}.contact-message-card-head>span i{width:.3rem;height:.3rem;border-radius:50%;background:currentColor}.contact-message-subject{border-bottom:1px solid #edf1f5;padding:.85rem .95rem}.contact-message-subject small,.contact-message-body small{display:block;color:#8a97a6;font-size:.64rem;font-weight:750}.contact-message-subject h2{margin:.2rem 0 0;color:var(--cd-ink);font-size:.92rem;font-weight:900}.contact-message-body{padding:1rem}.contact-message-body p{min-height:14rem;margin:.3rem 0 0;color:#344b63;font-size:.78rem;line-height:2;white-space:pre-wrap}.contact-detail-sidebar{display:grid;align-content:start;gap:.65rem}.contact-detail-sidebar section>header{display:flex;align-items:center;gap:.55rem;border-bottom:1px solid #edf1f5;padding:.78rem}.contact-detail-sidebar section>header>span{display:grid;width:2.15rem;height:2.15rem;flex:none;place-items:center;border-radius:.5rem;background:#edf4fc;color:#1a4d8f}.contact-detail-sidebar section>header>span.is-orange{background:#fff4e7;color:#b96614}.contact-detail-sidebar section>header svg{width:.95rem;height:.95rem}.contact-detail-sidebar h2{margin:0;color:var(--cd-ink);font-size:.76rem;font-weight:900}.contact-detail-sidebar header p{margin:.08rem 0 0;color:#8a97a6;font-size:.61rem}.contact-detail-sidebar dl{margin:0;padding:.35rem .8rem .75rem}.contact-detail-sidebar dl>div{padding:.48rem 0;border-bottom:1px solid #f0f3f6}.contact-detail-sidebar dl>div:last-child{border-bottom:0}.contact-detail-sidebar dt{color:#8a97a6;font-size:.62rem}.contact-detail-sidebar dd{overflow-wrap:anywhere;margin:.1rem 0 0;color:var(--cd-ink);font-size:.69rem;font-weight:750}.contact-detail-sidebar dd>a{color:#1a4d8f}.contact-detail-sidebar dd>span{color:#718096;font-weight:650}.source-link{display:flex;align-items:flex-start;gap:.25rem}.source-link svg{width:.72rem;height:.72rem;flex:none;margin-top:.12rem}.contact-detail-error{display:flex;min-height:18rem;align-items:center;justify-content:center;flex-direction:column;border:1px solid #fecaca;border-radius:.8rem;background:#fff;text-align:center}.contact-detail-error>span{display:grid;width:3rem;height:3rem;place-items:center;border-radius:.7rem;background:#fff1f2;color:#c5303e;font-size:1rem;font-weight:900}.contact-detail-error h1{margin:.6rem 0 0;color:var(--cd-ink);font-size:.9rem}.contact-detail-error p{margin:.2rem 0 0;color:var(--cd-muted);font-size:.68rem}.contact-detail-error a{margin-top:.55rem;color:#1a4d8f;font-size:.68rem;font-weight:850}
+		:global(.dark) .contact-detail-page{--cd-ink:#f8fafc;--cd-muted:#94a3b8;--cd-line:#334155}:global(.dark) .contact-detail-header h1{color:#fff}:global(.dark) .contact-detail-header-actions button,:global(.dark) .contact-message-card,:global(.dark) .contact-detail-sidebar section,:global(.dark) .contact-detail-error{border-color:#334155;background:#0f2547}:global(.dark) .contact-message-card-head,:global(.dark) .contact-message-subject,:global(.dark) .contact-detail-sidebar section>header,:global(.dark) .contact-detail-sidebar dl>div{border-color:#263b56}:global(.dark) .contact-message-body p{color:#dbe5f0}
+		@media(max-width:900px){.contact-detail-layout{grid-template-columns:1fr}.contact-detail-sidebar{grid-template-columns:repeat(2,minmax(0,1fr))}}
+		@media(max-width:650px){.contact-detail-header{align-items:stretch;flex-direction:column}.contact-detail-header-actions{width:100%}.contact-detail-header-actions a,.contact-detail-header-actions form{flex:1}.contact-detail-header-actions button{width:100%}.contact-detail-sidebar{grid-template-columns:1fr}.contact-message-body p{min-height:9rem}.contact-message-card-head{align-items:flex-start;flex-wrap:wrap}.contact-message-card-head>span{margin-right:0}}
+	</style>
+</DashboardLayout>

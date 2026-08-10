@@ -1,0 +1,89 @@
+---
+import DashboardLayout from '../../../layouts/DashboardLayout.astro';
+import DashboardAlert from '../../../components/ui/DashboardAlert.astro';
+import TeacherSubTabs from '../../../components/dashboard/TeacherSubTabs.astro';
+import Pagination from '../../../components/ui/Pagination.astro';
+import { requireDashboard } from '../../../lib/auth';
+import { apiFetch } from '../../../lib/api';
+
+const guard = await requireDashboard(Astro, 'manage teacher subscriptions');
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+
+const token = Astro.cookies.get('token')?.value;
+const page = Math.max(1, Number(Astro.url.searchParams.get('page')) || 1);
+const result = await apiFetch<any[]>('/dashboard/teacher-subscriptions/subscriptions', {
+	countryId: Astro.locals.countryId,
+	cookieHeader: `token=${token}`,
+	params: { page, per_page: 20 },
+});
+const subs = Array.isArray(result.data) ? result.data : [];
+const meta = result.meta;
+const statusColors: Record<string, string> = {
+	active: 'badge-success',
+	expired: 'badge',
+	cancelled: 'badge',
+};
+---
+
+<DashboardLayout title="اشتراكات المعلمين" user={user}>
+	<DashboardAlert />
+	<TeacherSubTabs active="subscriptions" />
+
+	<div class="space-y-4">
+		{
+			subs.map((sub: any) => (
+				<div class="surface-card p-6">
+					<div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+						<div>
+							<p class="font-extrabold text-graphite-950 dark:text-white">{sub.user?.name}</p>
+							<p class="text-sm text-graphite-500 dark:text-graphite-400">{sub.user?.email}</p>
+						</div>
+						<span class={statusColors[sub.status] || 'badge'}>{sub.status}</span>
+					</div>
+					<dl class="mb-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+						<div>
+							<dt class="text-graphite-400 text-xs">البداية</dt>
+							<dd class="font-bold text-graphite-900 dark:text-white">{new Date(sub.starts_at).toLocaleDateString('ar-EG')}</dd>
+						</div>
+						<div>
+							<dt class="text-graphite-400 text-xs">النهاية</dt>
+							<dd class="font-bold text-graphite-900 dark:text-white">{new Date(sub.ends_at).toLocaleDateString('ar-EG')}</dd>
+						</div>
+						<div>
+							<dt class="text-graphite-400 text-xs">السعر</dt>
+							<dd class="font-bold text-graphite-900 dark:text-white">{sub.price_jod} JOD</dd>
+						</div>
+						<div>
+							<dt class="text-graphite-400 text-xs">الأجهزة</dt>
+							<dd class="font-bold text-graphite-900 dark:text-white">{sub.device_limit}</dd>
+						</div>
+					</dl>
+
+					<div class="flex flex-wrap items-center gap-4 border-t border-graphite-100 pt-4 text-sm dark:border-graphite-800">
+						<form method="post" action={`/api/dashboard/teacher-subscriptions/subscriptions/${sub.id}/renew`} class="flex items-center gap-2">
+							<input type="hidden" name="redirect_to" value="/dashboard/teacher-subscriptions/subscriptions" />
+							<input type="number" name="extra_days" placeholder="أيام إضافية" class="form-control w-32 py-1.5 text-sm" />
+							<button type="submit" class="btn-outline py-1.5 text-sm">تجديد</button>
+						</form>
+						{sub.status !== 'active' && (
+							<form method="post" action={`/api/dashboard/teacher-subscriptions/subscriptions/${sub.id}/reactivate`}>
+								<input type="hidden" name="redirect_to" value="/dashboard/teacher-subscriptions/subscriptions" />
+								<button type="submit" class="font-bold text-emerald-brand-600 hover:underline dark:text-emerald-brand-300">إعادة تفعيل</button>
+							</form>
+						)}
+						{sub.status === 'active' && (
+							<form method="post" action={`/api/dashboard/teacher-subscriptions/subscriptions/${sub.id}/cancel`} onsubmit="return confirm('إلغاء هذا الاشتراك؟')">
+								<input type="hidden" name="redirect_to" value="/dashboard/teacher-subscriptions/subscriptions" />
+								<button type="submit" class="font-bold text-red-600 hover:underline dark:text-red-400">إلغاء</button>
+							</form>
+						)}
+					</div>
+				</div>
+			))
+		}
+		{subs.length === 0 && <p class="py-10 text-center text-graphite-400">لا توجد اشتراكات بعد.</p>}
+	</div>
+
+	{meta && <Pagination currentPage={meta.current_page} lastPage={meta.last_page} url={Astro.url} />}
+</DashboardLayout>

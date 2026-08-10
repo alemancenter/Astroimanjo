@@ -1,0 +1,82 @@
+---
+// Shared body for the two bare keyword-index URLs (identical content either way):
+//   /{cc}/posts/keyword/            (type="posts")
+//   /{cc}/lesson/articles/keyword/  (type="articles")
+// Lists every known keyword of that type as a link into KeywordResults, instead of
+// redirecting away from a working feature.
+import Breadcrumbs from './ui/Breadcrumbs.astro';
+import Pagination from './ui/Pagination.astro';
+import EmptyState from './ui/EmptyState.astro';
+import ErrorState from './ui/ErrorState.astro';
+import { apiFetch } from '../lib/api';
+
+interface Props {
+	type: 'articles' | 'posts';
+	detailBase: string;
+	title: string;
+}
+
+const { type, detailBase, title } = Astro.props;
+const countryId = Astro.locals.countryId;
+const q = Astro.url.searchParams.get('q')?.trim() ?? '';
+const page = Number(Astro.url.searchParams.get('page') ?? '1') || 1;
+const PER_PAGE = 60;
+
+const result = await apiFetch<any>('/keywords', {
+	countryId,
+	params: { type, q: q || undefined, page: String(page), per_page: String(PER_PAGE) },
+});
+const key = type === 'articles' ? 'article_keywords' : 'post_keywords';
+const data = result.data;
+const keywords: Array<{ id: number; keyword: string; items_count: number }> = data?.[key]?.data ?? [];
+const meta = data?.[key]?.meta;
+---
+
+<Breadcrumbs items={[{ label: title }]} />
+
+<div class="page-shell">
+	<header class="page-heading">
+		<span class="page-eyebrow">تصفح الوسوم</span>
+		<h1 class="page-title">{title}</h1>
+		<p class="page-description">اختر وسمًا لعرض كل المحتوى المرتبط به، أو ابحث عن وسم محدد.</p>
+	</header>
+
+	<form method="get" class="surface-card mb-10 flex flex-wrap items-center gap-3 p-4 sm:p-5" aria-label={`البحث في ${title}`}>
+		<input
+			type="text"
+			name="q"
+			value={q}
+			placeholder="ابحث في الوسوم..."
+			class="form-control min-w-[220px] flex-1"
+		/>
+		<button type="submit" class="btn-primary">بحث</button>
+		{q && (
+			<a href={detailBase} class="btn-outline">
+				مسح البحث
+			</a>
+		)}
+	</form>
+
+	{
+		!result.ok ? (
+			<ErrorState message="تعذر تحميل قائمة الوسوم حالياً." />
+		) : keywords.length === 0 ? (
+			<EmptyState message={q ? `لا توجد وسوم مطابقة لبحثك "${q}".` : 'لا توجد وسوم متاحة حالياً.'} />
+		) : (
+			<>
+				<div class="flex flex-wrap gap-3">
+					{keywords.map((kw) => (
+						<a
+							href={`${detailBase}/${encodeURIComponent(kw.keyword)}`}
+							class="badge-primary transition hover:bg-royal-100 dark:hover:bg-royal-900"
+						>
+							#{kw.keyword}
+							<span class="ms-1 opacity-60">({kw.items_count})</span>
+						</a>
+					))}
+				</div>
+				{meta && <Pagination currentPage={meta.current_page} lastPage={meta.last_page} url={Astro.url} />}
+			</>
+		)
+	}
+</div>

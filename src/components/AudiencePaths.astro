@@ -1,0 +1,31 @@
+---
+interface Props {
+	countryCode: string;
+}
+
+const { countryCode } = Astro.props;
+---
+
+<section class="relative z-10 -mt-10 pb-5 sm:-mt-12" aria-label="مسارات المستخدمين">
+	<div class="container-shell">
+		<div class="grid overflow-hidden rounded-[1.7rem] border border-graphite-200/80 bg-white shadow-[0_24px_60px_-34px_rgba(26,77,143,.42)] md:grid-cols-3 dark:border-graphite-700 dark:bg-graphite-900">
+			<a href={`/${countryCode}/classes`} class="group flex items-center gap-4 border-b border-graphite-100 p-5 transition hover:bg-royal-50/70 md:border-b-0 md:border-l dark:border-graphite-800 dark:hover:bg-royal-950/35 sm:p-6">
+				<span class="flex size-12 flex-none items-center justify-center rounded-2xl bg-royal-50 text-royal-600 transition group-hover:bg-royal-600 group-hover:text-white dark:bg-royal-950 dark:text-royal-300"><svg class="size-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m12 14 9-5-9-5-9 5 9 5Zm0 0 6.16-3.42a12 12 0 0 1 .67 6.48A12 12 0 0 0 12 20.06a12 12 0 0 0-6.82-3 12 12 0 0 1 .66-6.48L12 14Z" /></svg></span>
+				<span class="min-w-0 flex-1"><span class="text-xs font-bold text-royal-600 dark:text-royal-300">أنا طالب</span><strong class="mt-1 block text-base text-graphite-950 dark:text-white">ابدأ من صفك الدراسي</strong></span>
+				<svg class="size-5 flex-none text-graphite-300 transition group-hover:-translate-x-1 group-hover:text-royal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m15 19-7-7 7-7" /></svg>
+			</a>
+
+			<a href="/teachers" class="group flex items-center gap-4 border-b border-graphite-100 p-5 transition hover:bg-emerald-brand-50/70 md:border-b-0 md:border-l dark:border-graphite-800 dark:hover:bg-emerald-brand-950/30 sm:p-6">
+				<span class="flex size-12 flex-none items-center justify-center rounded-2xl bg-emerald-brand-50 text-emerald-brand-700 transition group-hover:bg-emerald-brand-600 group-hover:text-white dark:bg-emerald-brand-950 dark:text-emerald-brand-300"><svg class="size-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m7-10a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm13 10v-2a4 4 0 0 0-3-3.87" /></svg></span>
+				<span class="min-w-0 flex-1"><span class="text-xs font-bold text-emerald-brand-700 dark:text-emerald-brand-300">أنا معلم</span><strong class="mt-1 block text-base text-graphite-950 dark:text-white">استكشف بوابة المعلمين</strong></span>
+				<svg class="size-5 flex-none text-graphite-300 transition group-hover:-translate-x-1 group-hover:text-emerald-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m15 19-7-7 7-7" /></svg>
+			</a>
+
+			<a href="/contact" class="group flex items-center gap-4 p-5 transition hover:bg-sunset-50/80 dark:hover:bg-sunset-900/15 sm:p-6">
+				<span class="flex size-12 flex-none items-center justify-center rounded-2xl bg-sunset-50 text-sunset-700 transition group-hover:bg-sunset-400 group-hover:text-graphite-950 dark:bg-sunset-900/30 dark:text-sunset-300"><svg class="size-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 21h18M5 21V7l7-4 7 4v14M9 9h1m4 0h1m-6 4h1m4 0h1m-6 4h1m4 0h1" /></svg></span>
+				<span class="min-w-0 flex-1"><span class="text-xs font-bold text-sunset-700 dark:text-sunset-300">إدارة مدرسة</span><strong class="mt-1 block text-base text-graphite-950 dark:text-white">تجربة نظام خدمتك</strong></span>
+				<svg class="size-5 flex-none text-graphite-300 transition group-hover:-translate-x-1 group-hover:text-sunset-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m15 19-7-7 7-7" /></svg>
+			</a>
+		</div>
+	</div>
+</section>

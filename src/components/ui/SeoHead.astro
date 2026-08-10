@@ -1,0 +1,99 @@
+---
+import { COUNTRIES, DEFAULT_COUNTRY_CODE } from '../../lib/countries';
+
+interface Props {
+	title: string;
+	description?: string;
+	canonical?: string;
+	image?: string;
+	noindex?: boolean;
+	jsonLd?: Record<string, unknown> | Record<string, unknown>[];
+	siteName?: string;
+	hreflangSafe?: boolean;
+}
+
+const {
+	title,
+	description = 'منصة تعليمية متطورة تجمع الملفات الدراسية والمقالات لجميع الصفوف والمواد.',
+	canonical,
+	image,
+	noindex = false,
+	jsonLd,
+	siteName = 'موقع الإيمان التعليمي',
+	hreflangSafe = false,
+} = Astro.props;
+
+const fullTitle = title.includes(siteName) ? title : `${title} | ${siteName}`;
+
+// Paginated listings must each have their own canonical (page 2's canonical is itself, not
+// page 1) — otherwise every page collapses into one, and Google only ever sees page 1.
+// The `page` param is the only query-string value carried into the default canonical; other
+// filters (search/category/etc.) are intentionally dropped to avoid indexing every filter
+// combination as a separate "canonical" URL.
+// Built from Astro.site (configured from PUBLIC_SITE_URL — astro.config.mjs), not
+// Astro.url.origin: the latter reflects whatever Host header the request arrived with, which
+// makes canonical/JSON-LD depend on the reverse proxy forwarding the right Host instead of
+// being a fixed, known-correct value.
+const siteOrigin = Astro.site ? Astro.site.origin : Astro.url.origin;
+const baseCanonical = canonical ?? new URL(Astro.url.pathname, siteOrigin).toString();
+const pageParam = Astro.url.searchParams.get('page');
+const canonicalUrl = (() => {
+	if (!pageParam || pageParam === '1') return baseCanonical;
+	const url = new URL(baseCanonical);
+	url.searchParams.set('page', pageParam);
+	return url.toString();
+})();
+const jsonLdEntries = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
+
+// hreflang must link genuinely equivalent content (Google's own guidance), and each country
+// is a fully separate database with no shared identity of any kind between rows (confirmed:
+// no uuid/global_id/coordinated-slug on Article/Post/SchoolClass/Subject/Category, and
+// content is authored independently per country with no replication). Swapping the country
+// segment of an ID-keyed detail URL (an article/post/subject/class/category page) does NOT
+// point at "the same content in another country" — it points at an unrelated row that
+// happens to share a numeric ID. So hreflang here is opt-in (`hreflangSafe`), passed only by
+// pages where the swap is actually correct: pure listing/collection pages and free-text
+// keyword search pages, which are legitimately "the same page, regionally varied" (the same
+// pattern as a per-country homepage) rather than a claim that two specific rows are the same
+// piece of content. See also CountrySwitcher.astro, which applies the identical distinction.
+const currentCountryCode = Astro.params.countryCode as string | undefined;
+const hreflangAlternates = currentCountryCode && hreflangSafe
+	? COUNTRIES.map((country) => {
+			const url = new URL(canonicalUrl);
+			url.pathname = url.pathname.replace(`/${currentCountryCode}/`, `/${country.code}/`);
+			return { hreflang: country.hreflang, href: url.toString() };
+		})
+	: [];
+const xDefaultHref = currentCountryCode && hreflangSafe
+	? hreflangAlternates.find((a) => a.href.includes(`/${DEFAULT_COUNTRY_CODE}/`))?.href
+	: undefined;
+---
+
+<title>{fullTitle}</title>
+<meta name="description" content={description} />
+<link rel="canonical" href={canonicalUrl} />
+{hreflangAlternates.map((alt) => <link rel="alternate" hreflang={alt.hreflang} href={alt.href} />)}
+{xDefaultHref && <link rel="alternate" hreflang="x-default" href={xDefaultHref} />}
+{/* follow (not nofollow): these are search/filter permutations of real content — Google
+   should still crawl the links to the actual articles/posts within, just not index this
+   particular query-string URL as its own result. */}
+{noindex && <meta name="robots" content="noindex, follow" />}
+
+<meta property="og:site_name" content={siteName} />
+<meta property="og:type" content="website" />
+<meta property="og:title" content={fullTitle} />
+<meta property="og:description" content={description} />
+<meta property="og:url" content={canonicalUrl} />
+<meta property="og:locale" content="ar_AR" />
+{image && <meta property="og:image" content={image} />}
+
+<meta name="twitter:card" content={image ? 'summary_large_image' : 'summary'} />
+<meta name="twitter:title" content={fullTitle} />
+<meta name="twitter:description" content={description} />
+{image && <meta name="twitter:image" content={image} />}
+
+{/* JSON.stringify does not escape the "<" character, and entry.headline/description carry raw
+   admin-authored text (e.g. article.title) — a title containing "</script>" would close this
+   tag early and inject arbitrary HTML into every visitor's page. Replacing "<" with its
+   unicode escape neutralizes that without changing the parsed JSON value. */}
+{jsonLdEntries.map((entry) => <script type="application/ld+json" set:html={JSON.stringify(entry).replace(/</g, '\\u003c')} />)}

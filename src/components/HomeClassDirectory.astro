@@ -1,0 +1,174 @@
+---
+interface Props {
+	classes: any[];
+	countryCode: string;
+}
+
+const { classes, countryCode } = Astro.props;
+
+const className = (schoolClass: any) => String(schoolClass.grade_name ?? schoolClass.name ?? 'صف دراسي');
+const isFoundation = (schoolClass: any) => /رياض|روضة|تمهيد/.test(className(schoolClass));
+const foundationClass = classes.find(isFoundation) ?? classes[0];
+const orbitClasses = classes.filter((schoolClass) => schoolClass !== foundationClass);
+
+const ordinalCodes: Array<[RegExp, string]> = [
+	[/الأول/, '01'],
+	[/الثاني/, '02'],
+	[/الثالث/, '03'],
+	[/الرابع/, '04'],
+	[/الخامس/, '05'],
+	[/السادس/, '06'],
+	[/السابع/, '07'],
+	[/الثامن/, '08'],
+	[/التاسع/, '09'],
+	[/العاشر/, '10'],
+];
+
+const classMeta = (schoolClass: any) => {
+	const name = className(schoolClass);
+	if (/ثانو|بكالوريا/.test(name)) {
+		return { code: /الثاني/.test(name) ? '12' : '11', stage: 'ثانوي' };
+	}
+
+	return {
+		code: ordinalCodes.find(([pattern]) => pattern.test(name))?.[1] ?? '—',
+		stage: 'أساسي',
+	};
+};
+
+const desktopPositions = [
+	[1, 1], [2, 1], [3, 1], [5, 1], [6, 1], [7, 1],
+	[1, 2], [2, 2], [3, 2], [5, 2], [6, 2], [7, 2],
+];
+
+const surfaceStyles = ['royal', 'emerald', 'sunset', 'orange', 'sky', 'violet'];
+---
+
+<div class="orbit-shell relative isolate overflow-hidden rounded-[2rem] bg-graphite-950 px-4 py-6 shadow-[0_30px_80px_-42px_rgba(13,29,50,0.75)] sm:px-6 sm:py-8 xl:rounded-[3rem] xl:px-8 xl:py-10">
+	<div class="pointer-events-none absolute -right-24 -top-36 size-[28rem] rounded-full bg-royal-600/40 blur-[90px]" aria-hidden="true"></div>
+	<div class="pointer-events-none absolute -bottom-40 left-1/3 size-[25rem] rounded-full bg-emerald-brand-600/25 blur-[100px]" aria-hidden="true"></div>
+	<div class="pointer-events-none absolute left-10 top-1/4 size-56 rounded-full bg-sunset-400/16 blur-[85px]" aria-hidden="true"></div>
+
+	<div class="relative mb-6 flex flex-col gap-4 text-white sm:flex-row sm:items-center sm:justify-between xl:px-2">
+		<div>
+			<span class="mb-2 inline-flex items-center gap-2 text-[11px] font-bold text-emerald-brand-300">
+				<i class="size-1.5 rounded-full bg-emerald-brand-400"></i>
+				المسار الدراسي
+			</span>
+			<h3 class="text-lg font-extrabold sm:text-xl">كل صفوفك في مكان واحد</h3>
+			<p class="mt-1.5 text-xs leading-6 text-graphite-300 sm:text-[13px]">اضغط على صفك للوصول مباشرة إلى مواده وملفاته التعليمية.</p>
+		</div>
+		<span class="inline-flex w-fit items-center gap-2 rounded-full border border-white/10 bg-white/[0.07] px-3 py-2 text-[11px] font-bold text-graphite-200 backdrop-blur">
+			<svg class="size-3.5 text-sunset-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M4 19.5A2.5 2.5 0 0 0 6.5 22H20V2H6.5A2.5 2.5 0 0 0 4 4.5v15Z" /></svg>
+			{classes.length} صفاً دراسياً
+		</span>
+	</div>
+
+	<div class="orbit-grid relative grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 xl:grid-rows-2 xl:gap-3.5">
+		{foundationClass && (
+			<a href={`/${countryCode}/lesson/${foundationClass.id}`} class="grade-core group relative col-span-2 flex min-h-44 flex-col items-center justify-center overflow-hidden rounded-[1.6rem] border border-white/25 bg-gradient-to-br from-white/95 via-royal-100/95 to-emerald-brand-200/85 p-5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.8),0_18px_38px_-18px_rgba(15,132,100,0.8)] transition duration-300 hover:-translate-y-1 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_24px_44px_-18px_rgba(15,132,100,0.95)] sm:col-span-3 lg:col-span-4 xl:col-span-1 xl:col-start-4 xl:row-span-2 xl:row-start-1 xl:min-h-0" aria-label={`تصفح ${className(foundationClass)}`}>
+				<div class="absolute -right-10 -top-12 size-32 rounded-full bg-emerald-brand-400/35 blur-2xl"></div>
+				<div class="absolute -bottom-12 -left-8 size-32 rounded-full bg-royal-400/35 blur-2xl"></div>
+				<span class="relative flex size-16 items-center justify-center rounded-[1.35rem] border border-white/65 bg-white/45 text-xl font-black tracking-tight text-royal-700 shadow-[inset_0_1px_0_white,0_12px_24px_-15px_rgba(26,77,143,0.8)] backdrop-blur sm:size-[4.5rem] sm:text-2xl">KG</span>
+				<span class="relative mt-4 text-[10px] font-extrabold text-emerald-brand-700">نقطة البداية</span>
+				<h4 class="relative mt-1 text-base font-extrabold leading-6 text-graphite-950">{className(foundationClass)}</h4>
+				<span class="relative mt-4 inline-flex items-center gap-1.5 rounded-full bg-graphite-950 px-3 py-2 text-[10px] font-extrabold text-white transition group-hover:bg-royal-700">
+					ابدأ التعلّم
+					<span aria-hidden="true">←</span>
+				</span>
+			</a>
+		)}
+
+		{orbitClasses.map((schoolClass: any, index: number) => {
+			const meta = classMeta(schoolClass);
+			const position = desktopPositions[index] ?? [((index % 7) + 1), (Math.floor(index / 7) + 3)];
+			const surface = surfaceStyles[index % surfaceStyles.length];
+
+			return (
+				<a
+					href={`/${countryCode}/lesson/${schoolClass.id}`}
+					class:list={["orbit-card group relative isolate flex min-h-36 flex-col overflow-hidden rounded-[1.45rem] border p-4 transition duration-300 hover:z-20 hover:-translate-y-1.5 hover:scale-[1.015] hover:shadow-2xl focus-visible:z-20 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white/50 sm:min-h-40 sm:p-5 xl:min-h-0", `surface-${surface}`]}
+					style={`--desktop-column:${position[0]};--desktop-row:${position[1]};`}
+					aria-label={`تصفح ${className(schoolClass)}`}
+				>
+					<div class="pointer-events-none absolute -bottom-8 -left-2 -z-10 select-none text-[5.4rem] font-black leading-none tracking-[-0.09em] text-white/20 transition duration-300 group-hover:-translate-y-1 group-hover:text-white/30" aria-hidden="true">{meta.code}</div>
+					<div class="flex items-center justify-between gap-2">
+						<span class="inline-flex items-center gap-1.5 text-[9px] font-extrabold text-current/75">
+							<i class="size-1.5 rounded-full bg-current"></i>
+							{meta.stage}
+						</span>
+						<span class="rounded-full border border-current/10 bg-white/30 px-1.5 py-0.5 text-[9px] font-black backdrop-blur">{meta.code}</span>
+					</div>
+					<div class="mt-auto pt-5">
+						<h4 class="max-w-[10rem] text-[13px] font-extrabold leading-5 text-graphite-950 sm:text-sm sm:leading-6">{className(schoolClass)}</h4>
+						<span class="mt-2 inline-flex items-center gap-1 text-[9px] font-bold text-graphite-700/75 opacity-0 transition duration-200 group-hover:opacity-100">عرض المحتوى <span aria-hidden="true">←</span></span>
+					</div>
+				</a>
+			);
+		})}
+	</div>
+</div>
+
+<style>
+	.orbit-shell::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		pointer-events: none;
+		opacity: 0.12;
+		background-image: radial-gradient(circle at 1px 1px, white 1px, transparent 0);
+		background-size: 24px 24px;
+		mask-image: linear-gradient(to bottom, black, transparent 75%);
+	}
+
+	.orbit-card {
+		box-shadow: inset 0 1px 0 rgba(255,255,255,.55), 0 16px 28px -20px rgba(0,0,0,.9);
+	}
+
+	.surface-royal {
+		color: white;
+		border-color: rgba(255,255,255,.38);
+		background: linear-gradient(145deg, #60a5fa, #1d4ed8);
+	}
+	.surface-emerald {
+		color: white;
+		border-color: rgba(255,255,255,.38);
+		background: linear-gradient(145deg, #34d399, #00bb7f);
+	}
+	.surface-sunset {
+		color: white;
+		border-color: rgba(255,255,255,.38);
+		background: linear-gradient(145deg, #fbbf24, #f59e0b);
+	}
+	.surface-orange {
+		color: white;
+		border-color: rgba(255,255,255,.38);
+		background: linear-gradient(145deg, #fb923c, #fe6e00);
+	}
+	.surface-sky {
+		color: white;
+		border-color: rgba(255,255,255,.38);
+		background: linear-gradient(145deg, #22d3ee, #0ea5e9);
+	}
+	.surface-violet {
+		color: white;
+		border-color: rgba(255,255,255,.38);
+		background: linear-gradient(145deg, #a855f7, #7c3aed);
+	}
+
+	.surface-royal h4,
+	.surface-emerald h4,
+	.surface-sunset h4,
+	.surface-orange h4,
+	.surface-sky h4,
+	.surface-violet h4 {
+		color: white;
+	}
+
+	@media (min-width: 1280px) {
+		.orbit-card {
+			grid-column: var(--desktop-column);
+			grid-row: var(--desktop-row);
+		}
+	}
+</style>

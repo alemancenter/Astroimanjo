@@ -1,0 +1,64 @@
+---
+interface Props {
+	files: any[];
+	countryCode: string;
+	headingId?: string;
+}
+
+const { files, countryCode, headingId = 'article-attachments-heading' } = Astro.props;
+
+function formatSize(bytes?: number): string {
+	if (!bytes) return 'حجم غير محدد';
+	const kb = bytes / 1024;
+	if (kb < 1024) return `${Math.round(kb).toLocaleString('ar-JO')} KB`;
+	return `${(kb / 1024).toLocaleString('ar-JO', { maximumFractionDigits: 1 })} MB`;
+}
+
+function fileType(file: any): string {
+	const type = String(file?.file_type || file?.mime_type?.split('/').pop() || '').replace(/^\./, '').trim();
+	return type ? type.toUpperCase() : 'FILE';
+}
+---
+
+<section class="overflow-hidden rounded-2xl border border-graphite-200 bg-white shadow-soft dark:border-graphite-700 dark:bg-graphite-900" aria-labelledby={headingId}>
+	<header class="border-b border-graphite-200 bg-gradient-to-l from-royal-50 via-white to-sunset-50 px-4 py-4 dark:border-graphite-700 dark:from-royal-950/60 dark:via-graphite-900 dark:to-sunset-900/20">
+		<div class="flex items-center gap-3">
+			<span class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-royal-600 text-white shadow-sm">
+				<svg class="size-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Zm0 0v6h6M9 13h6m-6 4h6" /></svg>
+			</span>
+			<div class="min-w-0 flex-1">
+				<span class="block text-[10px] font-extrabold text-royal-600 dark:text-royal-300">جاهزة للتنزيل</span>
+				<h2 id={headingId} class="text-sm font-black text-graphite-950 dark:text-white">الملفات المرفقة</h2>
+			</div>
+			<span class="flex size-8 items-center justify-center rounded-full bg-white text-xs font-black text-royal-700 shadow-sm dark:bg-graphite-800 dark:text-royal-200">{files.length.toLocaleString('ar-JO')}</span>
+		</div>
+	</header>
+
+	<div class="space-y-3 p-3">
+		{files.map((file: any, index: number) => (
+			<article class="overflow-hidden rounded-xl border border-graphite-200 bg-graphite-50/70 transition hover:border-royal-300 hover:bg-white dark:border-graphite-700 dark:bg-graphite-800/50 dark:hover:border-royal-700 dark:hover:bg-graphite-800">
+				<div class="flex min-w-0 items-start gap-3 p-3">
+					<span class="relative flex size-11 shrink-0 items-center justify-center rounded-xl bg-white text-[10px] font-black text-royal-700 shadow-sm ring-1 ring-graphite-100 dark:bg-graphite-900 dark:text-royal-300 dark:ring-graphite-700">
+						{fileType(file)}
+						<i class="absolute -bottom-1 -left-1 flex size-4 items-center justify-center rounded-full bg-sunset-400 text-[8px] font-black not-italic text-white">{index + 1}</i>
+					</span>
+					<div class="min-w-0 flex-1">
+						<a href={`/${countryCode}/download/${file.id}`} class="group block rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-royal-500">
+							<h3 class="line-clamp-2 text-xs font-extrabold leading-5 text-graphite-900 transition group-hover:text-royal-700 dark:text-white dark:group-hover:text-royal-300">{file.file_name || `ملف ${file.id}`}</h3>
+						</a>
+						<div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-semibold text-graphite-400">
+							<span>{formatSize(file.file_size)}</span>
+							<span>{Number(file.views_count ?? file.view_count ?? 0).toLocaleString('ar-JO')} مشاهدة</span>
+							<span>{Number(file.download_count ?? 0).toLocaleString('ar-JO')} تنزيل</span>
+						</div>
+					</div>
+				</div>
+
+				<a href={`/${countryCode}/download/${file.id}`} class="flex min-h-10 items-center justify-center gap-2 border-t border-graphite-200 bg-white px-3 py-2 text-xs font-extrabold text-royal-700 transition hover:bg-royal-600 hover:text-white dark:border-graphite-700 dark:bg-graphite-900 dark:text-royal-300 dark:hover:bg-royal-600 dark:hover:text-white">
+					<svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" /></svg>
+					عرض صفحة التنزيل
+				</a>
+			</article>
+		))}
+	</div>
+</section>

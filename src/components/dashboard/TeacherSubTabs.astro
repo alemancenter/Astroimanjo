@@ -1,0 +1,34 @@
+---
+interface Props { active: string; }
+const { active } = Astro.props;
+const tabs = [
+	{ key: 'orders', label: 'طلبات الاشتراك', href: '/dashboard/teacher-subscriptions' },
+	{ key: 'subscriptions', label: 'الاشتراكات', href: '/dashboard/teacher-subscriptions/subscriptions' },
+	{ key: 'teachers', label: 'المعلمون', href: '/dashboard/teacher-subscriptions/teachers' },
+	{ key: 'premium-files', label: 'الملفات المميزة', href: '/dashboard/teacher-subscriptions/premium-files' },
+	{ key: 'reports', label: 'التقارير', href: '/dashboard/teacher-subscriptions/reports' },
+];
+---
+
+<nav class="teacher-sub-nav" aria-label="أقسام اشتراكات المعلمين">
+	<div class="teacher-sub-nav-scroll">
+		{tabs.map((tab) => (
+			<a href={tab.href} class:list={['teacher-sub-nav-link', { 'is-active': active === tab.key }]} aria-current={active === tab.key ? 'page' : undefined}>
+				<span>{tab.label}</span>
+			</a>
+		))}
+	</div>
+</nav>
+
+<style>
+	.teacher-sub-nav{margin-bottom:1rem;border:1px solid #dfe6ee;border-radius:.75rem;background:#fff;padding:.3rem;box-shadow:0 1px 2px rgb(15 23 42/.04)}
+	.teacher-sub-nav-scroll{display:flex;gap:.2rem;overflow-x:auto;scrollbar-width:thin}
+	.teacher-sub-nav-link{display:inline-flex;min-height:2.45rem;flex:1;align-items:center;justify-content:center;border:1px solid transparent;border-radius:.52rem;padding:.45rem .8rem;color:#64748b;font-size:.76rem;font-weight:800;white-space:nowrap;transition:border-color .15s,background-color .15s,color .15s}
+	.teacher-sub-nav-link:hover{background:#f6f8fb;color:#1a4d8f}
+	.teacher-sub-nav-link.is-active{border-color:#c9d9ec;background:#edf4fc;color:#1a4d8f;box-shadow:0 1px 2px rgb(26 77 143/.08)}
+	:global(.dark) .teacher-sub-nav{border-color:#334155;background:#0f2547}
+	:global(.dark) .teacher-sub-nav-link{color:#94a3b8}
+	:global(.dark) .teacher-sub-nav-link:hover{background:#132d50;color:#dbeafe}
+	:global(.dark) .teacher-sub-nav-link.is-active{border-color:#315b8f;background:#17365f;color:#bfdbfe}
+	@media(max-width:720px){.teacher-sub-nav-link{flex:none;padding-inline:.75rem;font-size:.73rem}}
+</style>

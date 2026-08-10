@@ -1,0 +1,98 @@
+---
+import Breadcrumbs from './ui/Breadcrumbs.astro';
+import EmptyState from './ui/EmptyState.astro';
+import ErrorState from './ui/ErrorState.astro';
+import SubjectCategoryIcon from './ui/SubjectCategoryIcon.astro';
+import { SUBJECT_FILE_CATEGORIES } from '../lib/subject-categories';
+
+interface Props {
+	countryCode: string;
+	subject: any;
+	semesters: any[];
+	schoolClass: any;
+	semestersOk: boolean;
+	semestersMessage: string;
+}
+
+const {
+	countryCode,
+	subject,
+	semesters,
+	schoolClass,
+	semestersOk,
+	semestersMessage,
+} = Astro.props;
+
+const toneClasses: Record<string, string> = {
+	blue: 'border-royal-200 bg-royal-50 text-royal-700 hover:border-royal-400 hover:bg-royal-100/80 dark:border-royal-900 dark:bg-royal-950/50 dark:text-royal-200',
+	emerald: 'border-emerald-brand-200 bg-emerald-brand-50 text-emerald-brand-700 hover:border-emerald-brand-400 hover:bg-emerald-brand-100/80 dark:border-emerald-brand-900 dark:bg-emerald-brand-950/50 dark:text-emerald-brand-200',
+	rose: 'border-rose-200 bg-rose-50 text-rose-700 hover:border-rose-400 hover:bg-rose-100/80 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200',
+	amber: 'border-amber-200 bg-amber-50 text-amber-700 hover:border-amber-400 hover:bg-amber-100/80 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200',
+	cyan: 'border-cyan-200 bg-cyan-50 text-cyan-700 hover:border-cyan-400 hover:bg-cyan-100/80 dark:border-cyan-900 dark:bg-cyan-950/40 dark:text-cyan-200',
+};
+---
+
+{
+	!semestersOk || !subject ? (
+		<div class="container-shell py-14"><ErrorState message={semestersOk ? 'المادة الدراسية غير موجودة.' : semestersMessage} /></div>
+	) : (
+		<>
+			<section class="border-b border-graphite-200 bg-white dark:border-graphite-800 dark:bg-graphite-950">
+				<div class="container-shell flex flex-col gap-6 py-9 sm:py-12 md:flex-row md:items-end md:justify-between">
+					<div class="max-w-3xl">
+						<span class="mb-3 inline-flex items-center gap-2 text-sm font-extrabold text-royal-600 dark:text-royal-300">
+							<svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m12 3 9 4.5-9 4.5-9-4.5L12 3Zm-7 7v5l7 4 7-4v-5" /></svg>
+							الفصول والتصنيفات
+						</span>
+						<h1 class="text-3xl font-black leading-tight text-graphite-950 sm:text-4xl dark:text-white">{subject.subject_name}</h1>
+						<p class="mt-3 text-sm font-medium leading-7 text-graphite-600 sm:text-base dark:text-graphite-300">اختر الفصل الدراسي والتصنيف المطلوب للوصول إلى الخطط، أوراق العمل، الاختبارات، والملفات التعليمية.</p>
+					</div>
+					<a href={`/${countryCode}/articles?class_id=${schoolClass?.id || subject.grade_level}&subject_id=${subject.id}`} class="btn-outline shrink-0 border-royal-200 bg-royal-50 text-royal-700 hover:bg-royal-100 dark:border-royal-800 dark:bg-royal-950 dark:text-royal-200">
+						<svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke-width="2"/><path stroke-linecap="round" stroke-width="2" d="m20 20-4-4"/></svg>
+						ابحث في الملفات
+					</a>
+				</div>
+			</section>
+
+			<Breadcrumbs items={[
+				{ label: 'الصفوف الدراسية', href: `/${countryCode}/classes` },
+				...(schoolClass ? [{ label: schoolClass.grade_name, href: `/${countryCode}/lesson/${schoolClass.id}` }] : []),
+				{ label: subject.subject_name },
+			]} />
+
+			<div class="page-shell pt-7 sm:pt-9">
+				{semesters.length > 0 ? (
+					<div class="space-y-6">
+						{semesters.map((semester: any) => (
+							<section class="overflow-hidden rounded-2xl border border-graphite-200 bg-white shadow-soft transition duration-300 hover:border-royal-200 hover:shadow-lifted dark:border-graphite-700 dark:bg-graphite-900 dark:hover:border-royal-800">
+								<header class="border-b border-graphite-200 bg-gradient-to-l from-royal-50 via-white to-graphite-50 p-5 sm:p-6 dark:border-graphite-700 dark:from-royal-950/70 dark:via-graphite-900 dark:to-graphite-800/50">
+									<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+										<div>
+											<span class="inline-flex items-center gap-2 rounded-full bg-royal-100 px-3 py-1 text-xs font-extrabold text-royal-700 dark:bg-royal-900 dark:text-royal-200">
+												<svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z" /></svg>
+												{subject.subject_name}
+											</span>
+											<h2 class="mt-3 text-xl font-black text-graphite-950 sm:text-2xl dark:text-white">{semester.semester_name}</h2>
+											<p class="mt-1 text-sm text-graphite-500 dark:text-graphite-400">اختر نوع المحتوى الذي تريد تصفحه لهذا الفصل.</p>
+										</div>
+										<span class="w-fit rounded-xl border border-graphite-200 bg-white px-4 py-3 text-sm font-extrabold text-graphite-600 shadow-sm dark:border-graphite-700 dark:bg-graphite-900 dark:text-graphite-300">{SUBJECT_FILE_CATEGORIES.length.toLocaleString('ar-EG')} تصنيفات متاحة</span>
+									</div>
+								</header>
+
+								<div class="grid grid-cols-1 gap-3 p-5 sm:grid-cols-2 sm:p-6 lg:grid-cols-5">
+									{SUBJECT_FILE_CATEGORIES.map((category) => (
+										<a href={`/${countryCode}/lesson/subjects/${subject.id}/articles/${semester.id}/${category.key}`} class:list={['group rounded-2xl border p-4 text-center transition duration-200 hover:-translate-y-0.5 hover:shadow-md', toneClasses[category.tone]]}>
+											<SubjectCategoryIcon category={category.key} class="mx-auto mb-3 size-7 transition duration-200 group-hover:scale-110" />
+											<h3 class="text-sm font-black">{category.label}</h3>
+											<p class="mt-1 text-xs opacity-75">عرض الملفات</p>
+										</a>
+									))}
+								</div>
+							</section>
+						))}
+					</div>
+				) : <EmptyState message="لا توجد فصول دراسية متاحة حالياً لهذه المادة." />}
+			</div>
+		</>
+	)
+}

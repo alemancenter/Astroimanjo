@@ -1,0 +1,12 @@
+---
+interface Props { currentPage: number; lastPage: number; url: URL; }
+const { currentPage, lastPage, url } = Astro.props;
+function pageHref(page: number): string { const u = new URL(url); u.searchParams.set('page', String(page)); return `${u.pathname}?${u.searchParams.toString()}`; }
+const pages: (number | '...')[] = [];
+if (lastPage <= 7) { for (let i = 1; i <= lastPage; i++) pages.push(i); } else { pages.push(1); if (currentPage > 3) pages.push('...'); for (let i = Math.max(2, currentPage - 1); i <= Math.min(lastPage - 1, currentPage + 1); i++) pages.push(i); if (currentPage < lastPage - 2) pages.push('...'); pages.push(lastPage); }
+---
+{lastPage > 1 && <nav class="mt-10 flex flex-wrap items-center justify-center gap-2" aria-label="ترقيم الصفحات">
+	{currentPage > 1 ? <a href={pageHref(currentPage - 1)} class="btn-outline px-4">السابق</a> : <span class="btn-outline pointer-events-none px-4 opacity-40">السابق</span>}
+	{pages.map((p) => p === '...' ? <span class="px-2 text-graphite-400">…</span> : <a href={pageHref(p)} aria-label={`الصفحة ${p}`} aria-current={p === currentPage ? 'page' : undefined} class={`flex size-11 items-center justify-center rounded-xl text-sm font-bold transition ${p === currentPage ? 'bg-royal-600 text-white shadow-md' : 'border border-graphite-200 bg-white text-graphite-700 hover:border-royal-300 hover:text-royal-700 dark:border-graphite-700 dark:bg-graphite-900 dark:text-graphite-200'}`}>{p}</a>)}
+	{currentPage < lastPage ? <a href={pageHref(currentPage + 1)} class="btn-outline px-4">التالي</a> : <span class="btn-outline pointer-events-none px-4 opacity-40">التالي</span>}
+</nav>}

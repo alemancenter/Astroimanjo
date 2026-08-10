@@ -1,0 +1,14 @@
+---
+interface Props { schoolClass: any; href: string; index?: number; }
+const { schoolClass, href, index = 0 } = Astro.props;
+---
+
+<a href={href} class="interactive-card group relative flex min-h-32 items-center gap-4 overflow-hidden p-4 sm:p-5">
+	<div class="absolute inset-y-0 right-0 w-1 bg-royal-600"></div>
+	<span class="flex size-12 flex-none items-center justify-center rounded-2xl bg-royal-50 text-sm font-extrabold text-royal-700 ring-1 ring-royal-100 transition group-hover:bg-royal-600 group-hover:text-white dark:bg-royal-950 dark:text-royal-200 dark:ring-royal-900">{String(index + 1).padStart(2, '0')}</span>
+	<div class="min-w-0 flex-1">
+		<p class="mb-1 text-[11px] font-bold text-graphite-500 dark:text-graphite-400">الصف الدراسي</p>
+		<h3 class="text-[15px] font-bold leading-6 text-graphite-950 transition group-hover:text-royal-700 sm:text-base dark:text-white dark:group-hover:text-royal-300">{schoolClass.grade_name}</h3>
+	</div>
+	<svg class="hidden size-5 flex-none text-graphite-300 transition group-hover:-translate-x-1 group-hover:text-royal-600 sm:block dark:text-graphite-600 dark:group-hover:text-royal-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m15 19-7-7 7-7" /></svg>
+</a>

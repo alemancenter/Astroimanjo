@@ -1,0 +1,32 @@
+---
+import DashboardLayout from '../../../../layouts/DashboardLayout.astro';
+import DashboardAlert from '../../../../components/ui/DashboardAlert.astro';
+import PostForm from '../../../../components/dashboard/PostForm.astro';
+import { requireDashboard } from '../../../../lib/auth';
+import { apiFetch, apiFetchList } from '../../../../lib/api';
+
+const guard = await requireDashboard(Astro, 'manage posts');
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+
+const { id } = Astro.params;
+const [postResult, { items: categories }] = await Promise.all([
+	apiFetch<any>(`/dashboard/posts/${id}`, {
+		countryId: Astro.locals.countryId,
+		cookieHeader: `token=${Astro.cookies.get('token')?.value}`,
+	}),
+	apiFetchList<any>('/categories', { countryId: Astro.locals.countryId }),
+]);
+const post = postResult.data;
+---
+
+<DashboardLayout title="تعديل منشور" user={user}>
+	<DashboardAlert />
+	{
+		!postResult.ok || !post ? (
+			<p class="text-red-600 dark:text-red-400">{postResult.ok ? 'المنشور غير موجود.' : postResult.message}</p>
+		) : (
+			<PostForm post={post} categories={categories} countryId={Astro.locals.countryId} />
+		)
+	}
+</DashboardLayout>

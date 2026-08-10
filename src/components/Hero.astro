@@ -1,0 +1,90 @@
+---
+interface Props {
+	countryCode: string;
+}
+
+const { countryCode } = Astro.props;
+---
+
+<section class="relative isolate overflow-hidden bg-graphite-950 text-white">
+	<div class="pointer-events-none absolute inset-0 -z-10" aria-hidden="true">
+		<div class="absolute inset-0 bg-[linear-gradient(125deg,#061a3a_0%,#12377f_52%,#172554_100%)]"></div>
+		<div class="absolute -right-40 -top-48 size-[38rem] rounded-full bg-royal-500/18 blur-[110px]"></div>
+		<div class="absolute -bottom-56 left-0 size-[30rem] rounded-full bg-emerald-brand-600/10 blur-[110px]"></div>
+		<div class="absolute inset-0 opacity-[.07]" style="background-image: radial-gradient(circle at 1px 1px, white 1px, transparent 0); background-size: 26px 26px;"></div>
+		<svg class="absolute -bottom-px left-0 h-12 w-full text-white dark:text-graphite-950" viewBox="0 0 1440 70" preserveAspectRatio="none"><path d="M0 42c220-34 410 28 655 5 283-27 486-19 785 7v16H0V42Z" fill="currentColor" /></svg>
+	</div>
+
+	<div class="container-shell pb-24 pt-14 sm:pb-28 sm:pt-20 lg:pb-32 lg:pt-24">
+		<div class="grid min-w-0 items-center gap-12 lg:grid-cols-[1.12fr_.88fr] lg:gap-16 xl:gap-20">
+			<div class="min-w-0">
+				<div class="mb-6 inline-flex items-center gap-2 rounded-full border border-sunset-300/25 bg-sunset-400/10 px-4 py-2 text-xs font-extrabold text-sunset-200 sm:text-sm">
+					<svg class="size-4 fill-sunset-400 text-sunset-400" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2.5 2.85 5.78 6.38.93-4.62 4.5 1.09 6.35L12 17.06l-5.7 3 1.09-6.35-4.62-4.5 6.38-.93L12 2.5Z" /></svg>
+					منصة تعليمية عربية للطالب والمعلم وولي الأمر
+				</div>
+
+				<h1 class="max-w-3xl text-[2rem] font-extrabold leading-[1.38] tracking-[-0.025em] sm:text-[2.4rem] lg:text-[2.75rem] xl:text-[2.9rem]">
+					<span class="lg:whitespace-nowrap">موقع الإيمان التعليمي</span>
+					<span class="mt-2 block bg-gradient-to-l from-emerald-brand-300 via-royal-200 to-indigo-300 bg-clip-text text-[.66em] font-bold leading-[1.55] text-transparent">عالم المعلم العربي في موقع واحد</span>
+				</h1>
+
+				<p class="mt-5 max-w-2xl text-[15px] leading-8 text-graphite-300 sm:text-base sm:leading-8">
+					ملفات دراسية، ملخصات، اختبارات، خطط وأوراق عمل مرتبة حسب الدولة والصف والمادة؛ جاهزة لتصل إليها في الوقت الذي تحتاجها فيه.
+				</p>
+
+				<div class="mt-8 flex flex-col gap-3 sm:flex-row">
+					<a href={`/${countryCode}/classes`} class="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-royal-600 px-7 py-3.5 text-base font-extrabold text-white shadow-xl shadow-royal-950/25 transition hover:-translate-y-0.5 hover:bg-royal-500">
+						اختر صفك الدراسي
+						<svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m15 19-7-7 7-7" /></svg>
+					</a>
+					<a href={`/${countryCode}/articles`} class="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/5 px-7 py-3.5 text-base font-extrabold text-white transition hover:border-white/40 hover:bg-white/10">استكشف المحتوى</a>
+				</div>
+
+				<dl class="mt-10 grid max-w-2xl grid-cols-2 gap-x-5 gap-y-6 border-t border-white/10 pt-7 sm:grid-cols-4">
+					<div><dt class="text-xs font-bold text-graphite-400">ملف تعليمي</dt><dd class="mt-1 text-xl font-extrabold text-white">+2400</dd></div>
+					<div><dt class="text-xs font-bold text-graphite-400">طالب ومعلم</dt><dd class="mt-1 text-xl font-extrabold text-white">+50K</dd></div>
+					<div><dt class="text-xs font-bold text-graphite-400">قسم دراسي</dt><dd class="mt-1 text-xl font-extrabold text-white">+18</dd></div>
+					<div><dt class="text-xs font-bold text-graphite-400">دعم مستمر</dt><dd class="mt-1 text-xl font-extrabold text-white">24/7</dd></div>
+				</dl>
+			</div>
+
+			<div class="min-w-0">
+				<div class="relative mx-auto w-full max-w-xl">
+					<div class="absolute -inset-4 rounded-[2.2rem] bg-gradient-to-br from-royal-400/15 to-emerald-brand-400/10 blur-2xl" aria-hidden="true"></div>
+					<div class="relative overflow-hidden rounded-[2rem] border border-white/12 bg-white/[.07] p-4 shadow-2xl backdrop-blur-xl sm:p-5">
+						<div class="mb-4 rounded-2xl border border-white/10 bg-white/[.06] p-4 sm:p-5">
+							<div class="mb-3 flex items-center gap-3">
+								<span class="flex size-10 flex-none items-center justify-center rounded-xl bg-royal-500 text-white"><svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m21 21-4.35-4.35m2.35-5.65a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z" /></svg></span>
+								<div><p class="text-xs font-bold text-emerald-brand-300">المكتبة التعليمية</p><h2 class="mt-0.5 font-black text-white">ما الذي تبحث عنه اليوم؟</h2></div>
+							</div>
+							<form action={`/${countryCode}/articles`} method="get" class="flex min-w-0 items-center gap-2 rounded-xl bg-white p-1.5" role="search">
+								<label for="hero-search" class="sr-only">ابحث عن ملف أو درس</label>
+								<input id="hero-search" name="q" type="search" class="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm font-semibold text-graphite-950 outline-none placeholder:font-normal placeholder:text-graphite-400" placeholder="مثال: اختبار رياضيات" />
+								<button type="submit" class="btn-primary flex-none px-5">بحث</button>
+							</form>
+						</div>
+
+						<nav class="grid grid-cols-2 gap-3" aria-label="الوصول السريع">
+							<a href={`/${countryCode}/articles`} class="group rounded-2xl border border-white/10 bg-white/[.06] p-4 transition hover:border-royal-300/35 hover:bg-royal-500/15 sm:p-5">
+								<span class="mb-5 flex size-10 items-center justify-center rounded-xl bg-royal-500/25 text-royal-200 ring-1 ring-royal-300/15"><svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.59L19 9.41V19a2 2 0 0 1-2 2Z" /></svg></span>
+								<strong class="block text-sm text-white">ملفات دراسية</strong><span class="mt-1 block text-xs leading-5 text-graphite-400">محتوى جاهز للتحميل</span>
+							</a>
+							<a href="/teachers" class="group rounded-2xl border border-white/10 bg-white/[.06] p-4 transition hover:border-emerald-brand-300/35 hover:bg-emerald-brand-500/15 sm:p-5">
+								<span class="mb-5 flex size-10 items-center justify-center rounded-xl bg-emerald-brand-500/20 text-emerald-brand-200 ring-1 ring-emerald-brand-300/15"><svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m7-10a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm13 10v-2a4 4 0 0 0-3-3.87" /></svg></span>
+								<strong class="block text-sm text-white">بوابة المعلمين</strong><span class="mt-1 block text-xs leading-5 text-graphite-400">أدوات وخدمات تعليمية</span>
+							</a>
+							<a href="/calendar" class="group rounded-2xl border border-white/10 bg-white/[.06] p-4 transition hover:border-sunset-300/35 hover:bg-sunset-400/10 sm:p-5">
+								<span class="mb-5 flex size-10 items-center justify-center rounded-xl bg-sunset-400/20 text-sunset-200 ring-1 ring-sunset-300/15"><svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3M5 11h14M5 21h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2Z" /></svg></span>
+								<strong class="block text-sm text-white">التقويم الدراسي</strong><span class="mt-1 block text-xs leading-5 text-graphite-400">مواعيد ودروس منظمة</span>
+							</a>
+							<a href={`/${countryCode}/articles`} class="group rounded-2xl border border-white/10 bg-white/[.06] p-4 transition hover:border-white/25 hover:bg-white/10 sm:p-5">
+								<span class="mb-5 flex size-10 items-center justify-center rounded-xl bg-white/10 text-white ring-1 ring-white/10"><svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m13 2-2 7h7l-9 13 2-8H4l9-12Z" /></svg></span>
+								<strong class="block text-sm text-white">محتوى جديد</strong><span class="mt-1 block text-xs leading-5 text-graphite-400">إضافات يومية موثوقة</span>
+							</a>
+						</nav>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+</section>

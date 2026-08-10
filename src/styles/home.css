@@ -1,0 +1,14 @@
+@import "tailwindcss/utilities" source(none);
+
+@reference "./global.css";
+
+@source "../pages/index.astro";
+@source "../components/Hero.astro";
+@source "../components/AudiencePaths.astro";
+@source "../components/SchoolPromo.astro";
+@source "../components/SectionWrapper.astro";
+@source "../components/HomeClassDirectory.astro";
+@source "../components/ui/ArticleCard.astro";
+@source "../components/ui/CategoryCard.astro";
+@source "../components/ui/EmptyState.astro";
+@source "../components/ui/ErrorState.astro";

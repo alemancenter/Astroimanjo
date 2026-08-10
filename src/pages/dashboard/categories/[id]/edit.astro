@@ -1,0 +1,36 @@
+---
+import DashboardLayout from '../../../../layouts/DashboardLayout.astro';
+import DashboardAlert from '../../../../components/ui/DashboardAlert.astro';
+import CategoryForm from '../../../../components/dashboard/CategoryForm.astro';
+import { requireDashboard } from '../../../../lib/auth';
+import { apiFetch, apiFetchList } from '../../../../lib/api';
+
+const guard = await requireDashboard(Astro, 'manage categories');
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+
+const { id } = Astro.params;
+const [catResult, { items: categories }] = await Promise.all([
+	apiFetch<any>(`/dashboard/categories/${id}`, {
+		countryId: Astro.locals.countryId,
+		cookieHeader: `token=${Astro.cookies.get('token')?.value}`,
+	}),
+	apiFetchList<any>('/dashboard/categories', {
+		countryId: Astro.locals.countryId,
+		cookieHeader: `token=${Astro.cookies.get('token')?.value}`,
+		params: { per_page: 200 },
+	}),
+]);
+const category = catResult.data;
+---
+
+<DashboardLayout title="تعديل قسم" user={user}>
+	<DashboardAlert />
+	{
+		!catResult.ok || !category ? (
+			<p class="text-red-600 dark:text-red-400">{catResult.ok ? 'القسم غير موجود.' : catResult.message}</p>
+		) : (
+			<CategoryForm category={category} categories={categories} countryId={Astro.locals.countryId} />
+		)
+	}
+</DashboardLayout>

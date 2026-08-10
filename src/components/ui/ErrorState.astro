@@ -1,0 +1,10 @@
+---
+interface Props { message?: string; }
+const { message = 'حدث خطأ أثناء جلب البيانات. حاول تحديث الصفحة.' } = Astro.props;
+---
+<div class="surface-card flex flex-col items-center justify-center border-red-200 px-5 py-16 text-center dark:border-red-900">
+	<div class="mb-5 flex size-16 items-center justify-center rounded-2xl bg-red-50 text-red-600 dark:bg-red-950/50 dark:text-red-300"><svg class="size-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" /></svg></div>
+	<h3 class="mb-2 font-extrabold text-graphite-900 dark:text-white">تعذّر عرض المحتوى</h3>
+	<p class="mb-5 max-w-md text-sm leading-6 text-graphite-500 dark:text-graphite-400">{message}</p>
+	<a href={Astro.url.pathname} class="btn-outline">إعادة المحاولة</a>
+</div>

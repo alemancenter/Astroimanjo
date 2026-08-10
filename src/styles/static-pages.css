@@ -1,0 +1,61 @@
+@import "tailwindcss/utilities" source(none);
+
+@reference "./global.css";
+
+@source "../pages/about.astro";
+@source "../pages/about-us.astro";
+@source "../pages/cookie-policy.astro";
+@source "../pages/copyright.astro";
+@source "../pages/disclaimer.astro";
+@source "../pages/editorial-policy.astro";
+@source "../pages/privacy-policy.astro";
+@source "../pages/terms-of-service.astro";
+@source "../components/ui/Breadcrumbs.astro";
+@source "../components/ui/ProseContainer.astro";
+
+@layer components {
+	.prose-edu {
+		@apply text-[1.05rem] leading-9 text-graphite-700 dark:text-graphite-200;
+	}
+
+	.prose-edu h2 {
+		@apply mt-10 mb-4 border-r-4 border-royal-600 pr-4 text-xl font-extrabold leading-9 text-graphite-950 sm:text-2xl dark:border-royal-400 dark:text-white;
+	}
+
+	.prose-edu h3 {
+		@apply mt-8 mb-3 text-xl font-bold text-graphite-900 dark:text-graphite-50;
+	}
+
+	.prose-edu p {
+		@apply mb-5;
+	}
+
+	.prose-edu strong {
+		@apply font-extrabold text-graphite-950 dark:text-white;
+	}
+
+	.prose-edu ul,
+	.prose-edu ol {
+		@apply mb-5 space-y-2 pr-6;
+	}
+
+	.prose-edu ul {
+		@apply list-disc;
+	}
+
+	.prose-edu ol {
+		@apply list-decimal;
+	}
+
+	.prose-edu a {
+		@apply font-semibold text-royal-600 underline decoration-royal-200 underline-offset-4 hover:text-royal-800 dark:text-royal-300;
+	}
+
+	.prose-edu img {
+		@apply my-8 rounded-2xl;
+	}
+
+	.prose-edu blockquote {
+		@apply my-6 rounded-xl border-r-4 border-emerald-brand-600 bg-emerald-brand-50 px-5 py-4 text-emerald-brand-900 dark:bg-emerald-brand-950/60 dark:text-emerald-brand-100;
+	}
+}

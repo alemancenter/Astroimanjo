@@ -1,0 +1,134 @@
+---
+import BrandMark from './ui/BrandMark.astro';
+import SocialIcon from './ui/SocialIcon.astro';
+import { getCountryById } from '../lib/countries';
+
+interface SocialLinks {
+	facebook?: string;
+	twitter?: string;
+	instagram?: string;
+	linkedin?: string;
+	tiktok?: string;
+	whatsapp?: string;
+}
+
+interface Props {
+	siteName?: string;
+	siteLogo?: string | null;
+	footerText?: string;
+	socialLinks?: SocialLinks;
+}
+
+const {
+	siteName = 'موقع الإيمان التعليمي',
+	siteLogo = null,
+	footerText,
+	socialLinks = {},
+} = Astro.props;
+const currentYear = new Date().getFullYear();
+// Footer renders on both bare pages (Astro.locals.countryCode unset) and /{countryCode}/...
+// pages (set from the URL path) — countryId is always set by middleware either way.
+const countryCode = getCountryById(Astro.locals.countryId).code;
+
+// These come straight from the dashboard's admin-editable settings (Settings → عام), passed
+// through as raw strings with no URL-scheme validation on either the frontend or backend
+// save path. Rendered directly as `href`, an href isn't just an href — a `javascript:...`
+// value would execute in every visitor's browser on click. Restricting to http(s) (or a
+// bare "wa.me"/phone-style value for WhatsApp) closes that off without needing to trust that
+// upstream validation stays correct forever.
+function isSafeExternalUrl(value: string): boolean {
+	try {
+		const url = new URL(value);
+		return url.protocol === 'https:' || url.protocol === 'http:';
+	} catch {
+		return false;
+	}
+}
+const socialEntries = (Object.entries(socialLinks) as [keyof SocialLinks, string | undefined][])
+	.filter((entry): entry is [keyof SocialLinks, string] => !!entry[1] && isSafeExternalUrl(entry[1]));
+---
+
+<footer class="mt-auto overflow-hidden bg-graphite-950 text-white">
+	<div class="h-1 bg-gradient-to-l from-royal-600 via-emerald-brand-600 to-sunset-400"></div>
+	<div class="container-shell py-14 sm:py-16">
+		<div class="grid gap-10 md:grid-cols-12">
+			<div class="md:col-span-5">
+				<a href="/" class="mb-5 inline-flex items-center gap-3 rounded-xl" aria-label={`${siteName} - الرئيسية`}>
+					{siteLogo ? <img src={siteLogo} alt="" class="size-12 rounded-xl object-contain" width="48" height="48" loading="lazy" decoding="async" /> : <BrandMark class="size-12" />}
+					<span class="text-xl font-black">{siteName}</span>
+				</a>
+				<p class="max-w-md text-sm leading-7 text-graphite-300">{footerText || 'عالم المعلم العربي في موقع واحد؛ محتوى تعليمي وملفات دراسية وخطط ومقالات تخدم الطالب والمعلم وولي الأمر بصورة منظمة وموثوقة.'}</p>
+				<div class="mt-6 flex flex-wrap gap-2 text-xs font-bold">
+					<span class="rounded-full bg-royal-600/20 px-3 py-1.5 text-royal-200">محتوى منظم</span>
+					<span class="rounded-full bg-emerald-brand-600/20 px-3 py-1.5 text-emerald-brand-200">تعلم موثوق</span>
+					<span class="rounded-full bg-sunset-400/15 px-3 py-1.5 text-sunset-200">تحديث مستمر</span>
+				</div>
+				{socialEntries.length > 0 && (
+					<div class="mt-6 flex flex-wrap gap-2">
+						{socialEntries.map(([platform, url]) => (
+							<a
+								href={url}
+								target="_blank"
+								rel="noopener noreferrer"
+								aria-label={platform}
+								class="flex size-9 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-sunset-400 hover:text-graphite-950"
+							>
+								<SocialIcon name={platform} class="size-4" />
+							</a>
+						))}
+					</div>
+				)}
+			</div>
+
+			<div class="md:col-span-3 md:col-start-7">
+				<h2 class="mb-4 text-sm font-extrabold text-white">استكشف الموقع</h2>
+				<ul class="space-y-3 text-sm text-graphite-300">
+					<li><a href={`/${countryCode}/classes`} class="transition hover:text-sunset-300">الدروس والمواد</a></li>
+					<li><a href={`/${countryCode}/articles`} class="transition hover:text-sunset-300">المقالات والملفات</a></li>
+					<li><a href={`/${countryCode}/categories`} class="transition hover:text-sunset-300">الأقسام التعليمية</a></li>
+					<li><a href="/calendar" class="transition hover:text-sunset-300">التقويم الدراسي</a></li>
+					<li><a href="/teachers" class="transition hover:text-sunset-300">بوابة المعلمين</a></li>
+				</ul>
+			</div>
+
+			<div class="md:col-span-3">
+				<h2 class="mb-4 text-sm font-extrabold text-white">المعلومات والدعم</h2>
+				<ul class="space-y-3 text-sm text-graphite-300">
+					<li><a href="/about-us" class="transition hover:text-sunset-300">من نحن</a></li>
+					<li><a href="/contact-us" class="transition hover:text-sunset-300">اتصل بنا</a></li>
+					<li><a href="/faq" class="transition hover:text-sunset-300">الأسئلة الشائعة</a></li>
+					<li><a href="/privacy-policy" class="transition hover:text-sunset-300">سياسة الخصوصية</a></li>
+					<li><a href="/terms-of-service" class="transition hover:text-sunset-300">شروط الاستخدام</a></li>
+					<li><a href="/cookie-policy" class="transition hover:text-sunset-300">سياسة ملفات الارتباط</a></li>
+					<li><a href="/disclaimer" class="transition hover:text-sunset-300">إخلاء المسؤولية</a></li>
+					<li><a href="/copyright" class="transition hover:text-sunset-300">حقوق النشر</a></li>
+					<li><a href="/editorial-policy" class="transition hover:text-sunset-300">السياسة التحريرية</a></li>
+				</ul>
+			</div>
+		</div>
+
+		<div class="mt-12 flex flex-col gap-6 border-t border-graphite-800 pt-7 text-xs text-graphite-400 sm:flex-row sm:items-center sm:justify-between">
+			<div class="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-4">
+				<p>&copy; {currentYear} {siteName}. جميع الحقوق محفوظة.</p>
+				<p>Aleman Center — عالم المعلم العربي في موقع واحد.</p>
+			</div>
+			<a
+				href="https://www.checkdomain.de/unternehmen/garantie/ssl/popup/"
+				onclick="window.open(this.href + '?host=' + window.location.host,'','height=600,width=560,scrollbars=yes'); return false;"
+				class="inline-flex shrink-0 items-center gap-3 self-start rounded-xl bg-white/95 px-3 py-2 shadow-sm transition hover:bg-white sm:self-auto"
+				aria-label="عرض شهادة أمان SSL الخاصة بالموقع (تفتح في نافذة منبثقة)"
+			>
+				<img
+					src="https://www.checkdomain.de/assets/bundles/web/app/widget/seal/img/ssl_certificate/de/150x150.png?20260720-124458"
+					alt="شهادة SSL آمنة"
+					width="40"
+					height="40"
+					loading="lazy"
+					decoding="async"
+					class="size-10 shrink-0 object-contain"
+				/>
+				<span class="text-[11px] font-bold leading-tight text-graphite-700">اتصال آمن<br />شهادة SSL مُفعّلة</span>
+			</a>
+		</div>
+	</div>
+</footer>

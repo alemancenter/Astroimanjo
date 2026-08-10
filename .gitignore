@@ -22,3 +22,7 @@ pnpm-debug.log*
 
 # jetbrains setting folder
 .idea/
+
+# local build-artifact snapshot / internal audit notes — not part of the source export
+Astro03.zip
+report.md

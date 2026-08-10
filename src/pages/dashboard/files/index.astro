@@ -1,0 +1,219 @@
+---
+import DashboardLayout from '../../../layouts/DashboardLayout.astro';
+import DashboardAlert from '../../../components/ui/DashboardAlert.astro';
+import Pagination from '../../../components/ui/Pagination.astro';
+import { requireDashboard } from '../../../lib/auth';
+import { apiFetch } from '../../../lib/api';
+import { COUNTRIES, getCountryById } from '../../../lib/countries';
+
+const FILE_TYPES = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'zip', 'rar', 'jpg', 'jpeg', 'png'];
+const FILE_CATEGORIES = [
+	{ value: 'study_plan', label: 'خطط الدراسة' },
+	{ value: 'worksheet', label: 'أوراق عمل' },
+	{ value: 'exam', label: 'اختبارات' },
+	{ value: 'book', label: 'المقررات الدراسية' },
+	{ value: 'record', label: 'السجلات' },
+];
+const CATEGORY_LABELS = Object.fromEntries(FILE_CATEGORIES.map((item) => [item.value, item.label]));
+const SORT_OPTIONS = [
+	{ value: 'created_at', label: 'الأحدث أولًا' },
+	{ value: 'file_name', label: 'اسم الملف' },
+	{ value: 'file_size', label: 'حجم الملف' },
+	{ value: 'download_count', label: 'الأكثر تنزيلًا' },
+	{ value: 'view_count', label: 'الأكثر مشاهدة' },
+];
+const validSorts = new Set(SORT_OPTIONS.map((item) => item.value));
+
+const guard = await requireDashboard(Astro, 'manage files');
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+
+const q = (Astro.url.searchParams.get('q') || '').trim();
+const requestedType = Astro.url.searchParams.get('type') || '';
+const fileType = FILE_TYPES.includes(requestedType) ? requestedType : '';
+const requestedCategory = Astro.url.searchParams.get('file_category') || '';
+const fileCategory = FILE_CATEGORIES.some((item) => item.value === requestedCategory) ? requestedCategory : '';
+const requestedSort = Astro.url.searchParams.get('sort_by') || 'created_at';
+const sortBy = validSorts.has(requestedSort) ? requestedSort : 'created_at';
+const sortDir = Astro.url.searchParams.get('sort_dir') === 'asc' ? 'asc' : 'desc';
+const requestedPage = Number.parseInt(Astro.url.searchParams.get('page') || '1', 10);
+const page = Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+
+const result = await apiFetch<any[]>('/dashboard/files', {
+	countryId: Astro.locals.countryId,
+	cookieHeader: `token=${Astro.cookies.get('token')?.value}`,
+	params: {
+		q,
+		type: fileType,
+		file_category: fileCategory,
+		sort_by: sortBy,
+		sort_dir: sortDir,
+		page,
+		per_page: 20,
+	},
+});
+const files = Array.isArray(result.data) ? result.data : [];
+const meta = result.meta;
+const total = meta?.total ?? files.length;
+const currentCountry = getCountryById(Astro.locals.countryId);
+const currentUrl = `${Astro.url.pathname}${Astro.url.search}`;
+
+function formatSize(bytes: number): string {
+	if (!bytes || bytes < 0) return '—';
+	if (bytes < 1024) return `${bytes} B`;
+	const kb = bytes / 1024;
+	if (kb < 1024) return `${kb.toFixed(kb >= 100 ? 0 : 1)} KB`;
+	const mb = kb / 1024;
+	if (mb < 1024) return `${mb.toFixed(mb >= 100 ? 0 : 1)} MB`;
+	return `${(mb / 1024).toFixed(1)} GB`;
+}
+
+function normalizedType(file: any): string {
+	const explicit = String(file.file_type || '').toLowerCase().replace(/^\./, '');
+	if (explicit) return explicit;
+	return String(file.file_name || '').split('.').pop()?.toLowerCase() || 'file';
+}
+
+function iconKind(type: string): 'pdf' | 'sheet' | 'image' | 'archive' | 'document' | 'file' {
+	if (type === 'pdf') return 'pdf';
+	if (['xls', 'xlsx', 'csv'].includes(type)) return 'sheet';
+	if (['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg'].includes(type)) return 'image';
+	if (['zip', 'rar', '7z'].includes(type)) return 'archive';
+	if (['doc', 'docx', 'ppt', 'pptx'].includes(type)) return 'document';
+	return 'file';
+}
+
+function relatedContent(file: any) {
+	if (file.article_id) return { label: 'مقال', id: file.article_id, href: `/${currentCountry.code}/lesson/articles/${file.article_id}` };
+	if (file.post_id) return { label: 'منشور', id: file.post_id, href: `/${currentCountry.code}/posts/${file.post_id}` };
+	return null;
+}
+---
+
+<DashboardLayout title="مكتبة الملفات" user={user}>
+	<DashboardAlert />
+
+	<div class="files-page">
+		<header class="files-page-header">
+			<div>
+				<span class="files-eyebrow">إدارة المحتوى</span>
+				<h1>مكتبة الملفات</h1>
+				<p>تصفّح المرفقات المرفوعة وتابع أحجامها ومشاهداتها وارتباطها بالمحتوى.</p>
+			</div>
+			<div class="files-header-actions">
+				<label class="files-country-control"><span aria-hidden="true">{currentCountry.flag}</span><select id="files-country-select" data-current={Astro.locals.countryId} aria-label="تبديل قاعدة البيانات">{COUNTRIES.map((country) => <option value={country.id} selected={country.id === Astro.locals.countryId}>{country.name}</option>)}</select></label>
+				<button type="button" class="files-upload-button" data-open-upload><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 16V4m0 0L8 8m4-4 4 4M5 14v5h14v-5" /></svg>رفع ملف</button>
+			</div>
+		</header>
+
+		<section class="files-filter-card" aria-label="البحث والتصفية">
+			<form method="get" class="files-filter-form">
+				<label class="files-search-field"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7" /><path stroke-linecap="round" stroke-width="1.8" d="m16.5 16.5 4 4" /></svg><input type="search" name="q" value={q} placeholder="ابحث باسم الملف..." aria-label="البحث في الملفات" /></label>
+				<label class="files-select-field"><span>النوع</span><select name="type"><option value="" selected={!fileType}>جميع الأنواع</option>{FILE_TYPES.map((type) => <option value={type} selected={fileType === type}>{type.toUpperCase()}</option>)}</select></label>
+				<label class="files-select-field"><span>التصنيف</span><select name="file_category"><option value="" selected={!fileCategory}>جميع التصنيفات</option>{FILE_CATEGORIES.map((item) => <option value={item.value} selected={fileCategory === item.value}>{item.label}</option>)}</select></label>
+				<label class="files-select-field"><span>الترتيب</span><select name="sort_by">{SORT_OPTIONS.map((item) => <option value={item.value} selected={sortBy === item.value}>{item.label}</option>)}</select></label>
+				<label class="files-direction-field" title="اتجاه الترتيب"><select name="sort_dir" aria-label="اتجاه الترتيب"><option value="desc" selected={sortDir === 'desc'}>تنازلي</option><option value="asc" selected={sortDir === 'asc'}>تصاعدي</option></select></label>
+				<button type="submit" class="files-filter-button">تطبيق</button>
+				{(q || fileType || fileCategory || sortBy !== 'created_at' || sortDir !== 'desc') && <a href="/dashboard/files" class="files-clear-button">مسح التصفية</a>}
+			</form>
+			<div class="files-result-count"><strong>{total.toLocaleString('ar-EG')}</strong><span>ملف</span></div>
+		</section>
+
+		{!result.ok ? (
+			<section class="files-error"><strong>تعذّر تحميل الملفات</strong><p>{result.message}</p><a href={Astro.url.pathname}>إعادة المحاولة</a></section>
+		) : (
+			<>
+				<section class="files-table-card files-desktop">
+					<div class="files-table-heading"><div><h2>مستودع الملفات</h2><p>الملفات المحفوظة في قاعدة بيانات {currentCountry.name}.</p></div><span>{files.length} نتيجة في الصفحة</span></div>
+					<div class="files-table-scroll">
+						<table>
+							<thead><tr><th>الملف</th><th>التصنيف</th><th>الحجم</th><th>الارتباط</th><th>المشاهدات</th><th>التنزيلات</th><th>تاريخ الرفع</th><th><span class="sr-only">الإجراءات</span></th></tr></thead>
+							<tbody>
+								{files.map((file: any) => {
+									const type = normalizedType(file);
+									const kind = iconKind(type);
+									const related = relatedContent(file);
+									const downloadHref = file.post_id ? `/api/download/post-file/${file.id}` : file.article_id ? `/api/download/article-file/${file.id}` : null;
+									return (
+										<tr>
+											<td><div class="files-name-cell"><span class={`files-type-icon is-${kind}`}>{kind === 'image' ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="8.5" cy="9" r="1.5" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="m4 17 5-5 4 4 2-2 5 4" /></svg> : kind === 'archive' ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M5 3h14v18H5V3Zm6 0v3m0 2v3m0 2v3m0 2v3" /></svg> : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M7 3h7l4 4v14H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm7 0v5h4M9 13h6m-6 4h4" /></svg>}</span><div><strong title={file.file_name}>{file.file_name || `ملف ${file.id}`}</strong><small><b>{type.toUpperCase()}</b> · رقم الملف {file.id}</small></div></div></td>
+											<td>{file.file_category ? <span class="files-category">{CATEGORY_LABELS[file.file_category] || file.file_category}</span> : <span class="files-muted">غير مصنّف</span>}</td>
+											<td><span class="files-size">{formatSize(Number(file.file_size || 0))}</span></td>
+											<td>{related ? <a href={related.href} target="_blank" rel="noreferrer" class="files-related"><span>{related.label}</span><strong>#{related.id}</strong><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M14 5h5v5m0-5-8 8M19 14v5H5V5h5" /></svg></a> : <span class="files-muted">ملف مستقل</span>}</td>
+											<td><span class="files-stat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" /><circle cx="12" cy="12" r="2.5" /></svg>{Number(file.views ?? file.view_count ?? file.views_count ?? 0).toLocaleString('ar-EG')}</span></td>
+											<td><span class="files-stat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14" /></svg>{Number(file.download_count || 0).toLocaleString('ar-EG')}</span></td>
+											<td><time datetime={file.created_at}>{file.created_at ? new Date(file.created_at).toLocaleDateString('ar-EG', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}</time></td>
+											<td><div class="files-actions">{downloadHref && <a href={downloadHref} class="files-action" aria-label={`تنزيل ${file.file_name}`} title="تنزيل"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14" /></svg></a>}<form method="post" action={`/api/dashboard/files/${file.id}/delete`} data-confirm-delete><input type="hidden" name="redirect_to" value={currentUrl} /><button type="submit" class="files-action is-delete" aria-label={`حذف ${file.file_name}`} title="حذف نهائي"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 7h16m-10 4v6m4-6v6m-7-10 .8 13h8.4L17 7m-7-3h4l1 3H9l1-3Z" /></svg></button></form></div></td>
+										</tr>
+									);
+								})}
+							</tbody>
+						</table>
+					</div>
+					{files.length === 0 && <div class="files-empty"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M7 3h7l4 4v14H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm7 0v5h4M9 13h6m-6 4h4" /></svg></span><h3>لا توجد ملفات مطابقة</h3><p>جرّب تعديل البحث أو نوع الملف أو التصنيف.</p></div>}
+				</section>
+
+				<div class="files-mobile">
+					{files.map((file: any) => {
+						const type = normalizedType(file);
+						const kind = iconKind(type);
+						const related = relatedContent(file);
+						const downloadHref = file.post_id ? `/api/download/post-file/${file.id}` : file.article_id ? `/api/download/article-file/${file.id}` : null;
+						return <article class="files-mobile-card"><div class="files-mobile-head"><span class={`files-type-icon is-${kind}`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M7 3h7l4 4v14H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm7 0v5h4M9 13h6m-6 4h4" /></svg></span><div><h2>{file.file_name || `ملف ${file.id}`}</h2><p>{CATEGORY_LABELS[file.file_category] || 'غير مصنّف'} · {type.toUpperCase()}</p></div><span class="files-mobile-size">{formatSize(Number(file.file_size || 0))}</span></div><div class="files-mobile-meta"><span>الارتباط<strong>{related ? `${related.label} #${related.id}` : 'ملف مستقل'}</strong></span><span>المشاهدات<strong>{Number(file.views ?? file.view_count ?? 0).toLocaleString('ar-EG')}</strong></span><span>التنزيلات<strong>{Number(file.download_count || 0).toLocaleString('ar-EG')}</strong></span></div><div class="files-mobile-actions">{downloadHref && <a href={downloadHref}>تنزيل</a>}{related && <a href={related.href} target="_blank" rel="noreferrer">فتح المحتوى</a>}<form method="post" action={`/api/dashboard/files/${file.id}/delete`} data-confirm-delete><input type="hidden" name="redirect_to" value={currentUrl} /><button type="submit" class="is-delete">حذف</button></form></div></article>;
+					})}
+					{files.length === 0 && <div class="files-empty"><h3>لا توجد ملفات مطابقة</h3><p>جرّب تعديل البحث أو نوع الملف أو التصنيف.</p></div>}
+				</div>
+
+				{meta && <Pagination currentPage={meta.current_page} lastPage={meta.last_page} url={Astro.url} />}
+			</>
+		)}
+	</div>
+
+	<dialog id="file-upload-dialog" class="files-upload-dialog">
+		<form method="post" action="/api/dashboard/files/upload" enctype="multipart/form-data" class="files-upload-form">
+			<div class="files-dialog-header"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 16V4m0 0L8 8m4-4 4 4M5 14v5h14v-5" /></svg></span><div><h2>رفع ملف جديد</h2><p>سيتم رفعه إلى قاعدة بيانات {currentCountry.name}.</p></div><button type="button" data-close-upload aria-label="إغلاق"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-width="1.8" d="m7 7 10 10M17 7 7 17" /></svg></button></div>
+			<label class="files-upload-drop" for="dashboard-file-input"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 16V4m0 0L8 8m4-4 4 4M5 14v5h14v-5" /></svg><strong>اختر الملف من جهازك</strong><small id="dashboard-file-name">PDF أو ملفات Office أو الصور أو الملفات المضغوطة</small><input id="dashboard-file-input" type="file" name="file" required /></label>
+			<div class="files-dialog-grid"><label><span>اسم مخصص <small>اختياري</small></span><input type="text" name="file_name" placeholder="اتركه فارغًا لاستخدام اسم الملف" /></label><label><span>تصنيف الملف</span><select name="file_category"><option value="">بدون تصنيف</option>{FILE_CATEGORIES.map((item) => <option value={item.value}>{item.label}</option>)}</select></label></div>
+			<div class="files-dialog-grid"><label><span>ربط الملف</span><select id="file-relation-type"><option value="none">ملف مستقل</option><option value="article">ربطه بمقال</option><option value="post">ربطه بمنشور</option></select></label><label id="file-relation-id-field" hidden><span id="file-relation-label">رقم المحتوى</span><input id="file-relation-id" type="number" min="1" inputmode="numeric" placeholder="أدخل الرقم" disabled /></label></div>
+			<div class="files-dialog-footer"><button type="button" data-close-upload class="files-dialog-cancel">إلغاء</button><button type="submit" class="files-dialog-submit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 16V4m0 0L8 8m4-4 4 4M5 14v5h14v-5" /></svg>رفع الملف</button></div>
+		</form>
+	</dialog>
+
+	<script>
+		const uploadDialog = document.getElementById('file-upload-dialog') as HTMLDialogElement | null;
+		document.querySelector('[data-open-upload]')?.addEventListener('click', () => uploadDialog?.showModal());
+		document.querySelectorAll('[data-close-upload]').forEach((button) => button.addEventListener('click', () => uploadDialog?.close()));
+		uploadDialog?.addEventListener('click', (event) => { if (event.target === uploadDialog) uploadDialog.close(); });
+
+		const fileInput = document.getElementById('dashboard-file-input') as HTMLInputElement | null;
+		const fileName = document.getElementById('dashboard-file-name');
+		fileInput?.addEventListener('change', () => { const file = fileInput.files?.[0]; if (fileName) fileName.textContent = file ? `${file.name} — ${(file.size / 1024 / 1024).toFixed(2)} MB` : 'PDF أو ملفات Office أو الصور أو الملفات المضغوطة'; });
+
+		const relationType = document.getElementById('file-relation-type') as HTMLSelectElement | null;
+		const relationField = document.getElementById('file-relation-id-field');
+		const relationInput = document.getElementById('file-relation-id') as HTMLInputElement | null;
+		const relationLabel = document.getElementById('file-relation-label');
+		relationType?.addEventListener('change', () => {
+			const linked = relationType.value !== 'none';
+			if (relationField) relationField.hidden = !linked;
+			if (relationInput) { relationInput.disabled = !linked; relationInput.required = linked; relationInput.name = relationType.value === 'article' ? 'article_id' : relationType.value === 'post' ? 'post_id' : ''; }
+			if (relationLabel) relationLabel.textContent = relationType.value === 'article' ? 'رقم المقال' : 'رقم المنشور';
+		});
+
+		document.querySelectorAll<HTMLFormElement>('[data-confirm-delete]').forEach((form) => form.addEventListener('submit', (event) => { if (!window.confirm('سيتم حذف الملف نهائيًا من الخادم ولن يعود متاحًا للتنزيل. هل تريد المتابعة؟')) event.preventDefault(); }));
+		const countrySelect = document.getElementById('files-country-select') as HTMLSelectElement | null;
+		countrySelect?.addEventListener('change', () => { if (countrySelect.value === countrySelect.dataset.current) return; const url = new URL(window.location.href); url.searchParams.set('country', countrySelect.value); url.searchParams.delete('page'); window.location.href = url.toString(); });
+	</script>
+
+	<style>
+		.files-page{--f-ink:#102a43;--f-muted:#718096;--f-line:#dfe6ee;max-width:1360px;margin-inline:auto;padding-bottom:2rem}.files-page-header{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;margin-bottom:1rem}.files-eyebrow{display:block;margin-bottom:.25rem;color:#1a4d8f;font-size:.65rem;font-weight:850}.files-page-header h1{margin:0;color:#061a3a;font-size:clamp(1.35rem,1.1rem + .65vw,1.85rem);font-weight:900;line-height:1.3}.files-page-header p{margin:.28rem 0 0;color:var(--f-muted);font-size:.75rem}.files-header-actions{display:flex;align-items:center;gap:.55rem}.files-country-control{display:flex;min-height:2.6rem;align-items:center;gap:.4rem;border:1px solid var(--f-line);border-radius:.6rem;background:#fff;padding:.35rem .55rem}.files-country-control>span{font-size:1rem}.files-country-control select{border:0;background:transparent;color:var(--f-ink);font-family:inherit;font-size:.66rem;font-weight:750;outline:0}.files-upload-button{display:inline-flex;min-height:2.6rem;align-items:center;justify-content:center;gap:.4rem;border:1px solid #16427d;border-radius:.6rem;background:#1a4d8f;padding:.5rem .9rem;color:#fff;font-size:.73rem;font-weight:850;box-shadow:0 2px 4px rgb(26 77 143/.16)}.files-upload-button:hover{background:#153f76}.files-upload-button svg{width:1rem;height:1rem}
+		.files-filter-card{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:1rem;border:1px solid var(--f-line);border-radius:.8rem;background:#fff;padding:.7rem;box-shadow:0 1px 2px rgb(15 23 42/.06)}.files-filter-form{display:flex;min-width:0;flex:1;flex-wrap:wrap;align-items:center;gap:.5rem}.files-search-field{position:relative;display:block;min-width:12rem;flex:1}.files-search-field svg{position:absolute;top:50%;right:.7rem;width:.9rem;height:.9rem;color:#8796a8;transform:translateY(-50%)}.files-search-field input,.files-select-field select,.files-direction-field select{width:100%;min-height:2.35rem;border:1px solid #d9e2ec;border-radius:.5rem;background:#fff;color:var(--f-ink);font-family:inherit;font-size:.68rem}.files-search-field input{padding:.45rem 2rem .45rem .65rem}.files-search-field input:focus,.files-select-field select:focus,.files-direction-field select:focus{border-color:#81a7da;outline:0;box-shadow:0 0 0 3px rgb(26 77 143/.07)}.files-select-field{display:flex;align-items:center;gap:.3rem}.files-select-field>span{color:var(--f-muted);font-size:.59rem;font-weight:750}.files-select-field select{width:7.8rem;padding:.4rem .45rem}.files-select-field:nth-of-type(4) select{width:8.5rem}.files-direction-field select{width:4.6rem;padding:.4rem}.files-filter-button,.files-clear-button{display:inline-flex;min-height:2.35rem;align-items:center;justify-content:center;border-radius:.5rem;padding:.4rem .7rem;font-size:.64rem;font-weight:800}.files-filter-button{border:1px solid #315f9f;background:#fff;color:#1a4d8f}.files-filter-button:hover{background:#f7f9fc}.files-clear-button{color:#64748b}.files-clear-button:hover{color:#1a4d8f}.files-result-count{display:flex;align-items:baseline;gap:.3rem;border-right:1px solid #e7ecf2;padding-inline:1rem .25rem;color:var(--f-muted);font-size:.64rem;white-space:nowrap}.files-result-count strong{color:var(--f-ink);font-size:.88rem}
+		.files-table-card{overflow:hidden;border:1px solid var(--f-line);border-radius:.85rem;background:#fff;box-shadow:0 1px 2px rgb(15 23 42/.06)}.files-table-heading{display:flex;align-items:center;justify-content:space-between;gap:1rem;border-bottom:1px solid #edf1f5;padding:.9rem 1rem}.files-table-heading h2{margin:0;color:var(--f-ink);font-size:.85rem;font-weight:850}.files-table-heading p{margin:.18rem 0 0;color:var(--f-muted);font-size:.62rem}.files-table-heading>span{border:1px solid #e1e7ee;border-radius:999px;background:#f8fafc;padding:.25rem .55rem;color:#64748b;font-size:.6rem;font-weight:750}.files-table-scroll{overflow-x:auto}.files-table-card table{width:100%;border-collapse:collapse}.files-table-card th{padding:.72rem .78rem;background:#f8fafc;color:#718096;font-size:.59rem;font-weight:800;text-align:right;white-space:nowrap}.files-table-card td{padding:.72rem .78rem;border-top:1px solid #edf1f5;color:#64748b;font-size:.66rem;vertical-align:middle}.files-table-card tbody tr:hover{background:#fafcff}.files-name-cell{display:flex;max-width:22rem;align-items:center;gap:.58rem}.files-type-icon{display:inline-grid;width:2.25rem;height:2.25rem;flex:none;place-items:center;border:1px solid #dce5ef;border-radius:.5rem;background:#f4f7fb;color:#60758a}.files-type-icon svg{width:1.05rem;height:1.05rem}.files-type-icon.is-pdf{border-color:#f3d3d6;background:#fff5f5;color:#d64550}.files-type-icon.is-sheet{border-color:#cce9df;background:#f2fbf8;color:#0f8464}.files-type-icon.is-image{border-color:#cfdef0;background:#f2f7fd;color:#1a4d8f}.files-type-icon.is-archive{border-color:#f0dfc6;background:#fff9f0;color:#bb751d}.files-name-cell>div{min-width:0}.files-name-cell strong{display:block;overflow:hidden;color:var(--f-ink);font-size:.69rem;font-weight:850;text-overflow:ellipsis;white-space:nowrap}.files-name-cell small{display:block;margin-top:.1rem;color:#9aa7b6;font-size:.52rem}.files-name-cell small b{color:#58718d}.files-category{display:inline-flex;border-radius:999px;background:#edf4fc;padding:.23rem .45rem;color:#315f9f;font-size:.55rem;font-weight:800;white-space:nowrap}.files-muted{color:#98a4b2;font-size:.59rem}.files-size{color:#52667e;font-size:.62rem;font-weight:750;white-space:nowrap}.files-related{display:inline-flex;align-items:center;gap:.25rem;border:1px solid #e2e8ef;border-radius:.45rem;background:#fafbfd;padding:.28rem .42rem;color:#52667e}.files-related:hover{border-color:#a9bdd5;color:#1a4d8f}.files-related span{font-size:.53rem}.files-related strong{font-size:.6rem}.files-related svg{width:.67rem;height:.67rem}.files-stat{display:inline-flex;align-items:center;gap:.28rem;color:#52667e}.files-stat svg{width:.75rem;height:.75rem;color:#94a3b8}.files-table-card time{color:#68798c;font-size:.58rem;white-space:nowrap}.files-actions{display:flex;align-items:center;justify-content:flex-end;gap:.28rem}.files-action{display:inline-grid;width:1.8rem;height:1.8rem;place-items:center;border:1px solid #dfe6ee;border-radius:.44rem;background:#fff;color:#52667e}.files-action:hover{border-color:#a8bdd8;color:#1a4d8f}.files-action.is-delete{color:#dc3545}.files-action.is-delete:hover{border-color:#fecaca;background:#fff7f7}.files-action svg{width:.82rem;height:.82rem}
+		.files-empty,.files-error{display:flex;min-height:15rem;align-items:center;justify-content:center;flex-direction:column;padding:2rem;text-align:center}.files-empty>span{display:grid;width:3rem;height:3rem;place-items:center;border-radius:.75rem;background:#f1f5f9;color:#718096}.files-empty svg{width:1.35rem;height:1.35rem}.files-empty h3,.files-error strong{margin:.7rem 0 0;color:var(--f-ink);font-size:.8rem}.files-empty p,.files-error p{margin:.25rem 0 0;color:var(--f-muted);font-size:.64rem}.files-error{border:1px solid #fecaca;border-radius:.8rem;background:#fff}.files-error a{margin-top:.65rem;color:#1a4d8f;font-size:.65rem;font-weight:800}.files-mobile{display:none}.files-mobile-card{border:1px solid var(--f-line);border-radius:.75rem;background:#fff;padding:.85rem;box-shadow:0 1px 2px rgb(15 23 42/.06)}.files-mobile-head{display:flex;align-items:flex-start;gap:.58rem}.files-mobile-head>div{min-width:0;flex:1}.files-mobile-head h2{overflow:hidden;margin:0;color:var(--f-ink);font-size:.7rem;text-overflow:ellipsis;white-space:nowrap}.files-mobile-head p{margin:.1rem 0 0;color:var(--f-muted);font-size:.55rem}.files-mobile-size{color:#52667e;font-size:.58rem;font-weight:800}.files-mobile-meta{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.4rem;margin-top:.7rem}.files-mobile-meta span{border:1px solid #edf1f5;border-radius:.48rem;padding:.4rem;color:#8b98a8;font-size:.53rem}.files-mobile-meta strong{display:block;margin-top:.1rem;color:var(--f-ink);font-size:.59rem}.files-mobile-actions{display:flex;gap:.38rem;margin-top:.7rem;border-top:1px solid #edf1f5;padding-top:.65rem}.files-mobile-actions a,.files-mobile-actions button{display:inline-flex;min-height:2rem;align-items:center;justify-content:center;border:1px solid #dce4ed;border-radius:.43rem;background:#fff;padding:.33rem .58rem;color:#42526a;font-size:.59rem;font-weight:750}.files-mobile-actions .is-delete{color:#dc2626}
+		.files-upload-dialog{width:min(34rem,calc(100% - 2rem));max-width:none;border:0;border-radius:.85rem;background:transparent;padding:0;box-shadow:0 20px 55px rgb(15 23 42/.22)}.files-upload-dialog::backdrop{background:rgb(15 23 42/.5);backdrop-filter:blur(2px)}.files-upload-form{border:1px solid #dfe6ee;border-radius:.85rem;background:#fff;padding:1rem}.files-dialog-header{display:grid;grid-template-columns:auto 1fr auto;align-items:start;gap:.6rem;border-bottom:1px solid #edf1f5;padding-bottom:.8rem}.files-dialog-header>span{display:grid;width:2rem;height:2rem;place-items:center;border-radius:.48rem;background:#edf4fc;color:#1a4d8f}.files-dialog-header svg{width:.95rem;height:.95rem}.files-dialog-header h2{margin:0;color:#102a43;font-size:.85rem;font-weight:900}.files-dialog-header p{margin:.12rem 0 0;color:#718096;font-size:.6rem}.files-dialog-header>button{display:grid;width:1.9rem;height:1.9rem;place-items:center;border-radius:.4rem;color:#718096}.files-dialog-header>button:hover{background:#f1f5f9}.files-upload-drop{position:relative;display:grid;min-height:8rem;cursor:pointer;justify-items:center;align-content:center;gap:.22rem;margin-top:.9rem;border:1px dashed #afc2d8;border-radius:.6rem;background:#fafcfe;color:#60758a}.files-upload-drop:hover{border-color:#1a4d8f;background:#f6f9fd}.files-upload-drop svg{width:1.3rem;height:1.3rem;color:#1a4d8f}.files-upload-drop strong{font-size:.68rem}.files-upload-drop small{max-width:90%;overflow:hidden;color:#8796a8;font-size:.55rem;text-overflow:ellipsis;white-space:nowrap}.files-upload-drop input{position:absolute;width:1px;height:1px;opacity:0}.files-dialog-grid{display:grid;grid-template-columns:1fr 1fr;gap:.7rem;margin-top:.75rem}.files-dialog-grid label{display:grid;gap:.3rem}.files-dialog-grid label>span{color:#243b53;font-size:.63rem;font-weight:850}.files-dialog-grid label>span small{color:#91a0b2;font-size:.52rem;font-weight:500}.files-dialog-grid input,.files-dialog-grid select{width:100%;min-height:2.4rem;border:1px solid #d9e2ec;border-radius:.5rem;background:#fff;padding:.48rem .6rem;color:#102a43;font-family:inherit;font-size:.66rem}.files-dialog-grid input:focus,.files-dialog-grid select:focus{border-color:#7da4d7;outline:0;box-shadow:0 0 0 3px rgb(26 77 143/.07)}.files-dialog-footer{display:flex;justify-content:flex-end;gap:.5rem;margin-top:1rem;border-top:1px solid #edf1f5;padding-top:.8rem}.files-dialog-cancel,.files-dialog-submit{display:inline-flex;min-height:2.3rem;align-items:center;justify-content:center;border-radius:.5rem;padding:.4rem .8rem;font-size:.65rem;font-weight:850}.files-dialog-cancel{border:1px solid #dce4ed;background:#fff;color:#52667e}.files-dialog-submit{gap:.35rem;border:1px solid #16427d;background:#1a4d8f;color:#fff}.files-dialog-submit svg{width:.82rem;height:.82rem}
+		:global(.dark) .files-page{--f-ink:#f8fafc;--f-muted:#94a3b8;--f-line:#334155}:global(.dark) .files-page-header h1{color:#fff}:global(.dark) .files-country-control,:global(.dark) .files-filter-card,:global(.dark) .files-table-card,:global(.dark) .files-mobile-card,:global(.dark) .files-search-field input,:global(.dark) .files-select-field select,:global(.dark) .files-direction-field select,:global(.dark) .files-action,:global(.dark) .files-mobile-actions a,:global(.dark) .files-mobile-actions button,:global(.dark) .files-error{border-color:#334155;background:#0f2547;color:#cbd5e1}:global(.dark) .files-table-card th,:global(.dark) .files-table-heading>span{background:#0b1e38}:global(.dark) .files-table-heading,:global(.dark) .files-table-card td,:global(.dark) .files-mobile-actions{border-color:#263b56}:global(.dark) .files-table-card tbody tr:hover{background:#122b4c}:global(.dark) .files-upload-form{border-color:#334155;background:#111827}:global(.dark) .files-dialog-header,:global(.dark) .files-dialog-footer{border-color:#283548}:global(.dark) .files-dialog-header h2,:global(.dark) .files-dialog-grid label>span{color:#f1f5f9}:global(.dark) .files-upload-drop{border-color:#52647a;background:#151e2d}:global(.dark) .files-dialog-grid input,:global(.dark) .files-dialog-grid select{border-color:#3b4a5c;background:#172033;color:#e6edf5}
+		@media(max-width:900px){.files-select-field>span{display:none}}
+		@media(max-width:767px){.files-page-header{align-items:stretch;flex-direction:column}.files-header-actions{display:grid;grid-template-columns:1fr 1fr}.files-country-control,.files-upload-button{justify-content:center}.files-filter-card{align-items:stretch;flex-direction:column}.files-filter-form{align-items:stretch;flex-direction:column}.files-search-field,.files-select-field,.files-select-field select,.files-direction-field,.files-direction-field select{width:100%}.files-select-field{align-items:stretch;flex-direction:column}.files-select-field>span{display:block}.files-result-count{border:0;border-top:1px solid #edf1f5;padding:.65rem .15rem 0}.files-desktop{display:none}.files-mobile{display:grid;gap:.7rem}}
+		@media(max-width:520px){.files-dialog-grid{grid-template-columns:1fr}.files-mobile-meta{grid-template-columns:1fr 1fr}.files-mobile-meta span:first-child{grid-column:1/-1}}
+	</style>
+</DashboardLayout>

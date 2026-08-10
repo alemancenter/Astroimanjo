@@ -1,0 +1,279 @@
+---
+import DashboardLayout from '../../../layouts/DashboardLayout.astro';
+import DashboardAlert from '../../../components/ui/DashboardAlert.astro';
+import Pagination from '../../../components/ui/Pagination.astro';
+import { requireDashboard } from '../../../lib/auth';
+import { apiFetch } from '../../../lib/api';
+const guard = await requireDashboard(Astro, 'manage articles');
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+const token = Astro.cookies.get('token')?.value;
+const params = Astro.url.searchParams;
+const q = params.get('q') || '';
+const classId = params.get('class_id') || '';
+const subjectId = params.get('subject_id') || '';
+const semesterId = params.get('semester_id') || '';
+const page = Math.max(1, Number(params.get('page')) || 1);
+const perPage = 20;
+const academicBatchSize = 500;
+const hasAcademicFilters = Boolean(classId || subjectId || semesterId);
+const subjectsRequest = classId
+	? apiFetch<any[]>(`/filter/subjects/${classId}`, { countryId: Astro.locals.countryId })
+	: Promise.resolve({ ok: true, data: [] as any[] });
+const semestersRequest = subjectId
+	? apiFetch<{ semesters?: any[] }>(`/filter/semesters/${subjectId}`, { countryId: Astro.locals.countryId })
+	: Promise.resolve({ ok: true, data: { semesters: [] as any[] } });
+
+// The deployed dashboard articles endpoint supports text pagination but not academic
+// filters. Fetch every dashboard page while an academic filter is active, then filter
+// locally. The backend caps per_page at 500, so a single oversized request silently
+// omitted older articles (most noticeably first-semester content).
+const [result, classesResult, subjectsResult, semestersResult] = await Promise.all([
+	apiFetch<any[]>('/dashboard/articles', {
+		countryId: Astro.locals.countryId,
+		cookieHeader: `token=${token}`,
+		params: { q: q || undefined, page: hasAcademicFilters ? 1 : page, per_page: hasAcademicFilters ? academicBatchSize : perPage },
+	}),
+	apiFetch<any>('/dashboard/articles/create', { countryId: Astro.locals.countryId, cookieHeader: `token=${token}` }),
+	subjectsRequest,
+	semestersRequest,
+]);
+
+const allClasses = Array.isArray(classesResult.data?.classes) ? classesResult.data.classes : [];
+const selectedClass = allClasses.find((schoolClass: any) => String(schoolClass.id) === classId);
+const acceptedClassValues = new Set([classId, selectedClass?.grade_level == null ? '' : String(selectedClass.grade_level)]);
+const subjectOptions = classId && Array.isArray(subjectsResult.data) ? subjectsResult.data : [];
+const semesterOptions = subjectId && Array.isArray(semestersResult.data?.semesters) ? semestersResult.data.semesters : [];
+let fetchedArticles = Array.isArray(result.data) ? result.data : [];
+
+if (hasAcademicFilters && result.ok && (result.meta?.last_page ?? 1) > 1) {
+	const remainingPages = Array.from({ length: result.meta!.last_page - 1 }, (_, index) => index + 2);
+	const remainingResults = await Promise.all(
+		remainingPages.map((requestPage) =>
+			apiFetch<any[]>('/dashboard/articles', {
+				countryId: Astro.locals.countryId,
+				cookieHeader: `token=${token}`,
+				params: { q: q || undefined, page: requestPage, per_page: academicBatchSize },
+			}),
+		),
+	);
+	for (const pageResult of remainingResults) {
+		if (Array.isArray(pageResult.data)) fetchedArticles.push(...pageResult.data);
+	}
+}
+
+const filteredArticles = hasAcademicFilters
+	? fetchedArticles.filter((article: any) => {
+		const articleClassValues = [article.grade_level, article.subject?.grade_level].filter((value) => value != null).map(String);
+		const matchesClass = !classId || articleClassValues.some((value) => acceptedClassValues.has(value));
+		const matchesSubject = !subjectId || String(article.subject_id ?? article.subject?.id ?? '') === subjectId;
+		const matchesSemester = !semesterId || String(article.semester_id ?? article.semester?.id ?? '') === semesterId;
+		return matchesClass && matchesSubject && matchesSemester;
+	})
+	: fetchedArticles;
+const filteredTotal = filteredArticles.length;
+const articles = hasAcademicFilters ? filteredArticles.slice((page - 1) * perPage, page * perPage) : filteredArticles;
+const meta = hasAcademicFilters
+	? { current_page: page, last_page: Math.max(1, Math.ceil(filteredTotal / perPage)), total: filteredTotal, per_page: perPage }
+	: result.meta;
+---
+<DashboardLayout title="إدارة المقالات" user={user}>
+	<DashboardAlert />
+	<div class="articles-page">
+		<header class="articles-page-header">
+			<div>
+				<span class="articles-eyebrow">إدارة المحتوى</span>
+				<h2>المقالات التعليمية</h2>
+				<p>ابحث عن المقالات، راجع حالة النشر، وانتقل إلى التحرير من مكان واحد.</p>
+			</div>
+			<a href="/dashboard/articles/new" class="articles-create-button">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 5v14M5 12h14" /></svg>
+				<span>إضافة مقالة</span>
+			</a>
+		</header>
+
+		<section class="articles-filter-card">
+			<form method="get" class="articles-filter-form" aria-label="تصفية المقالات">
+				<label class="articles-search-field">
+					<span class="sr-only">البحث بالعنوان</span>
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7" /><path stroke-linecap="round" d="m20 20-4-4" /></svg>
+					<input type="search" name="q" value={q} placeholder="ابحث بعنوان المقالة..." />
+				</label>
+				<label class="articles-select-field">
+					<span>الصف</span>
+					<select id="articles-class-filter" name="class_id">
+						<option value="">جميع الصفوف</option>
+						{allClasses.map((schoolClass: any) => <option value={schoolClass.id} selected={String(schoolClass.id) === classId}>{schoolClass.grade_name}</option>)}
+					</select>
+				</label>
+				<label class="articles-select-field is-academic">
+					<span>المادة</span>
+					<select id="articles-subject-filter" name="subject_id" disabled={!classId || subjectOptions.length === 0}>
+						<option value="">{classId ? 'جميع المواد' : 'اختر الصف أولًا'}</option>
+						{subjectOptions.map((subject: any) => <option value={subject.id} selected={String(subject.id) === subjectId}>{subject.subject_name}</option>)}
+					</select>
+				</label>
+				<label class="articles-select-field is-academic">
+					<span>الفصل</span>
+					<select id="articles-semester-filter" name="semester_id" disabled={!subjectId || semesterOptions.length === 0}>
+						<option value="">{subjectId ? 'جميع الفصول' : 'اختر المادة أولًا'}</option>
+						{semesterOptions.map((semester: any) => <option value={semester.id} selected={String(semester.id) === semesterId}>{semester.semester_name}</option>)}
+					</select>
+				</label>
+				<button type="submit" class="articles-search-button">تطبيق التصفية</button>
+				{(q || classId || subjectId || semesterId) && <a href="/dashboard/articles" class="articles-clear-button">مسح التصفية</a>}
+			</form>
+			<div class="articles-result-count"><strong>{meta?.total ?? articles.length}</strong><span>مقالة</span></div>
+		</section>
+
+		<section class="articles-table-card articles-desktop">
+			<div class="articles-table-heading">
+				<div><h3>قائمة المقالات</h3><p>آخر المحتويات التعليمية المضافة إلى قاعدة البيانات.</p></div>
+				<span>{articles.length} نتيجة في الصفحة</span>
+			</div>
+			<div class="articles-table-scroll">
+				<table>
+					<thead><tr><th>المقالة</th><th>المادة</th><th>الحالة</th><th>المشاهدات</th><th>تاريخ الإنشاء</th><th><span class="sr-only">الإجراءات</span></th></tr></thead>
+					<tbody>
+						{articles.map((article: any) => (
+							<tr>
+								<td>
+									<div class="articles-title-cell">
+										<span class="articles-document-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M7 3h7l4 4v14H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm7 0v5h4M9 13h6m-6 4h4" /></svg></span>
+										<div><a href={`/dashboard/articles/${article.id}/edit`}>{article.title}</a><small>رقم المقالة: {article.id}</small></div>
+									</div>
+								</td>
+								<td><span class="articles-subject">{article.subject?.subject_name || 'غير مصنّف'}</span></td>
+								<td><span class={article.status === 1 ? 'articles-status is-published' : 'articles-status is-draft'}><i></i>{article.status === 1 ? 'منشور' : 'مسودة'}</span></td>
+								<td><span class="articles-views"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" /><circle cx="12" cy="12" r="2.5" /></svg>{article.visit_count || 0}</span></td>
+								<td><time datetime={article.created_at}>{new Date(article.created_at).toLocaleDateString('ar-EG')}</time></td>
+								<td>
+									<div class="articles-actions">
+										<a href={`/dashboard/articles/${article.id}/edit`} class="articles-action" aria-label={`تعديل ${article.title}`} title="تعديل"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m4 20 4.3-1 9.9-9.9a2.1 2.1 0 0 0-3-3L5.3 16 4 20Zm9.8-12.5 3 3" /></svg></a>
+										<form method="post" action={`/api/dashboard/articles/${article.id}/${article.status === 1 ? 'unpublish' : 'publish'}`}><input type="hidden" name="redirect_to" value={Astro.url.pathname + Astro.url.search} /><button type="submit" class="articles-action" aria-label={article.status === 1 ? 'إلغاء النشر' : 'نشر'} title={article.status === 1 ? 'إلغاء النشر' : 'نشر'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d={article.status === 1 ? 'M4 4l16 16M10.6 6.3A9.8 9.8 0 0 1 12 6c6 0 9.5 6 9.5 6a14 14 0 0 1-2.1 2.8M6.2 6.2C3.8 8 2.5 12 2.5 12S6 18 12 18c1.4 0 2.6-.3 3.7-.8M9.9 9.9a3 3 0 0 0 4.2 4.2' : 'M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6ZM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z'} /></svg></button></form>
+										<form method="post" action={`/api/dashboard/articles/${article.id}/delete`} onsubmit="return confirm('هل أنت متأكد من حذف هذا المقال؟')"><input type="hidden" name="redirect_to" value={Astro.url.pathname + Astro.url.search} /><button type="submit" class="articles-action is-delete" aria-label={`حذف ${article.title}`} title="حذف"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 7h16m-10 4v6m4-6v6m-7-10 .8 13h8.4L17 7m-7-3h4l1 3H9l1-3Z" /></svg></button></form>
+									</div>
+								</td>
+							</tr>
+						))}
+					</tbody>
+				</table>
+			</div>
+			{articles.length === 0 && <div class="articles-empty"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M7 3h7l4 4v14H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm7 0v5h4M9 13h6m-6 4h4" /></svg></span><h3>لا توجد مقالات مطابقة</h3><p>جرّب تغيير عبارة البحث أو حالة النشر.</p></div>}
+		</section>
+
+		<div class="articles-mobile">
+			{articles.map((article: any) => (
+				<article class="articles-mobile-card">
+					<div class="articles-mobile-head"><span class="articles-document-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M7 3h7l4 4v14H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm7 0v5h4M9 13h6m-6 4h4" /></svg></span><div><h3>{article.title}</h3><p>{article.subject?.subject_name || 'غير مصنّف'}</p></div><span class={article.status === 1 ? 'articles-status is-published' : 'articles-status is-draft'}><i></i>{article.status === 1 ? 'منشور' : 'مسودة'}</span></div>
+					<div class="articles-mobile-meta"><span>المشاهدات <strong>{article.visit_count || 0}</strong></span><span>التاريخ <strong>{new Date(article.created_at).toLocaleDateString('ar-EG')}</strong></span></div>
+					<div class="articles-mobile-actions"><a href={`/dashboard/articles/${article.id}/edit`}>تعديل</a><form method="post" action={`/api/dashboard/articles/${article.id}/${article.status === 1 ? 'unpublish' : 'publish'}`}><input type="hidden" name="redirect_to" value={Astro.url.pathname + Astro.url.search} /><button type="submit">{article.status === 1 ? 'إلغاء النشر' : 'نشر'}</button></form><form method="post" action={`/api/dashboard/articles/${article.id}/delete`} onsubmit="return confirm('هل أنت متأكد من حذف هذا المقال؟')"><input type="hidden" name="redirect_to" value={Astro.url.pathname + Astro.url.search} /><button type="submit" class="is-delete">حذف</button></form></div>
+				</article>
+			))}
+			{articles.length === 0 && <div class="articles-empty"><h3>لا توجد مقالات مطابقة</h3><p>جرّب تغيير عبارة البحث أو حالة النشر.</p></div>}
+		</div>
+
+		{meta && <Pagination currentPage={meta.current_page} lastPage={meta.last_page} url={Astro.url} />}
+	</div>
+
+	<script>
+		const classFilter = document.getElementById('articles-class-filter') as HTMLSelectElement | null;
+		const subjectFilter = document.getElementById('articles-subject-filter') as HTMLSelectElement | null;
+		const semesterFilter = document.getElementById('articles-semester-filter') as HTMLSelectElement | null;
+		let subjectsRequestId = 0;
+		let semestersRequestId = 0;
+
+		function replaceOptions(
+			select: HTMLSelectElement,
+			items: any[],
+			labelKey: 'subject_name' | 'semester_name',
+			placeholder: string,
+		) {
+			select.replaceChildren(new Option(placeholder, ''));
+			for (const item of items) select.add(new Option(String(item[labelKey] ?? ''), String(item.id ?? '')));
+			select.disabled = items.length === 0;
+			select.removeAttribute('aria-busy');
+		}
+
+		function showLoading(select: HTMLSelectElement, message: string) {
+			select.replaceChildren(new Option(message, ''));
+			select.disabled = true;
+			select.setAttribute('aria-busy', 'true');
+		}
+
+		classFilter?.addEventListener('change', async () => {
+			if (!subjectFilter || !semesterFilter) return;
+			const requestId = ++subjectsRequestId;
+			semestersRequestId++;
+			replaceOptions(semesterFilter, [], 'semester_name', 'اختر المادة أولًا');
+			if (!classFilter.value) {
+				replaceOptions(subjectFilter, [], 'subject_name', 'اختر الصف أولًا');
+				return;
+			}
+
+			showLoading(subjectFilter, 'جاري تحميل المواد...');
+			try {
+				const response = await fetch(`/api/dashboard/filter/subjects/${encodeURIComponent(classFilter.value)}`);
+				const payload = await response.json();
+				if (!response.ok) throw new Error();
+				if (requestId !== subjectsRequestId) return;
+				const subjects = Array.isArray(payload?.data) ? payload.data : [];
+				replaceOptions(subjectFilter, subjects, 'subject_name', subjects.length ? 'جميع المواد' : 'لا توجد مواد لهذا الصف');
+			} catch {
+				if (requestId !== subjectsRequestId) return;
+				replaceOptions(subjectFilter, [], 'subject_name', 'تعذّر تحميل المواد');
+			}
+		});
+
+		subjectFilter?.addEventListener('change', async () => {
+			if (!semesterFilter) return;
+			const requestId = ++semestersRequestId;
+			if (!subjectFilter.value) {
+				replaceOptions(semesterFilter, [], 'semester_name', 'اختر المادة أولًا');
+				return;
+			}
+
+			showLoading(semesterFilter, 'جاري تحميل الفصول...');
+			try {
+				const response = await fetch(`/api/dashboard/filter/semesters/${encodeURIComponent(subjectFilter.value)}`);
+				const payload = await response.json();
+				if (!response.ok) throw new Error();
+				if (requestId !== semestersRequestId) return;
+				const semesters = Array.isArray(payload?.data?.semesters) ? payload.data.semesters : [];
+				replaceOptions(semesterFilter, semesters, 'semester_name', semesters.length ? 'جميع الفصول' : 'لا توجد فصول لهذه المادة');
+			} catch {
+				if (requestId !== semestersRequestId) return;
+				replaceOptions(semesterFilter, [], 'semester_name', 'تعذّر تحميل الفصول');
+			}
+		});
+	</script>
+
+	<style>
+		.articles-page{--al-ink:#102a43;--al-muted:#718096;--al-line:#dfe6ee;max-width:1360px;margin-inline:auto;padding-bottom:2rem}
+		.articles-page-header{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;margin-bottom:1rem}
+		.articles-eyebrow{display:block;margin-bottom:.25rem;color:#2862bb;font-size:.65rem;font-weight:800}
+		.articles-page-header h2{margin:0;color:#061a3a;font-size:clamp(1.35rem,1.1rem + .65vw,1.85rem);font-weight:900;line-height:1.3}
+		.articles-page-header p{margin:.28rem 0 0;color:var(--al-muted);font-size:.75rem}
+		.articles-create-button{display:inline-flex;min-height:2.6rem;align-items:center;justify-content:center;gap:.4rem;border:1px solid #1f55cf;border-radius:.6rem;background:#2458d3;padding:.5rem .9rem;color:#fff;font-size:.73rem;font-weight:850;box-shadow:0 2px 4px rgb(37 88 211 / .16)}
+		.articles-create-button:hover{background:#1d4fca}.articles-create-button svg{width:1rem;height:1rem}
+		.articles-filter-card{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:1rem;border:1px solid var(--al-line);border-radius:.8rem;background:#fff;padding:.7rem;box-shadow:0 1px 2px rgb(15 23 42 / .06)}
+		.articles-filter-form{display:flex;min-width:0;flex:1;flex-wrap:wrap;align-items:center;gap:.55rem}
+		.articles-search-field{position:relative;display:block;min-width:13rem;flex:1}.articles-search-field svg{position:absolute;top:50%;right:.7rem;width:.9rem;height:.9rem;color:#8796a8;transform:translateY(-50%)}
+		.articles-search-field input,.articles-select-field select{width:100%;min-height:2.35rem;border:1px solid #d9e2ec;border-radius:.5rem;background:#fff;color:var(--al-ink);font-size:.72rem}
+		.articles-search-field input{padding:.45rem 2rem .45rem .65rem}.articles-search-field input:focus,.articles-select-field select:focus{border-color:#81a7da;outline:0;box-shadow:0 0 0 3px rgb(33 89 214 / .07)}
+		.articles-select-field{display:flex;align-items:center;gap:.4rem}.articles-select-field>span{color:var(--al-muted);font-size:.65rem;font-weight:700}.articles-select-field select{width:8.5rem;padding:.4rem .55rem}.articles-select-field.is-academic select{width:10rem}.articles-select-field select:disabled{cursor:not-allowed;background:#f8fafc;color:#a3afbd}
+		.articles-search-button,.articles-clear-button{display:inline-flex;min-height:2.35rem;align-items:center;justify-content:center;border-radius:.5rem;padding:.4rem .75rem;font-size:.68rem;font-weight:800}
+		.articles-search-button{border:1px solid #315f9f;background:#fff;color:#1a4d8f}.articles-search-button:hover{background:#f7f9fc}.articles-clear-button{color:#64748b}.articles-clear-button:hover{color:#1a4d8f}
+		.articles-result-count{display:flex;align-items:baseline;gap:.3rem;border-right:1px solid #e7ecf2;padding-inline:1rem .25rem;color:var(--al-muted);font-size:.65rem;white-space:nowrap}.articles-result-count strong{color:var(--al-ink);font-size:.9rem}
+		.articles-table-card{overflow:hidden;border:1px solid var(--al-line);border-radius:.85rem;background:#fff;box-shadow:0 1px 2px rgb(15 23 42 / .06)}
+		.articles-table-heading{display:flex;align-items:center;justify-content:space-between;gap:1rem;border-bottom:1px solid #edf1f5;padding:.9rem 1rem}.articles-table-heading h3{margin:0;color:var(--al-ink);font-size:.85rem;font-weight:850}.articles-table-heading p{margin:.18rem 0 0;color:var(--al-muted);font-size:.62rem}.articles-table-heading>span{border:1px solid #e1e7ee;border-radius:999px;background:#f8fafc;padding:.25rem .55rem;color:#64748b;font-size:.6rem;font-weight:750}
+		.articles-table-scroll{overflow-x:auto}.articles-table-card table{width:100%;border-collapse:collapse}.articles-table-card th{padding:.72rem 1rem;background:#f8fafc;color:#718096;font-size:.62rem;font-weight:800;text-align:right;white-space:nowrap}.articles-table-card td{padding:.78rem 1rem;border-top:1px solid #edf1f5;color:#64748b;font-size:.7rem;vertical-align:middle}.articles-table-card tbody tr{transition:background-color 140ms ease}.articles-table-card tbody tr:hover{background:#fafcff}
+		.articles-title-cell{display:flex;max-width:27rem;align-items:center;gap:.65rem}.articles-document-icon{display:inline-grid;width:2rem;height:2rem;flex:0 0 auto;place-items:center;border:1px solid #dce5ef;border-radius:.55rem;background:#f8fafc;color:#4c6f99}.articles-document-icon svg{width:1rem;height:1rem}.articles-title-cell>div{min-width:0}.articles-title-cell a{display:block;overflow:hidden;color:var(--al-ink);font-size:.72rem;font-weight:800;text-overflow:ellipsis;white-space:nowrap}.articles-title-cell a:hover{color:#1d58ac}.articles-title-cell small{display:block;margin-top:.12rem;color:#9aa7b6;font-size:.56rem}
+		.articles-subject{display:inline-block;max-width:12rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.articles-status{display:inline-flex;align-items:center;gap:.3rem;border-radius:999px;padding:.25rem .5rem;font-size:.59rem;font-weight:800}.articles-status i{width:.32rem;height:.32rem;border-radius:999px}.articles-status.is-published{background:#ecfdf5;color:#08785d}.articles-status.is-published i{background:#10b981}.articles-status.is-draft{background:#f1f5f9;color:#64748b}.articles-status.is-draft i{background:#94a3b8}
+		.articles-views{display:inline-flex;align-items:center;gap:.3rem}.articles-views svg{width:.85rem;height:.85rem;color:#94a3b8}.articles-actions{display:flex;align-items:center;justify-content:flex-end;gap:.3rem}.articles-action{display:inline-grid;width:1.85rem;height:1.85rem;place-items:center;border:1px solid #dfe6ee;border-radius:.45rem;background:#fff;color:#52667e}.articles-action:hover{border-color:#a8bdd8;color:#1a4d8f}.articles-action.is-delete:hover{border-color:#fecaca;background:#fff7f7;color:#dc2626}.articles-action svg{width:.85rem;height:.85rem}
+		.articles-empty{display:flex;min-height:15rem;align-items:center;justify-content:center;flex-direction:column;padding:2rem;text-align:center}.articles-empty>span{display:grid;width:3rem;height:3rem;place-items:center;border-radius:.75rem;background:#f1f5f9;color:#718096}.articles-empty svg{width:1.35rem;height:1.35rem}.articles-empty h3{margin:.7rem 0 0;color:var(--al-ink);font-size:.8rem}.articles-empty p{margin:.25rem 0 0;color:var(--al-muted);font-size:.65rem}
+		.articles-mobile{display:none}.articles-mobile-card{border:1px solid var(--al-line);border-radius:.75rem;background:#fff;padding:.85rem;box-shadow:0 1px 2px rgb(15 23 42 / .06)}.articles-mobile-head{display:flex;align-items:flex-start;gap:.6rem}.articles-mobile-head>div{min-width:0;flex:1}.articles-mobile-head h3{margin:0;color:var(--al-ink);font-size:.75rem;line-height:1.65}.articles-mobile-head p{margin:.18rem 0 0;color:var(--al-muted);font-size:.6rem}.articles-mobile-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem;margin-top:.75rem}.articles-mobile-meta span{border:1px solid #edf1f5;border-radius:.5rem;padding:.45rem;color:#8b98a8;font-size:.58rem}.articles-mobile-meta strong{display:block;margin-top:.15rem;color:var(--al-ink);font-size:.68rem}.articles-mobile-actions{display:flex;gap:.4rem;margin-top:.75rem;border-top:1px solid #edf1f5;padding-top:.7rem}.articles-mobile-actions a,.articles-mobile-actions button{display:inline-flex;min-height:2.1rem;align-items:center;justify-content:center;border:1px solid #dce4ed;border-radius:.45rem;background:#fff;padding:.35rem .65rem;color:#42526a;font-size:.63rem;font-weight:750}.articles-mobile-actions .is-delete{color:#dc2626}
+		:global(.dark) .articles-page{--al-ink:#f8fafc;--al-muted:#94a3b8;--al-line:#334155}:global(.dark) .articles-page-header h2{color:#fff}:global(.dark) .articles-filter-card,:global(.dark) .articles-table-card,:global(.dark) .articles-mobile-card,:global(.dark) .articles-search-field input,:global(.dark) .articles-select-field select,:global(.dark) .articles-action,:global(.dark) .articles-mobile-actions a,:global(.dark) .articles-mobile-actions button{border-color:#334155;background:#0f2547;color:#cbd5e1}:global(.dark) .articles-table-card th,:global(.dark) .articles-table-heading>span{background:#0b1e38}:global(.dark) .articles-table-heading,:global(.dark) .articles-table-card td,:global(.dark) .articles-mobile-actions{border-color:#263b56}:global(.dark) .articles-table-card tbody tr:hover{background:#122b4c}
+		@media(max-width:767px){.articles-page-header{align-items:stretch;flex-direction:column}.articles-create-button{width:100%}.articles-filter-card{align-items:stretch;flex-direction:column}.articles-filter-form{align-items:stretch;flex-direction:column}.articles-search-field,.articles-select-field,.articles-select-field select{width:100%}.articles-select-field{align-items:stretch;flex-direction:column}.articles-result-count{border:0;border-top:1px solid #edf1f5;padding:.65rem .15rem 0}.articles-desktop{display:none}.articles-mobile{display:grid;gap:.7rem}}
+	</style>
+</DashboardLayout>

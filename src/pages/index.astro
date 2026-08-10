@@ -1,11 +1,177 @@
 ---
-import Welcome from '../components/Welcome.astro';
 import Layout from '../layouts/Layout.astro';
+import '../styles/home.css';
+import Hero from '../components/Hero.astro';
+import AudiencePaths from '../components/AudiencePaths.astro';
+import SchoolPromo from '../components/SchoolPromo.astro';
+import SectionWrapper from '../components/SectionWrapper.astro';
+import HomeClassDirectory from '../components/HomeClassDirectory.astro';
+import CategoryCard from '../components/ui/CategoryCard.astro';
+import ArticleCard from '../components/ui/ArticleCard.astro';
+import AdSensePlacement from '../components/AdSensePlacement.astro';
+import EmptyState from '../components/ui/EmptyState.astro';
+import ErrorState from '../components/ui/ErrorState.astro';
+import { apiFetch } from '../lib/api';
+import { getCountryById } from '../lib/countries';
 
-// Welcome to Astro! Wondering what to do next? Check out the Astro documentation at https://docs.astro.build
-// Don't want to use any of this? Delete everything in this file, the `assets`, `components`, and `layouts` directories, and start fresh.
+interface HomeData {
+	articles: any[];
+	posts: any[];
+	featured_posts: any[];
+	categories: any[];
+	classes: any[];
+	settings: Record<string, string>;
+}
+
+const countryId = Astro.locals.countryId;
+const countryCode = getCountryById(countryId).code;
+const home = await apiFetch<HomeData>('/home', { countryId });
+
+const classes = home.data?.classes ?? [];
+const categories = home.data?.categories ?? [];
+const articles = (home.data?.articles ?? []).slice(0, 6);
+const settings = home.data?.settings ?? {};
+const adsenseClient = settings.adsense_client?.trim() ?? '';
+const hasHomeContent = home.ok && (classes.length > 0 || categories.length > 0 || articles.length > 0);
+const hasValidAdConfig = (raw: unknown) => {
+	if (typeof raw !== 'string' || !raw.trim()) return false;
+	try {
+		const config = JSON.parse(raw);
+		return /^\d+$/.test(String(config?.ad_slot ?? ''));
+	} catch {
+		return false;
+	}
+};
+const validAdsenseClient = /^ca-pub-\d+$/.test(adsenseClient);
+const showHomeAd1 = hasHomeContent && validAdsenseClient && (hasValidAdConfig(settings.google_ads_desktop_home) || hasValidAdConfig(settings.google_ads_mobile_home));
+const showHomeAd2 = hasHomeContent && validAdsenseClient && (hasValidAdConfig(settings.google_ads_desktop_home_2) || hasValidAdConfig(settings.google_ads_mobile_home_2));
 ---
 
-<Layout>
-	<Welcome />
+{/* No title/description here — falls back to the dashboard's meta_title/meta_description
+   settings (Layout.astro), then to a generic default if those aren't configured either. This
+   is the one page where a site-wide "meta title/description" setting is conventionally meant
+   to apply. */}
+<Layout enableAds={showHomeAd1 || showHomeAd2}>
+	<Hero countryCode={countryCode} />
+	<AudiencePaths countryCode={countryCode} />
+
+	<div>
+		{/* Classes directory */}
+		<SectionWrapper
+			title="اختر مستواك الدراسي"
+			subtitle="واجهة واحدة تجمع جميع الصفوف؛ ابدأ من مرحلتك وانتقل مباشرة إلى المحتوى المناسب"
+			linkText="تفاصيل الصفوف"
+			linkUrl={`/${countryCode}/classes`}
+			tone="muted"
+		>
+			{
+				!home.ok ? (
+					<ErrorState message={home.message} />
+				) : classes.length > 0 ? (
+					<HomeClassDirectory classes={classes} countryCode={countryCode} />
+				) : (
+					<EmptyState message="لا يوجد صفوف دراسية متاحة حالياً." />
+				)
+			}
+		</SectionWrapper>
+
+		{showHomeAd1 && (
+			<div class="container-shell max-w-7xl py-7 sm:py-9" aria-label="إعلان الصفحة الرئيسية الأول">
+				<AdSensePlacement
+					client={adsenseClient}
+					desktopConfig={settings.google_ads_desktop_home}
+					mobileConfig={settings.google_ads_mobile_home}
+					placement="home-after-classes"
+				/>
+			</div>
+		)}
+
+		{/* Categories Section - Light Cards with Icons */}
+		<SectionWrapper
+			title="الأقسام التعليمية"
+			subtitle="تصفح المحتوى حسب الموضوع أو المادة"
+			linkText="جميع الأقسام"
+			linkUrl={`/${countryCode}/categories`}
+		>
+			{
+				!home.ok ? (
+					<ErrorState message={home.message} />
+				) : categories.length > 0 ? (
+					<div class="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
+						{categories.map((cat: any, i: number) => (
+							<CategoryCard category={cat} href={`/${countryCode}/posts/category/${cat.slug || cat.id}`} index={i} />
+						))}
+					</div>
+				) : (
+					<EmptyState message="لا توجد أقسام متاحة حالياً." />
+				)
+			}
+		</SectionWrapper>
+
+		<SchoolPromo />
+
+		{/* Articles Section - Top Colored Border Cards */}
+		<SectionWrapper
+			title="أحدث المقالات والملفات"
+			subtitle="محتوى جديد يضاف يومياً من أفضل المعلمين"
+			linkText="تصفح المزيد"
+			linkUrl={`/${countryCode}/articles`}
+			tone="muted"
+		>
+			{
+				!home.ok ? (
+					<ErrorState message={home.message} />
+				) : articles.length > 0 ? (
+					<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+						{articles.map((article: any, i: number) => (
+							<ArticleCard article={article} href={`/${countryCode}/lesson/articles/${article.id}`} index={i} />
+						))}
+					</div>
+				) : (
+					<EmptyState message="لا توجد مقالات متاحة حالياً." />
+				)
+			}
+		</SectionWrapper>
+
+		{showHomeAd2 && (
+			<div class="container-shell max-w-7xl py-7 sm:py-9" aria-label="إعلان الصفحة الرئيسية الثاني">
+				<AdSensePlacement
+					client={adsenseClient}
+					desktopConfig={settings.google_ads_desktop_home_2}
+					mobileConfig={settings.google_ads_mobile_home_2}
+					placement="home-after-latest-content"
+				/>
+			</div>
+		)}
+
+		{/* Teacher CTA Banner */}
+		<div class="container-shell py-16 sm:py-20">
+			<div
+				class="relative overflow-hidden rounded-[2rem] bg-graphite-950 p-8 shadow-lifted sm:p-14"
+			>
+				<div class="absolute -left-24 -top-24 size-72 rounded-full bg-royal-600/35 blur-3xl" aria-hidden="true"></div>
+				<div class="absolute -bottom-32 right-1/3 size-72 rounded-full bg-emerald-brand-600/25 blur-3xl" aria-hidden="true"></div>
+				<div class="relative z-10 grid items-center gap-8 lg:grid-cols-[1fr_auto]">
+					<div>
+						<span class="mb-4 inline-flex rounded-full bg-sunset-400 px-3 py-1.5 text-xs font-extrabold text-graphite-950">مساحة مخصصة للمعلمين</span>
+						<h2 class="text-2xl font-extrabold text-white sm:text-3xl">حوّل خبرتك إلى أثر يصل لآلاف الطلاب</h2>
+						<p class="mt-4 max-w-3xl text-sm leading-7 text-graphite-300 sm:text-base sm:leading-8">شارك خبرتك، أنشئ محتوى تعليمياً، وصل لآلاف الطلاب، وابنِ مسيرتك المهنية الرقمية معنا.</p>
+					</div>
+					<a
+						href="/teachers"
+						class="btn-secondary min-w-48 px-8 py-4 text-base"
+					>
+						<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+							><path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path></svg
+						>
+						استكشف باقة المعلم
+					</a>
+				</div>
+			</div>
+		</div>
+	</div>
 </Layout>

@@ -1,0 +1,9 @@
+---
+interface Props { message?: string; }
+const { message = 'لا توجد بيانات لعرضها حاليًا.' } = Astro.props;
+---
+<div class="surface-card flex flex-col items-center justify-center px-5 py-16 text-center">
+	<div class="mb-5 flex size-16 items-center justify-center rounded-2xl bg-royal-50 text-royal-500 dark:bg-royal-950 dark:text-royal-300"><svg class="size-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" /></svg></div>
+	<h3 class="mb-2 font-extrabold text-graphite-900 dark:text-white">لا يوجد محتوى بعد</h3>
+	<p class="max-w-md text-sm leading-6 text-graphite-500 dark:text-graphite-400">{message}</p>
+</div>

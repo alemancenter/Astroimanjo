@@ -1,0 +1,143 @@
+---
+import Breadcrumbs from './ui/Breadcrumbs.astro';
+import EmptyState from './ui/EmptyState.astro';
+import ErrorState from './ui/ErrorState.astro';
+import ClassSubjectIcon from './ui/ClassSubjectIcon.astro';
+
+interface Props {
+	countryCode: string;
+	schoolClass: any;
+	resultOk: boolean;
+	resultMessage: string;
+}
+
+const { countryCode, schoolClass, resultOk, resultMessage } = Astro.props;
+const subjects = schoolClass?.subjects ?? [];
+const totalFiles = subjects.reduce((sum: number, subject: any) => sum + Number(subject.files_count || 0), 0);
+const totalArticles = subjects.reduce((sum: number, subject: any) => sum + Number(subject.articles_count || 0), 0);
+const numberFormat = new Intl.NumberFormat('ar-JO');
+
+const subjectTones = [
+	{
+		line: 'bg-royal-600',
+		icon: 'bg-royal-50 text-royal-700 ring-royal-100 dark:bg-royal-950 dark:text-royal-300 dark:ring-royal-900',
+		badge: 'bg-royal-50 text-royal-700 dark:bg-royal-950 dark:text-royal-200',
+		hover: 'hover:border-royal-300 dark:hover:border-royal-700',
+	},
+	{
+		line: 'bg-emerald-brand-600',
+		icon: 'bg-emerald-brand-50 text-emerald-brand-700 ring-emerald-brand-100 dark:bg-emerald-brand-950 dark:text-emerald-brand-300 dark:ring-emerald-brand-900',
+		badge: 'bg-emerald-brand-50 text-emerald-brand-700 dark:bg-emerald-brand-950 dark:text-emerald-brand-200',
+		hover: 'hover:border-emerald-brand-300 dark:hover:border-emerald-brand-700',
+	},
+	{
+		line: 'bg-sunset-400',
+		icon: 'bg-sunset-50 text-sunset-700 ring-sunset-100 dark:bg-sunset-900/30 dark:text-sunset-300 dark:ring-sunset-800',
+		badge: 'bg-sunset-50 text-sunset-700 dark:bg-sunset-900/30 dark:text-sunset-200',
+		hover: 'hover:border-sunset-300 dark:hover:border-sunset-700',
+	},
+	{
+		line: 'bg-graphite-700',
+		icon: 'bg-graphite-100 text-graphite-700 ring-graphite-200 dark:bg-graphite-800 dark:text-graphite-200 dark:ring-graphite-700',
+		badge: 'bg-graphite-100 text-graphite-700 dark:bg-graphite-800 dark:text-graphite-200',
+		hover: 'hover:border-graphite-400 dark:hover:border-graphite-500',
+	},
+];
+---
+
+{
+	!resultOk || !schoolClass ? (
+		<div class="container-shell py-14"><ErrorState message={resultOk ? 'الصف الدراسي غير موجود.' : resultMessage} /></div>
+	) : (
+		<>
+			<section class="relative overflow-hidden border-b border-graphite-200 bg-white dark:border-graphite-800 dark:bg-graphite-950">
+				<div class="pointer-events-none absolute -right-28 -top-40 size-[30rem] rounded-full bg-royal-100/70 blur-3xl dark:bg-royal-900/25" aria-hidden="true"></div>
+				<div class="pointer-events-none absolute -bottom-32 left-10 size-80 rounded-full bg-emerald-brand-100/55 blur-3xl dark:bg-emerald-brand-900/15" aria-hidden="true"></div>
+
+				<div class="container-shell relative grid gap-8 py-10 sm:py-14 lg:grid-cols-[minmax(0,1fr)_23rem] lg:items-end lg:py-16">
+					<div class="max-w-3xl">
+						<span class="mb-4 inline-flex items-center gap-2 rounded-full border border-royal-100 bg-royal-50 px-3 py-1.5 text-xs font-extrabold text-royal-700 dark:border-royal-900 dark:bg-royal-950 dark:text-royal-200">
+							<svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m12 3 9 4.5-9 4.5-9-4.5L12 3Zm-7 7v5l7 4 7-4v-5" /></svg>
+							المواد والمحتوى التعليمي
+						</span>
+						<h1 class="text-3xl font-black leading-tight tracking-tight text-graphite-950 sm:text-4xl lg:text-5xl dark:text-white">{schoolClass.grade_name}</h1>
+						<p class="mt-4 max-w-2xl text-sm font-medium leading-8 text-graphite-600 sm:text-base dark:text-graphite-300">اختر المادة الدراسية للوصول إلى الفصول والخطط وأوراق العمل والاختبارات والملفات التعليمية المرتبطة بهذا الصف.</p>
+						<div class="mt-6 flex flex-col gap-3 sm:flex-row">
+							<a href="#class-subjects" class="btn-primary">
+								استعرض المواد
+								<svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m12 5 7 7-7 7M19 12H5" /></svg>
+							</a>
+							<a href={`/${countryCode}/articles?class_id=${schoolClass.id}`} class="btn-outline">
+								<svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke-width="2"/><path stroke-linecap="round" stroke-width="2" d="m20 20-4-4"/></svg>
+								البحث في ملفات الصف
+							</a>
+						</div>
+					</div>
+
+					<div class="grid grid-cols-3 gap-2 rounded-2xl border border-graphite-200 bg-white/85 p-3 shadow-soft backdrop-blur dark:border-graphite-700 dark:bg-graphite-900/85 sm:gap-3 sm:p-4">
+						<div class="rounded-xl bg-royal-50 px-2 py-4 text-center dark:bg-royal-950">
+							<strong class="block text-xl font-black text-royal-700 sm:text-2xl dark:text-royal-200">{numberFormat.format(subjects.length)}</strong>
+							<span class="mt-1 block text-[10px] font-bold text-graphite-500 sm:text-xs dark:text-graphite-400">مادة دراسية</span>
+						</div>
+						<div class="rounded-xl bg-emerald-brand-50 px-2 py-4 text-center dark:bg-emerald-brand-950">
+							<strong class="block text-xl font-black text-emerald-brand-700 sm:text-2xl dark:text-emerald-brand-200">{numberFormat.format(totalFiles)}</strong>
+							<span class="mt-1 block text-[10px] font-bold text-graphite-500 sm:text-xs dark:text-graphite-400">ملف تعليمي</span>
+						</div>
+						<div class="rounded-xl bg-sunset-50 px-2 py-4 text-center dark:bg-sunset-900/25">
+							<strong class="block text-xl font-black text-sunset-700 sm:text-2xl dark:text-sunset-300">{numberFormat.format(totalArticles)}</strong>
+							<span class="mt-1 block text-[10px] font-bold text-graphite-500 sm:text-xs dark:text-graphite-400">مقالة وشرح</span>
+						</div>
+					</div>
+				</div>
+			</section>
+
+			<Breadcrumbs items={[
+				{ label: 'الصفوف الدراسية', href: `/${countryCode}/classes` },
+				{ label: schoolClass.grade_name },
+			]} />
+
+			<main class="page-shell pt-8 sm:pt-10">
+				<section id="class-subjects" class="scroll-mt-28" aria-labelledby="class-subjects-title">
+					<div class="mb-6 flex flex-col gap-3 sm:mb-8 sm:flex-row sm:items-end sm:justify-between">
+						<div>
+							<span class="mb-2 inline-flex items-center gap-2 text-sm font-extrabold text-emerald-brand-700 dark:text-emerald-brand-300"><span class="size-2 rounded-full bg-emerald-brand-500"></span>اختر المادة للمتابعة</span>
+							<h2 id="class-subjects-title" class="text-2xl font-black text-graphite-950 sm:text-3xl dark:text-white">مواد {schoolClass.grade_name}</h2>
+							<p class="mt-2 text-sm leading-7 text-graphite-500 dark:text-graphite-400">كل مادة تقودك إلى فصولها وتصنيفات ملفاتها التعليمية المرتبة.</p>
+						</div>
+						<span class="w-fit rounded-xl bg-graphite-100 px-4 py-2 text-sm font-extrabold text-graphite-600 dark:bg-graphite-800 dark:text-graphite-300">{numberFormat.format(subjects.length)} مواد متاحة</span>
+					</div>
+
+					{subjects.length > 0 ? (
+						<div class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+							{subjects.map((subject: any, index: number) => {
+								const tone = subjectTones[index % subjectTones.length];
+								const filesCount = Number(subject.files_count || 0);
+								const articlesCount = Number(subject.articles_count || 0);
+								return (
+									<a href={`/${countryCode}/lesson/subjects/${subject.id}`} class:list={['group relative flex min-h-56 flex-col overflow-hidden rounded-2xl border border-graphite-200 bg-white p-5 shadow-soft transition duration-300 hover:-translate-y-1 hover:shadow-lifted sm:p-6 dark:border-graphite-700 dark:bg-graphite-900', tone.hover]}>
+										<span class:list={['absolute inset-x-0 top-0 h-1', tone.line]}></span>
+										<div class="flex items-start gap-4">
+											<span class:list={['flex size-13 shrink-0 items-center justify-center rounded-xl ring-1 transition duration-300 group-hover:scale-105', tone.icon]}><ClassSubjectIcon index={index} class="size-6" /></span>
+											<div class="min-w-0 flex-1 pt-0.5">
+												<span class="text-[11px] font-extrabold text-graphite-400 dark:text-graphite-500">المادة {numberFormat.format(index + 1)}</span>
+												<h3 class="mt-1 line-clamp-2 text-lg font-black leading-7 text-graphite-950 transition group-hover:text-royal-700 dark:text-white dark:group-hover:text-royal-300">{subject.subject_name}</h3>
+											</div>
+										</div>
+
+										<p class="mt-4 flex-1 text-sm font-medium leading-7 text-graphite-500 dark:text-graphite-400">الفصول الدراسية، الخطط، أوراق العمل، الاختبارات والملفات الخاصة بالمادة.</p>
+
+										<div class="mt-4 flex items-center gap-2 border-t border-graphite-100 pt-4 dark:border-graphite-800">
+											<span class:list={['rounded-lg px-2.5 py-1.5 text-[11px] font-extrabold', tone.badge]}>{numberFormat.format(filesCount)} ملف</span>
+											<span class="rounded-lg bg-graphite-100 px-2.5 py-1.5 text-[11px] font-extrabold text-graphite-600 dark:bg-graphite-800 dark:text-graphite-300">{numberFormat.format(articlesCount)} مقالة</span>
+											<span class="mr-auto inline-flex items-center gap-1 text-xs font-black text-royal-600 transition group-hover:-translate-x-1 dark:text-royal-300">عرض المادة<svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m15 18-6-6 6-6" /></svg></span>
+										</div>
+									</a>
+								);
+							})}
+						</div>
+					) : <EmptyState message="لا توجد مواد متاحة لهذا الصف حاليًا." />}
+				</section>
+			</main>
+		</>
+	)
+}

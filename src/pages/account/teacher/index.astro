@@ -1,0 +1,103 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import '../../../styles/auth-pages.css';
+import Breadcrumbs from '../../../components/ui/Breadcrumbs.astro';
+import { getCurrentUser } from '../../../lib/auth';
+import { apiFetch } from '../../../lib/api';
+
+const currentUser = await getCurrentUser(Astro);
+if (!currentUser) {
+	return Astro.redirect(`/login?redirect_to=${encodeURIComponent('/account/teacher')}`);
+}
+
+const params = Astro.url.searchParams;
+const orderSent = params.get('order_sent') === '1';
+
+const result = await apiFetch<any>('/teacher-subscription/me', {
+	countryId: Astro.locals.countryId,
+	cookieHeader: `token=${Astro.cookies.get('token')?.value}`,
+});
+
+const needsVerification = result.status === 401 || result.status === 403;
+const summary = result.data;
+const subscription = summary?.subscription;
+const pendingOrder = summary?.orders?.find((o: any) => o.status === 'pending');
+const downloadPercent = subscription?.download_limit ? Math.min(100, Math.round(((summary?.usage?.downloads ?? 0) / subscription.download_limit) * 100)) : 0;
+const aiPercent = subscription?.ai_generation_limit ? Math.min(100, Math.round(((summary?.usage?.ai_generations ?? 0) / subscription.ai_generation_limit) * 100)) : 0;
+
+const statusLabels: Record<string, string> = {
+	active: 'نشط',
+	expired: 'منتهي',
+	cancelled: 'ملغى',
+	pending: 'قيد المراجعة',
+	approved: 'تمت الموافقة',
+	rejected: 'مرفوض',
+};
+---
+
+<Layout title="منطقة المعلم" description="إدارة اشتراكك كمعلم." noindex>
+	<Breadcrumbs items={[{ label: 'حسابي', href: '/account' }, { label: 'منطقة المعلم' }]} />
+
+	<div class="mx-auto max-w-3xl px-4 py-10 sm:px-6 sm:py-14">
+		<header class="page-heading"><span class="page-eyebrow">إدارة الباقة</span><h1 class="page-title">منطقة المعلم</h1><p class="page-description">تابع حالة اشتراكك واستخدام المزايا المتاحة لك.</p></header>
+
+		{orderSent && (
+			<div class="alert-success mb-6" role="status">
+				تم إرسال طلب اشتراكك بنجاح، سيتم مراجعته من الإدارة قريباً.
+			</div>
+		)}
+
+		{needsVerification ? (
+			<div class="surface-card p-8 text-center">
+				<p class="text-gray-600 dark:text-gray-300 mb-4">يرجى تفعيل بريدك الإلكتروني للوصول إلى منطقة المعلم.</p>
+				<a href="/account" class="font-bold text-royal-600 hover:underline dark:text-royal-300">
+					الذهاب لصفحة الحساب
+				</a>
+			</div>
+		) : subscription ? (
+			<div class="surface-card border-t-4 border-t-emerald-brand-600 p-6 sm:p-8">
+				<div class="flex items-center justify-between mb-6">
+					<h2 class="text-lg font-bold text-gray-900 dark:text-white">{summary.plan?.name}</h2>
+					<span class={`text-xs font-bold px-3 py-1 rounded-full ${subscription.status === 'active' ? 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'}`}>
+						{statusLabels[subscription.status] || subscription.status}
+					</span>
+				</div>
+				<dl class="grid gap-5 text-sm sm:grid-cols-2">
+					<div>
+						<dt class="text-gray-400 dark:text-gray-500 mb-1">تاريخ الانتهاء</dt>
+						<dd class="text-gray-900 dark:text-white font-medium">{new Date(subscription.ends_at).toLocaleDateString('ar-EG')}</dd>
+					</div>
+					<div>
+						<dt class="text-gray-400 dark:text-gray-500 mb-1">التنزيلات المستخدمة</dt>
+						<dd class="font-bold text-graphite-950 dark:text-white">{summary.usage?.downloads ?? 0} / {subscription.download_limit}<div class="mt-2 h-2 overflow-hidden rounded-full bg-graphite-100 dark:bg-graphite-700"><div class="h-full rounded-full bg-royal-600" style={`width:${downloadPercent}%`}></div></div></dd>
+					</div>
+					<div>
+						<dt class="text-gray-400 dark:text-gray-500 mb-1">توليدات الذكاء الاصطناعي</dt>
+						<dd class="font-bold text-graphite-950 dark:text-white">{summary.usage?.ai_generations ?? 0} / {subscription.ai_generation_limit}<div class="mt-2 h-2 overflow-hidden rounded-full bg-graphite-100 dark:bg-graphite-700"><div class="h-full rounded-full bg-emerald-brand-600" style={`width:${aiPercent}%`}></div></div></dd>
+					</div>
+					<div>
+						<dt class="text-gray-400 dark:text-gray-500 mb-1">المواد المسجلة</dt>
+						<dd class="text-gray-900 dark:text-white font-medium">{(summary.subjects || []).join('، ') || '—'}</dd>
+					</div>
+				</dl>
+			</div>
+		) : pendingOrder ? (
+			<div class="surface-card border-t-4 border-t-sunset-400 p-8 text-center">
+				<p class="text-amber-600 dark:text-amber-400 font-bold mb-2">طلب اشتراكك قيد المراجعة</p>
+				<p class="text-gray-500 dark:text-gray-400 text-sm">
+					تم إرسال طلبك بتاريخ {new Date(pendingOrder.created_at).toLocaleDateString('ar-EG')} وسيتم إشعارك فور الموافقة عليه.
+				</p>
+			</div>
+		) : (
+			<div class="surface-card p-8 text-center">
+				<p class="text-gray-600 dark:text-gray-300 mb-6">ليس لديك اشتراك معلم فعّال حالياً.</p>
+				<a
+					href="/account/teacher/subscribe"
+					class="btn-primary"
+				>
+					اشترك الآن
+				</a>
+			</div>
+		)}
+	</div>
+</Layout>

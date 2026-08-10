@@ -1,0 +1,13 @@
+@import "tailwindcss/utilities" source(none);
+
+@reference "./global.css";
+
+@source "../pages/404.astro";
+@source "../pages/calendar/index.astro";
+@source "../pages/contact.astro";
+@source "../pages/contact-us.astro";
+@source "../pages/faq.astro";
+@source "../pages/teachers/index.astro";
+@source "../components/ui/Breadcrumbs.astro";
+@source "../components/ui/EmptyState.astro";
+@source "../components/ui/ErrorState.astro";

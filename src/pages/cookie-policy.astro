@@ -1,0 +1,66 @@
+---
+import Layout from '../layouts/Layout.astro';
+import '../styles/static-pages.css';
+import Breadcrumbs from '../components/ui/Breadcrumbs.astro';
+import ProseContainer from '../components/ui/ProseContainer.astro';
+import { getSiteContactInfo } from '../lib/site-contact';
+
+export const prerender = true;
+
+const { contactEmail } = await getSiteContactInfo(Astro);
+---
+
+<Layout title="سياسة ملفات تعريف الارتباط" description="تفاصيل استخدام ملفات تعريف الارتباط وخيارات التحكم في الخصوصية على موقع الإيمان التعليمي.">
+	<Breadcrumbs items={[{ label: 'سياسة ملفات تعريف الارتباط' }]} />
+	<ProseContainer title="سياسة ملفات تعريف الارتباط" description="تفاصيل أنواع ملفات الارتباط المستخدمة، وأغراضها، وكيف يمكنك إدارة موافقتك عليها." lastUpdated="30 مايو 2026" eyebrow="ملفات الارتباط والخصوصية">
+		<h2>1. ما هي ملفات تعريف الارتباط؟</h2>
+		<p>ملفات تعريف الارتباط هي ملفات نصية صغيرة تُخزن على جهازك عند زيارة موقعنا. تُستخدم لتذكر تفضيلاتك وتحسين تجربتك وتحليل أنماط الاستخدام. بالإضافة إليها، قد نستخدم تقنيات مشابهة مثل Web Storage وPixel Tags.</p>
+
+		<h2>2. أنواع ملفات تعريف الارتباط التي نستخدمها</h2>
+		<h3>أ. حسب المدة الزمنية</h3>
+		<ul>
+			<li><strong>ملفات الجلسة (Session Cookies):</strong> ملفات مؤقتة تُحذف عند إغلاق المتصفح، وتساعد على تشغيل الجلسة والتنقل بين الصفحات.</li>
+			<li><strong>الملفات الدائمة (Persistent Cookies):</strong> تبقى على جهازك مدة محددة أو إلى أن تحذفها، وتُستخدم لتذكر تفضيلاتك في الزيارات اللاحقة.</li>
+		</ul>
+		<h3>ب. حسب الغرض</h3>
+		<ul>
+			<li><strong>الضرورية (Always Active):</strong> لازمة لتشغيل الموقع وتأمين الحساب والجلسة ولا يمكن تعطيلها من داخل الموقع.</li>
+			<li><strong>التحليلية أو الإحصائية:</strong> تساعدنا على فهم استخدام الصفحات وتحسين المحتوى والأداء.</li>
+			<li><strong>الإعلانية:</strong> تُستخدم لعرض الإعلانات وقياس فعاليتها والحد من تكرارها.</li>
+			<li><strong>الوظيفية:</strong> تتذكر اختياراتك مثل اللغة أو الدولة أو المظهر.</li>
+			<li><strong>الأداء:</strong> تساعد في اكتشاف الأخطاء وقياس سرعة الموقع واستقراره.</li>
+		</ul>
+
+		<h2>3. موافقة الكوكيز وضوابط الخصوصية</h2>
+		<p>عند زيارتك الأولى قد يظهر بانر للموافقة يتيح اختيار فئات ملفات الارتباط التي توافق عليها. يدعم الموقع آليات الموافقة المتوافقة مع Google Consent Mode v2 حيث تكون ملفات التحليل والإعلانات غير مفعلة قبل الموافقة عند تطبيقها.</p>
+		<blockquote>يمكنك مراجعة اختياراتك أو تغييرها في أي وقت من إعدادات متصفحك. قد يؤثر تعطيل الملفات الضرورية على بعض وظائف الموقع.</blockquote>
+
+		<h2>4. الخدمات الخارجية وملفاتها</h2>
+		<h3>Google Analytics</h3>
+		<p>قد نستخدم Google Analytics لتحليل أداء الموقع. تجمع هذه الخدمة بيانات عن أنماط الاستخدام، ويمكن إلغاء التتبع عبر:</p>
+		<ul><li><a href="https://tools.google.com/dlpage/gaoptout" target="_blank" rel="noopener noreferrer">إضافة إلغاء الاشتراك في Google Analytics</a>.</li></ul>
+		<h3>Google AdSense</h3>
+		<p>نستخدم Google AdSense لعرض إعلانات. قد تستخدم Google ملف تعريف DART لعرض إعلانات مخصصة بناءً على زياراتك السابقة. يمكن إدارة ذلك عبر:</p>
+		<ul>
+			<li><a href="https://adssettings.google.com/" target="_blank" rel="noopener noreferrer">إعدادات إعلانات Google</a>.</li>
+			<li><a href="https://optout.aboutads.info/" target="_blank" rel="noopener noreferrer">aboutads.info لإلغاء الاشتراك الموحد</a>.</li>
+		</ul>
+		<h3>Google Tag Manager</h3>
+		<p>قد نستخدم Google Tag Manager لإدارة الأكواد البرمجية. لا يجمع GTM بحد ذاته بيانات شخصية، لكنه يتحكم في تحميل الأدوات الأخرى وفق إعدادات الموافقة.</p>
+
+		<h2>5. التحكم في ملفات تعريف الارتباط عبر المتصفح</h2>
+		<p>يمكنك التحكم في ملفات تعريف الارتباط أو حذفها من خلال إعدادات متصفحك. لاحظ أن تعطيل بعض الملفات قد يؤثر على وظائف الموقع.</p>
+		<ul>
+			<li><a href="https://support.google.com/chrome/answer/95647?hl=ar" target="_blank" rel="noopener noreferrer">Google Chrome</a>.</li>
+			<li><a href="https://support.mozilla.org/ar/kb/حظر-ملفات-تعريف-الارتباط" target="_blank" rel="noopener noreferrer">Mozilla Firefox</a>.</li>
+			<li><a href="https://support.apple.com/ar-sa/guide/safari/sfri11471/mac" target="_blank" rel="noopener noreferrer">Apple Safari</a>.</li>
+			<li><a href="https://support.microsoft.com/ar-sa/windows/حذف-ملفات-تعريف-الارتباط-وإدارتها-168dab11-0753-043d-7c16-ede5947fc64d" target="_blank" rel="noopener noreferrer">Microsoft Edge</a>.</li>
+		</ul>
+
+		<h2>6. تحديثات سياسة الكوكيز</h2>
+		<p>قد يتم تحديث هذه السياسة من وقت إلى آخر لتعكس التغييرات في الخدمات المستخدمة أو المتطلبات القانونية. يُنصح بمراجعة الصفحة بانتظام، ويظهر تاريخ آخر تحديث في أعلاها.</p>
+
+		<h2>التواصل معنا</h2>
+		<p>لأي استفسار حول سياسة الكوكيز، تواصل معنا عبر <a href={`mailto:${contactEmail}`}>{contactEmail}</a> أو <a href="/contact-us">نموذج التواصل</a>.</p>
+	</ProseContainer>
+</Layout>

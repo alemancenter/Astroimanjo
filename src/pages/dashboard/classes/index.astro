@@ -1,0 +1,179 @@
+---
+import DashboardLayout from '../../../layouts/DashboardLayout.astro';
+import DashboardAlert from '../../../components/ui/DashboardAlert.astro';
+import { requireDashboard } from '../../../lib/auth';
+import { apiFetchList } from '../../../lib/api';
+import { COUNTRIES, getCountryById } from '../../../lib/countries';
+
+const guard = await requireDashboard(Astro, 'manage classes');
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+
+const query = (Astro.url.searchParams.get('q') || '').trim();
+const sort = Astro.url.searchParams.get('sort') === 'name' ? 'name' : 'order';
+const token = Astro.cookies.get('token')?.value;
+const authOptions = {
+	countryId: Astro.locals.countryId,
+	cookieHeader: `token=${token}`,
+	params: { per_page: 500 },
+};
+
+const [classResult, subjectResult, semesterResult] = await Promise.all([
+	apiFetchList<any>('/dashboard/school-classes', authOptions),
+	apiFetchList<any>('/dashboard/subjects', authOptions),
+	apiFetchList<any>('/dashboard/semesters', authOptions),
+]);
+
+const allClasses = classResult.items;
+const subjectCounts = new Map<string, number>();
+const semesterCounts = new Map<string, number>();
+for (const subject of subjectResult.items) {
+	const key = String(subject.grade_level ?? '');
+	subjectCounts.set(key, (subjectCounts.get(key) || 0) + 1);
+}
+for (const semester of semesterResult.items) {
+	const key = String(semester.grade_level ?? '');
+	semesterCounts.set(key, (semesterCounts.get(key) || 0) + 1);
+}
+
+const normalizedQuery = query.toLocaleLowerCase('ar');
+const classes = allClasses
+	.filter((item: any) => !normalizedQuery || String(item.grade_name || '').toLocaleLowerCase('ar').includes(normalizedQuery) || String(item.grade_level || '').includes(normalizedQuery))
+	.sort((a: any, b: any) => sort === 'name'
+		? String(a.grade_name || '').localeCompare(String(b.grade_name || ''), 'ar')
+		: Number(a.grade_level || 0) - Number(b.grade_level || 0));
+
+const currentCountry = getCountryById(Astro.locals.countryId);
+const currentUrl = `${Astro.url.pathname}${Astro.url.search}`;
+const totalSubjects = subjectResult.meta?.total ?? subjectResult.items.length;
+const totalSemesters = semesterResult.meta?.total ?? semesterResult.items.length;
+---
+
+<DashboardLayout title="إدارة الصفوف الدراسية" user={user}>
+	<DashboardAlert />
+
+	<div class="classes-page">
+		<header class="classes-page-header">
+			<div>
+				<span class="classes-eyebrow">الهيكل الأكاديمي</span>
+				<h1>الصفوف الدراسية</h1>
+				<p>أنشئ الصفوف ورتّب ظهورها، ثم أدِر المواد والفصول الدراسية التابعة لكل صف.</p>
+			</div>
+			<div class="classes-header-actions">
+				<label class="classes-country-control">
+					<span aria-hidden="true">{currentCountry.flag}</span>
+					<select id="classes-country-select" data-current={Astro.locals.countryId} aria-label="تبديل قاعدة البيانات">
+						{COUNTRIES.map((country) => <option value={country.id} selected={country.id === Astro.locals.countryId}>{country.name}</option>)}
+					</select>
+				</label>
+				<button type="button" class="classes-create-button" data-open-create>
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-width="1.8" d="M12 5v14M5 12h14" /></svg>
+					إضافة صف
+				</button>
+			</div>
+		</header>
+
+		<section class="classes-summary" aria-label="ملخص الهيكل الأكاديمي">
+			<div><span class="is-blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="m3 10 9-5 9 5-9 5-9-5Zm4 2.3V17c3.2 2.5 6.8 2.5 10 0v-4.7" /></svg></span><p>الصفوف<strong>{allClasses.length.toLocaleString('ar-EG')}</strong></p></div>
+			<div><span class="is-green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M4 5.5A2.5 2.5 0 0 1 6.5 3H11v16H6.5A2.5 2.5 0 0 0 4 21V5.5Zm16 0A2.5 2.5 0 0 0 17.5 3H13v16h4.5A2.5 2.5 0 0 1 20 21V5.5Z" /></svg></span><p>المواد<strong>{totalSubjects.toLocaleString('ar-EG')}</strong></p></div>
+			<div><span class="is-orange"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M5 4v3m14-3v3M4 9h16M5 6h14a1 1 0 0 1 1 1v13H4V7a1 1 0 0 1 1-1Z" /></svg></span><p>الفصول الدراسية<strong>{totalSemesters.toLocaleString('ar-EG')}</strong></p></div>
+			<div class="classes-summary-note"><span>قاعدة البيانات الحالية</span><strong>{currentCountry.name}</strong></div>
+		</section>
+
+		<section class="classes-filter-card" aria-label="البحث والترتيب">
+			<form method="get" class="classes-filter-form">
+				<label class="classes-search-field">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7" /><path stroke-linecap="round" stroke-width="1.8" d="m16.5 16.5 4 4" /></svg>
+					<input type="search" name="q" value={query} placeholder="ابحث باسم الصف أو رقمه..." aria-label="البحث في الصفوف" />
+				</label>
+				<label class="classes-select-field"><span>الترتيب</span><select name="sort"><option value="order" selected={sort === 'order'}>حسب ترتيب الظهور</option><option value="name" selected={sort === 'name'}>حسب الاسم</option></select></label>
+				<button type="submit" class="classes-filter-button">تطبيق</button>
+				{(query || sort !== 'order') && <a href="/dashboard/classes" class="classes-clear-button">مسح التصفية</a>}
+			</form>
+			<div class="classes-result-count"><strong>{classes.length.toLocaleString('ar-EG')}</strong><span>صف</span></div>
+		</section>
+
+		{!classResult.ok ? (
+			<section class="classes-error"><strong>تعذّر تحميل الصفوف</strong><p>{classResult.message}</p><a href={Astro.url.pathname}>إعادة المحاولة</a></section>
+		) : (
+			<>
+				<section class="classes-table-card classes-desktop">
+					<div class="classes-table-heading"><div><h2>هيكل الصفوف</h2><p>مرتب حسب موقع الظهور في الواجهة التعليمية.</p></div><span>{classes.length.toLocaleString('ar-EG')} نتيجة</span></div>
+					<div class="classes-table-scroll">
+						<table>
+							<thead><tr><th>الصف الدراسي</th><th>ترتيب الظهور</th><th>المواد</th><th>الفصول الدراسية</th><th>آخر تحديث</th><th><span class="sr-only">الإجراءات</span></th></tr></thead>
+							<tbody>
+								{classes.map((cls: any) => {
+									const classKey = String(cls.id);
+									return (
+										<tr>
+											<td><div class="classes-title-cell"><span>{Number(cls.grade_level || 0).toLocaleString('ar-EG')}</span><div><a href={`/dashboard/classes/${cls.id}/edit`}>{cls.grade_name}</a><small>معرّف الصف #{cls.id}</small></div></div></td>
+											<td><span class="classes-order">{Number(cls.grade_level || 0).toLocaleString('ar-EG')}</span></td>
+											<td><span class="classes-count is-subject"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M4 5.5A2.5 2.5 0 0 1 6.5 3H11v16H6.5A2.5 2.5 0 0 0 4 21V5.5Zm16 0A2.5 2.5 0 0 0 17.5 3H13v16h4.5A2.5 2.5 0 0 1 20 21V5.5Z" /></svg>{subjectResult.ok ? (subjectCounts.get(classKey) || 0).toLocaleString('ar-EG') : '—'}</span></td>
+											<td><span class="classes-count is-semester"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M5 4v3m14-3v3M4 9h16M5 6h14a1 1 0 0 1 1 1v13H4V7a1 1 0 0 1 1-1Z" /></svg>{semesterResult.ok ? (semesterCounts.get(classKey) || 0).toLocaleString('ar-EG') : '—'}</span></td>
+											<td><time datetime={cls.updated_at}>{cls.updated_at ? new Date(cls.updated_at).toLocaleDateString('ar-EG', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}</time></td>
+											<td><div class="classes-actions"><a href={`/dashboard/classes/${cls.id}/edit`} class="classes-manage-button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M4 6h16M4 12h10M4 18h7m6-3 3 3-3 3" /></svg>إدارة الصف</a><form method="post" action={`/api/dashboard/classes/${cls.id}/delete`} data-confirm-delete><input type="hidden" name="redirect_to" value={currentUrl} /><button type="submit" class="classes-delete-button" aria-label={`حذف ${cls.grade_name}`} title="حذف"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 7h16m-10 4v6m4-6v6m-7-10 .8 13h8.4L17 7m-7-3h4l1 3H9l1-3Z" /></svg></button></form></div></td>
+										</tr>
+									);
+								})}
+							</tbody>
+						</table>
+					</div>
+					{classes.length === 0 && <div class="classes-empty"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="m3 10 9-5 9 5-9 5-9-5Zm4 2.3V17c3.2 2.5 6.8 2.5 10 0v-4.7" /></svg></span><h3>لا توجد صفوف مطابقة</h3><p>جرّب تعديل عبارة البحث أو أضف صفًا دراسيًا جديدًا.</p></div>}
+				</section>
+
+				<div class="classes-mobile">
+					{classes.map((cls: any) => {
+						const classKey = String(cls.id);
+						return <article class="classes-mobile-card"><div class="classes-mobile-head"><span>{Number(cls.grade_level || 0).toLocaleString('ar-EG')}</span><div><h2>{cls.grade_name}</h2><p>ترتيب الظهور {Number(cls.grade_level || 0).toLocaleString('ar-EG')}</p></div></div><div class="classes-mobile-meta"><span>المواد<strong>{subjectResult.ok ? (subjectCounts.get(classKey) || 0).toLocaleString('ar-EG') : '—'}</strong></span><span>الفصول<strong>{semesterResult.ok ? (semesterCounts.get(classKey) || 0).toLocaleString('ar-EG') : '—'}</strong></span><span>آخر تحديث<strong>{cls.updated_at ? new Date(cls.updated_at).toLocaleDateString('ar-EG') : '—'}</strong></span></div><div class="classes-mobile-actions"><a href={`/dashboard/classes/${cls.id}/edit`}>إدارة المواد والفصول</a><form method="post" action={`/api/dashboard/classes/${cls.id}/delete`} data-confirm-delete><input type="hidden" name="redirect_to" value={currentUrl} /><button type="submit">حذف</button></form></div></article>;
+					})}
+					{classes.length === 0 && <div class="classes-empty"><h3>لا توجد صفوف مطابقة</h3><p>جرّب تعديل عبارة البحث أو أضف صفًا جديدًا.</p></div>}
+				</div>
+			</>
+		)}
+	</div>
+
+	<dialog id="create-class-dialog" class="classes-dialog">
+		<div class="classes-dialog-card">
+			<div class="classes-dialog-head"><div><span>صف دراسي جديد</span><h2>إضافة صف إلى {currentCountry.name}</h2><p>حدّد اسم الصف وموقعه ضمن تسلسل الصفوف في الواجهة.</p></div><button type="button" data-close-create aria-label="إغلاق"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-width="1.8" d="m7 7 10 10M17 7 7 17" /></svg></button></div>
+			<form method="post" action="/api/dashboard/classes/save" class="classes-create-form">
+				<input type="hidden" name="redirect_to" value={currentUrl} />
+				<label><span>اسم الصف</span><input type="text" name="grade_name" required minlength="2" autocomplete="off" placeholder="مثال: الصف الأول الابتدائي" /></label>
+				<label><span>ترتيب الظهور</span><input type="number" name="grade_level" required min="1" inputmode="numeric" placeholder="مثال: 1" /><small>الرقم الأصغر يظهر أولًا في قوائم الصفوف.</small></label>
+				<div class="classes-dialog-actions"><button type="button" data-close-create>إلغاء</button><button type="submit">حفظ الصف</button></div>
+			</form>
+		</div>
+	</dialog>
+
+	<script>
+		const dialog = document.getElementById('create-class-dialog') as HTMLDialogElement | null;
+		document.querySelector('[data-open-create]')?.addEventListener('click', () => dialog?.showModal());
+		document.querySelectorAll('[data-close-create]').forEach((button) => button.addEventListener('click', () => dialog?.close()));
+		dialog?.addEventListener('click', (event) => { if (event.target === dialog) dialog.close(); });
+		document.querySelectorAll<HTMLFormElement>('[data-confirm-delete]').forEach((form) => {
+			form.addEventListener('submit', (event) => {
+				if (!window.confirm('سيتم حذف الصف وما يرتبط به من بنية أكاديمية. هل تريد المتابعة؟')) event.preventDefault();
+			});
+		});
+		const countrySelect = document.getElementById('classes-country-select') as HTMLSelectElement | null;
+		countrySelect?.addEventListener('change', () => {
+			if (countrySelect.value === countrySelect.dataset.current) return;
+			const url = new URL(window.location.href);
+			url.searchParams.set('country', countrySelect.value);
+			window.location.href = url.toString();
+		});
+	</script>
+
+	<style>
+		.classes-page{--cl-ink:#102a43;--cl-muted:#718096;--cl-line:#dfe6ee;max-width:1360px;margin-inline:auto;padding-bottom:2rem}.classes-page-header{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;margin-bottom:1rem}.classes-eyebrow{display:block;margin-bottom:.25rem;color:#1a4d8f;font-size:.65rem;font-weight:850}.classes-page-header h1{margin:0;color:#061a3a;font-size:clamp(1.35rem,1.1rem + .65vw,1.85rem);font-weight:900;line-height:1.3}.classes-page-header p{margin:.28rem 0 0;color:var(--cl-muted);font-size:.75rem}.classes-header-actions{display:flex;align-items:center;gap:.55rem}.classes-country-control{display:flex;min-height:2.6rem;align-items:center;gap:.4rem;border:1px solid var(--cl-line);border-radius:.6rem;background:#fff;padding:.35rem .55rem}.classes-country-control>span{font-size:1rem}.classes-country-control select{border:0;background:transparent;color:var(--cl-ink);font-family:inherit;font-size:.66rem;font-weight:750;outline:0}.classes-create-button{display:inline-flex;min-height:2.6rem;align-items:center;justify-content:center;gap:.4rem;border:1px solid #16427d;border-radius:.6rem;background:#1a4d8f;padding:.5rem .9rem;color:#fff;font-family:inherit;font-size:.73rem;font-weight:850;box-shadow:0 2px 4px rgb(26 77 143/.16)}.classes-create-button:hover{background:#153f76}.classes-create-button svg{width:1rem;height:1rem}
+		.classes-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) 1.15fr;gap:.65rem;margin-bottom:1rem}.classes-summary>div{display:flex;min-height:4.3rem;align-items:center;gap:.65rem;border:1px solid var(--cl-line);border-radius:.75rem;background:#fff;padding:.65rem .75rem;box-shadow:0 1px 2px rgb(15 23 42/.04)}.classes-summary>div>span:not(.classes-summary-note span){display:grid;width:2.35rem;height:2.35rem;flex:none;place-items:center;border-radius:.55rem}.classes-summary svg{width:1.05rem;height:1.05rem}.classes-summary .is-blue{background:#edf4fc;color:#1a4d8f}.classes-summary .is-green{background:#edf9f5;color:#0f8464}.classes-summary .is-orange{background:#fff7eb;color:#c77712}.classes-summary p{margin:0;color:var(--cl-muted);font-size:.59rem}.classes-summary p strong{display:block;margin-top:.08rem;color:var(--cl-ink);font-size:.9rem;font-weight:900}.classes-summary-note{justify-content:space-between!important;border-style:dashed!important;box-shadow:none!important}.classes-summary-note span{color:var(--cl-muted);font-size:.6rem}.classes-summary-note strong{color:var(--cl-ink);font-size:.72rem}
+		.classes-filter-card{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:1rem;border:1px solid var(--cl-line);border-radius:.8rem;background:#fff;padding:.7rem;box-shadow:0 1px 2px rgb(15 23 42/.06)}.classes-filter-form{display:flex;min-width:0;flex:1;flex-wrap:wrap;align-items:center;gap:.55rem}.classes-search-field{position:relative;display:block;min-width:14rem;flex:1}.classes-search-field svg{position:absolute;top:50%;right:.7rem;width:.9rem;height:.9rem;color:#8796a8;transform:translateY(-50%)}.classes-search-field input,.classes-select-field select{width:100%;min-height:2.35rem;border:1px solid #d9e2ec;border-radius:.5rem;background:#fff;color:var(--cl-ink);font-family:inherit;font-size:.69rem}.classes-search-field input{padding:.45rem 2rem .45rem .65rem}.classes-search-field input:focus,.classes-select-field select:focus{border-color:#81a7da;outline:0;box-shadow:0 0 0 3px rgb(26 77 143/.07)}.classes-select-field{display:flex;align-items:center;gap:.35rem}.classes-select-field>span{color:var(--cl-muted);font-size:.61rem;font-weight:750}.classes-select-field select{width:10.5rem;padding:.4rem .5rem}.classes-filter-button,.classes-clear-button{display:inline-flex;min-height:2.35rem;align-items:center;justify-content:center;border-radius:.5rem;padding:.4rem .75rem;font-size:.65rem;font-weight:800}.classes-filter-button{border:1px solid #315f9f;background:#fff;color:#1a4d8f}.classes-filter-button:hover{background:#f7f9fc}.classes-clear-button{color:#64748b}.classes-result-count{display:flex;align-items:baseline;gap:.3rem;border-right:1px solid #e7ecf2;padding-inline:1rem .25rem;color:var(--cl-muted);font-size:.64rem;white-space:nowrap}.classes-result-count strong{color:var(--cl-ink);font-size:.88rem}
+		.classes-table-card{overflow:hidden;border:1px solid var(--cl-line);border-radius:.85rem;background:#fff;box-shadow:0 1px 2px rgb(15 23 42/.06)}.classes-table-heading{display:flex;align-items:center;justify-content:space-between;gap:1rem;border-bottom:1px solid #edf1f5;padding:.85rem 1rem}.classes-table-heading h2{margin:0;color:var(--cl-ink);font-size:.84rem;font-weight:850}.classes-table-heading p{margin:.16rem 0 0;color:var(--cl-muted);font-size:.6rem}.classes-table-heading>span{border:1px solid #e1e7ee;border-radius:999px;background:#f8fafc;padding:.25rem .55rem;color:#64748b;font-size:.58rem;font-weight:750}.classes-table-scroll{overflow-x:auto}.classes-table-card table{width:100%;border-collapse:collapse}.classes-table-card th{padding:.7rem .8rem;background:#f8fafc;color:#718096;font-size:.59rem;font-weight:800;text-align:right;white-space:nowrap}.classes-table-card td{padding:.72rem .8rem;border-top:1px solid #edf1f5;color:#64748b;font-size:.66rem;vertical-align:middle}.classes-table-card tbody tr{transition:background-color .14s}.classes-table-card tbody tr:hover{background:#fafcff}.classes-title-cell{display:flex;min-width:15rem;align-items:center;gap:.6rem}.classes-title-cell>span,.classes-mobile-head>span{display:grid;width:2.25rem;height:2.25rem;flex:none;place-items:center;border:1px solid #d9e5f2;border-radius:.55rem;background:#edf4fc;color:#1a4d8f;font-size:.66rem;font-weight:900}.classes-title-cell a{display:block;color:var(--cl-ink);font-size:.7rem;font-weight:850}.classes-title-cell a:hover{color:#1a4d8f}.classes-title-cell small{display:block;margin-top:.08rem;color:#9aa6b4;font-size:.51rem}.classes-order{display:inline-grid;min-width:1.8rem;height:1.55rem;place-items:center;border-radius:.38rem;background:#f2f5f8;color:#52667e;font-size:.61rem;font-weight:800}.classes-count{display:inline-flex;align-items:center;gap:.3rem;border-radius:999px;padding:.25rem .48rem;font-size:.59rem;font-weight:800}.classes-count svg{width:.75rem;height:.75rem}.classes-count.is-subject{background:#edf9f5;color:#0b7659}.classes-count.is-semester{background:#fff7eb;color:#a7600b}.classes-table-card time{color:#718096;font-size:.58rem}.classes-actions{display:flex;align-items:center;justify-content:flex-end;gap:.3rem}.classes-manage-button{display:inline-flex;min-height:1.85rem;align-items:center;gap:.3rem;border:1px solid #d7e2ee;border-radius:.45rem;background:#fff;padding:.3rem .55rem;color:#1a4d8f;font-size:.58rem;font-weight:800}.classes-manage-button:hover{border-color:#99b6d7;background:#f8fbff}.classes-manage-button svg{width:.75rem;height:.75rem}.classes-delete-button{display:inline-grid;width:1.85rem;height:1.85rem;place-items:center;border:1px solid #dfe6ee;border-radius:.45rem;background:#fff;color:#718096}.classes-delete-button:hover{border-color:#fecaca;background:#fff7f7;color:#dc2626}.classes-delete-button svg{width:.82rem;height:.82rem}
+		.classes-empty,.classes-error{display:flex;min-height:14rem;align-items:center;justify-content:center;flex-direction:column;padding:2rem;text-align:center}.classes-empty>span{display:grid;width:3rem;height:3rem;place-items:center;border-radius:.75rem;background:#f1f5f9;color:#718096}.classes-empty svg{width:1.35rem;height:1.35rem}.classes-empty h3,.classes-error strong{margin:.7rem 0 0;color:var(--cl-ink);font-size:.8rem}.classes-empty p,.classes-error p{margin:.25rem 0 0;color:var(--cl-muted);font-size:.64rem}.classes-error{border:1px solid #fecaca;border-radius:.8rem;background:#fff}.classes-error a{margin-top:.65rem;color:#1a4d8f;font-size:.65rem;font-weight:800}.classes-mobile{display:none}.classes-mobile-card{border:1px solid var(--cl-line);border-radius:.75rem;background:#fff;padding:.85rem;box-shadow:0 1px 2px rgb(15 23 42/.06)}.classes-mobile-head{display:flex;align-items:center;gap:.58rem}.classes-mobile-head>div{min-width:0;flex:1}.classes-mobile-head h2{margin:0;color:var(--cl-ink);font-size:.72rem}.classes-mobile-head p{margin:.1rem 0 0;color:var(--cl-muted);font-size:.55rem}.classes-mobile-meta{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.4rem;margin-top:.7rem}.classes-mobile-meta span{border:1px solid #edf1f5;border-radius:.5rem;padding:.4rem;color:#8b98a8;font-size:.53rem}.classes-mobile-meta strong{display:block;margin-top:.12rem;color:var(--cl-ink);font-size:.61rem}.classes-mobile-actions{display:flex;gap:.38rem;margin-top:.7rem;border-top:1px solid #edf1f5;padding-top:.65rem}.classes-mobile-actions a,.classes-mobile-actions button{display:inline-flex;min-height:2.05rem;align-items:center;justify-content:center;border:1px solid #dce4ed;border-radius:.43rem;background:#fff;padding:.34rem .62rem;font-size:.59rem;font-weight:780}.classes-mobile-actions a{flex:1;color:#1a4d8f}.classes-mobile-actions button{color:#dc2626}
+		.classes-dialog{width:min(92vw,31rem);max-width:none;border:0;border-radius:.9rem;background:transparent;padding:0}.classes-dialog::backdrop{background:rgb(4 16 35/.58);backdrop-filter:blur(2px)}.classes-dialog-card{overflow:hidden;border:1px solid #dce4ed;border-radius:.9rem;background:#fff;box-shadow:0 20px 55px rgb(6 26 58/.22)}.classes-dialog-head{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;border-bottom:1px solid #edf1f5;padding:1.1rem 1.2rem}.classes-dialog-head span{color:#1a4d8f;font-size:.57rem;font-weight:850}.classes-dialog-head h2{margin:.2rem 0 0;color:#102a43;font-size:1rem;font-weight:900}.classes-dialog-head p{margin:.2rem 0 0;color:#718096;font-size:.61rem}.classes-dialog-head>button{display:grid;width:2rem;height:2rem;place-items:center;border:1px solid #dfe6ee;border-radius:.45rem;background:#fff;color:#64748b}.classes-dialog-head svg{width:.85rem;height:.85rem}.classes-create-form{display:grid;gap:.8rem;padding:1.2rem}.classes-create-form label>span{display:block;margin-bottom:.32rem;color:#344b63;font-size:.63rem;font-weight:800}.classes-create-form input{width:100%;min-height:2.5rem;border:1px solid #d9e2ec;border-radius:.52rem;background:#fff;padding:.5rem .65rem;color:#102a43;font-family:inherit;font-size:.7rem}.classes-create-form input:focus{border-color:#81a7da;outline:0;box-shadow:0 0 0 3px rgb(26 77 143/.07)}.classes-create-form small{display:block;margin-top:.25rem;color:#8b98a8;font-size:.54rem}.classes-dialog-actions{display:flex;justify-content:flex-end;gap:.45rem;margin-top:.25rem;border-top:1px solid #edf1f5;padding-top:.85rem}.classes-dialog-actions button{min-height:2.25rem;border-radius:.48rem;padding:.4rem .8rem;font-family:inherit;font-size:.64rem;font-weight:800}.classes-dialog-actions button:first-child{border:1px solid #dce4ed;background:#fff;color:#64748b}.classes-dialog-actions button:last-child{border:1px solid #16427d;background:#1a4d8f;color:#fff}
+		:global(.dark) .classes-page{--cl-ink:#f8fafc;--cl-muted:#94a3b8;--cl-line:#334155}:global(.dark) .classes-page-header h1{color:#fff}:global(.dark) .classes-country-control,:global(.dark) .classes-summary>div,:global(.dark) .classes-filter-card,:global(.dark) .classes-table-card,:global(.dark) .classes-mobile-card,:global(.dark) .classes-search-field input,:global(.dark) .classes-select-field select,:global(.dark) .classes-manage-button,:global(.dark) .classes-delete-button,:global(.dark) .classes-mobile-actions a,:global(.dark) .classes-mobile-actions button,:global(.dark) .classes-error{border-color:#334155;background:#0f2547;color:#cbd5e1}:global(.dark) .classes-table-card th{background:#0b1e38}:global(.dark) .classes-table-heading,:global(.dark) .classes-table-card td,:global(.dark) .classes-mobile-actions{border-color:#263b56}:global(.dark) .classes-table-card tbody tr:hover{background:#122b4c}:global(.dark) .classes-title-cell>span,:global(.dark) .classes-mobile-head>span{border-color:#294d75;background:#132f53;color:#8eb4e6}:global(.dark) .classes-dialog-card{border-color:#334155;background:#0f2547}:global(.dark) .classes-dialog-head,:global(.dark) .classes-dialog-actions{border-color:#263b56}:global(.dark) .classes-dialog-head h2,:global(.dark) .classes-create-form label>span{color:#f8fafc}:global(.dark) .classes-dialog-head>button,:global(.dark) .classes-create-form input,:global(.dark) .classes-dialog-actions button:first-child{border-color:#40536a;background:#132943;color:#e2e8f0}
+		@media(max-width:900px){.classes-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
+		@media(max-width:767px){.classes-page-header{align-items:stretch;flex-direction:column}.classes-header-actions{display:grid;grid-template-columns:1fr 1fr}.classes-country-control,.classes-create-button{justify-content:center}.classes-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.classes-filter-card{align-items:stretch;flex-direction:column}.classes-filter-form{align-items:stretch;flex-direction:column}.classes-search-field,.classes-select-field,.classes-select-field select{width:100%}.classes-select-field{align-items:stretch;flex-direction:column}.classes-result-count{border:0;border-top:1px solid #edf1f5;padding:.65rem .15rem 0}.classes-desktop{display:none}.classes-mobile{display:grid;gap:.7rem}}
+		@media(max-width:430px){.classes-summary{grid-template-columns:1fr}.classes-summary-note{display:none!important}.classes-mobile-meta{grid-template-columns:repeat(2,minmax(0,1fr))}.classes-mobile-meta span:last-child{grid-column:1/-1}}
+	</style>
+</DashboardLayout>

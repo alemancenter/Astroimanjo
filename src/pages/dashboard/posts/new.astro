@@ -1,0 +1,18 @@
+---
+import DashboardLayout from '../../../layouts/DashboardLayout.astro';
+import DashboardAlert from '../../../components/ui/DashboardAlert.astro';
+import PostForm from '../../../components/dashboard/PostForm.astro';
+import { requireDashboard } from '../../../lib/auth';
+import { apiFetchList } from '../../../lib/api';
+
+const guard = await requireDashboard(Astro, 'manage posts');
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+
+const { items: categories } = await apiFetchList<any>('/categories', { countryId: Astro.locals.countryId });
+---
+
+<DashboardLayout title="منشور جديد" user={user}>
+	<DashboardAlert />
+	<PostForm categories={categories} countryId={Astro.locals.countryId} />
+</DashboardLayout>

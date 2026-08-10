@@ -1,0 +1,53 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import '../../styles/misc-pages.css';
+import Breadcrumbs from '../../components/ui/Breadcrumbs.astro';
+import EmptyState from '../../components/ui/EmptyState.astro';
+import ErrorState from '../../components/ui/ErrorState.astro';
+import { apiFetchList } from '../../lib/api';
+
+interface Event {
+	id: number;
+	title: string;
+	description?: string;
+	event_date: string;
+}
+
+const countryId = Astro.locals.countryId;
+const { ok, items: events, message } = await apiFetchList<Event>('/home/calendar', { countryId });
+
+const sorted = [...events].sort((a, b) => new Date(a.event_date).getTime() - new Date(b.event_date).getTime());
+---
+
+<Layout title="التقويم الدراسي" description="مواعيد وأحداث الفصل الدراسي.">
+	<Breadcrumbs items={[{ label: 'التقويم الدراسي' }]} />
+
+	<div class="mx-auto max-w-4xl px-4 py-10 sm:px-6 sm:py-14 lg:px-8">
+		<header class="page-heading"><span class="page-eyebrow">ابقَ على موعد</span><h1 class="page-title">التقويم الدراسي</h1><p class="page-description">المواعيد والأحداث الدراسية القادمة مرتبة زمنيًا.</p></header>
+
+		{
+			!ok ? (
+				<ErrorState message={message} />
+			) : sorted.length > 0 ? (
+				<ul class="space-y-4">
+					{sorted.map((event) => (
+						<li class="surface-card flex gap-4 p-5 sm:p-6">
+							<div class="flex size-16 flex-shrink-0 flex-col items-center justify-center rounded-2xl bg-royal-50 text-royal-700 ring-1 ring-royal-100 dark:bg-royal-950 dark:text-royal-200 dark:ring-royal-900">
+								<span class="text-xs font-bold">
+									{new Date(event.event_date).toLocaleDateString('ar-EG', { month: 'short' })}
+								</span>
+								<span class="text-xl font-extrabold">{new Date(event.event_date).getDate()}</span>
+							</div>
+							<div>
+								<h3 class="mb-1 font-extrabold text-graphite-950 dark:text-white">{event.title}</h3>
+								{event.description && <p class="text-sm leading-6 text-graphite-600 dark:text-graphite-300">{event.description}</p>}
+							</div>
+						</li>
+					))}
+				</ul>
+			) : (
+				<EmptyState message="لا توجد أحداث مجدولة حالياً." />
+			)
+		}
+	</div>
+</Layout>

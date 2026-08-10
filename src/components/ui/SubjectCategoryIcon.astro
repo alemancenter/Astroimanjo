@@ -1,0 +1,22 @@
+---
+interface Props {
+	category: string;
+	class?: string;
+}
+
+const { category, class: className = 'size-7' } = Astro.props;
+---
+
+{
+	category === 'plans' ? (
+		<svg class={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 3h12a2 2 0 0 1 2 2v16H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm3 0v18M8 7H4m4 4H4m4 4H4" /></svg>
+	) : category === 'papers' ? (
+		<svg class={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Zm0 0v6h6M8 13h8m-8 4h6" /></svg>
+	) : category === 'tests' ? (
+		<svg class={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5h6m-6 4h6m-7 4 2 2 4-4m4-8h1a2 2 0 0 1 2 2v15a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h1m3-1h6v4H9V2Z" /></svg>
+	) : category === 'books' ? (
+		<svg class={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z" /></svg>
+	) : (
+		<svg class={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5h6M9 9h6m-8 4h10M7 17h7M8 3H6a2 2 0 0 0-2 2v16h16V5a2 2 0 0 0-2-2h-2M8 2h8v4H8V2Z" /></svg>
+	)
+}

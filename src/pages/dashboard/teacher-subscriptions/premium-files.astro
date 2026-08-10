@@ -1,0 +1,117 @@
+---
+import DashboardLayout from '../../../layouts/DashboardLayout.astro';
+import DashboardAlert from '../../../components/ui/DashboardAlert.astro';
+import TeacherSubTabs from '../../../components/dashboard/TeacherSubTabs.astro';
+import Pagination from '../../../components/ui/Pagination.astro';
+import { requireDashboard } from '../../../lib/auth';
+import { apiFetch } from '../../../lib/api';
+
+const guard = await requireDashboard(Astro, 'manage teacher subscriptions');
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+
+const token = Astro.cookies.get('token')?.value;
+const page = Math.max(1, Number(Astro.url.searchParams.get('page')) || 1);
+const result = await apiFetch<any[]>('/dashboard/teacher-subscriptions/premium-files', {
+	countryId: Astro.locals.countryId,
+	cookieHeader: `token=${token}`,
+	params: { page, per_page: 20 },
+});
+const files = Array.isArray(result.data) ? result.data : [];
+const meta = result.meta;
+---
+
+<DashboardLayout title="الملفات المميزة للمعلمين" user={user}>
+	<DashboardAlert />
+	<TeacherSubTabs active="premium-files" />
+
+	<div class="grid gap-6 lg:grid-cols-3">
+		<div class="lg:col-span-2 surface-card overflow-hidden">
+			<div class="overflow-x-auto">
+				<table class="w-full text-sm">
+					<thead class="bg-graphite-50 text-graphite-500 dark:bg-graphite-900/50 dark:text-graphite-400">
+						<tr>
+							<th class="text-right px-4 py-3 font-bold">العنوان</th>
+							<th class="text-right px-4 py-3 font-bold">المادة</th>
+							<th class="text-right px-4 py-3 font-bold">الحالة</th>
+							<th class="text-right px-4 py-3 font-bold">التنزيلات</th>
+							<th class="text-right px-4 py-3 font-bold">إجراءات</th>
+						</tr>
+					</thead>
+					<tbody class="divide-y divide-graphite-100 dark:divide-graphite-800">
+						{
+							files.map((f: any) => (
+								<tr>
+									<td class="px-4 py-3 font-bold text-graphite-950 dark:text-white max-w-[160px] truncate">{f.title || f.original_filename}</td>
+									<td class="px-4 py-3 text-graphite-500 dark:text-graphite-400">{f.subject_name || f.subject || '—'}</td>
+									<td class="px-4 py-3">
+										<span class={f.is_active ? 'badge-success' : 'badge'}>{f.is_active ? 'نشط' : 'معطّل'}</span>
+									</td>
+									<td class="px-4 py-3 text-graphite-500 dark:text-graphite-400">{f.download_count ?? 0}</td>
+									<td class="px-4 py-3">
+										<div class="flex items-center gap-2">
+											{f.is_active ? (
+												<form method="post" action={`/api/dashboard/teacher-subscriptions/premium-files/${f.id}/disable`}>
+													<input type="hidden" name="redirect_to" value="/dashboard/teacher-subscriptions/premium-files" />
+													<button type="submit" class="font-bold text-amber-600 hover:underline dark:text-amber-400">تعطيل</button>
+												</form>
+											) : (
+												<form method="post" action={`/api/dashboard/teacher-subscriptions/premium-files/${f.id}/enable`}>
+													<input type="hidden" name="redirect_to" value="/dashboard/teacher-subscriptions/premium-files" />
+													<button type="submit" class="font-bold text-emerald-brand-600 hover:underline dark:text-emerald-brand-300">تفعيل</button>
+												</form>
+											)}
+											<form method="post" action={`/api/dashboard/teacher-subscriptions/premium-files/${f.id}/archive`} onsubmit="return confirm('أرشفة هذا الملف؟')">
+												<input type="hidden" name="redirect_to" value="/dashboard/teacher-subscriptions/premium-files" />
+												<button type="submit" class="font-bold text-red-600 hover:underline dark:text-red-400">أرشفة</button>
+											</form>
+										</div>
+									</td>
+								</tr>
+							))
+						}
+					</tbody>
+				</table>
+			</div>
+			{files.length === 0 && <p class="py-10 text-center text-graphite-400">لا توجد ملفات مميزة بعد.</p>}
+			{meta && <div class="p-4"><Pagination currentPage={meta.current_page} lastPage={meta.last_page} url={Astro.url} /></div>}
+		</div>
+
+		<div class="surface-card h-fit p-6">
+			<h2 class="mb-4 text-lg font-extrabold text-graphite-950 dark:text-white">رفع ملف مميّز جديد</h2>
+			<form method="post" action="/api/dashboard/teacher-subscriptions/premium-files/upload" enctype="multipart/form-data" class="space-y-4">
+				<div>
+					<label for="title" class="form-label">العنوان</label>
+					<input id="title" type="text" name="title" required class="form-control" />
+				</div>
+				<div>
+					<label for="subject_name" class="form-label">المادة</label>
+					<input id="subject_name" type="text" name="subject_name" required class="form-control" />
+				</div>
+				<div>
+					<label for="category" class="form-label">التصنيف</label>
+					<select id="category" name="category" class="form-control">
+						<option value="exam">امتحان</option>
+						<option value="worksheet">ورقة عمل</option>
+						<option value="plan">خطة</option>
+						<option value="answer_key">نموذج إجابة</option>
+					</select>
+				</div>
+				<div>
+					<label for="country" class="form-label">الدولة</label>
+					<select id="country" name="country" class="form-control">
+						<option value="jo">الأردن</option>
+						<option value="sa">السعودية</option>
+						<option value="eg">مصر</option>
+						<option value="ps">فلسطين</option>
+					</select>
+				</div>
+				<div>
+					<label for="file" class="form-label">الملف</label>
+					<input id="file" type="file" name="file" required class="form-control text-sm" />
+				</div>
+				<button type="submit" class="btn-primary w-full">رفع الملف</button>
+			</form>
+		</div>
+	</div>
+</DashboardLayout>

@@ -1,0 +1,10 @@
+---
+// Legacy bare path — the canonical article page lives at /{countryCode}/lesson/articles/{id}
+// (mirrors the old Next.js site's own /articles/[id] redirect shim, so any pre-existing
+// bookmarks/backlinks to this bare shape keep working).
+import { getCountryById } from '../../lib/countries';
+
+const { id } = Astro.params;
+const countryCode = getCountryById(Astro.locals.countryId).code;
+return Astro.redirect(`/${countryCode}/lesson/articles/${id}`, 307);
+---

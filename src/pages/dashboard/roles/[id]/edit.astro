@@ -1,0 +1,125 @@
+---
+import DashboardLayout from '../../../../layouts/DashboardLayout.astro';
+import DashboardAlert from '../../../../components/ui/DashboardAlert.astro';
+import { requireDashboard } from '../../../../lib/auth';
+import { apiFetch, apiFetchList } from '../../../../lib/api';
+
+const guard = await requireDashboard(Astro, 'manage roles');
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+const { id } = Astro.params;
+const token = Astro.cookies.get('token')?.value;
+const authOptions = { countryId: Astro.locals.countryId, cookieHeader: `token=${token}` };
+const [roleResult, permissionsResult] = await Promise.all([
+	apiFetch<any>(`/dashboard/roles/${id}`, authOptions),
+	apiFetchList<any>('/dashboard/permissions', authOptions),
+]);
+const role = roleResult.data;
+const permissions = permissionsResult.items;
+const assignedIds = new Set((role?.permissions ?? []).map((permission: any) => Number(permission.id)));
+const isSuperAdmin = user.roles?.some((item: any) => item.name === 'Super Admin') ?? false;
+const isProtected = role ? ['Super Admin', 'Admin'].includes(role.name) : false;
+const coverage = permissions.length ? Math.round((assignedIds.size / permissions.length) * 100) : 0;
+
+const labels: Record<string, string> = {
+	users: 'المستخدمون', roles: 'الأدوار', permissions: 'الصلاحيات', articles: 'المقالات', posts: 'المنشورات', categories: 'التصنيفات', comments: 'التعليقات', files: 'الملفات', settings: 'الإعدادات', dashboard: 'لوحة التحكم', security: 'الأمان', subscriptions: 'الاشتراكات', teachers: 'المعلمون', classes: 'الصفوف', subjects: 'المواد', lessons: 'الدروس', messages: 'الرسائل', notifications: 'الإشعارات', calendar: 'التقويم', other: 'أخرى',
+};
+function categoryOf(name: string): string {
+	const clean = String(name || '').trim().toLowerCase();
+	if (!clean) return 'other';
+	if (clean.includes('.')) return clean.split('.')[0];
+	const words = clean.split(/\s+/);
+	return words[words.length - 1] || 'other';
+}
+const groups = [...permissions.reduce((map: Map<string, any[]>, permission: any) => {
+	const key = categoryOf(permission.name); const list = map.get(key) ?? []; list.push(permission); map.set(key, list); return map;
+}, new Map<string, any[]>()).entries()].map(([key, items]) => ({ key, label: labels[key] || key, permissions: items.sort((a, b) => a.name.localeCompare(b.name)), selected: items.filter((permission) => assignedIds.has(Number(permission.id))).length })).sort((a, b) => a.label.localeCompare(b.label, 'ar'));
+
+function formatDate(value: unknown): string {
+	if (!value) return 'غير متوفر';
+	const date = new Date(String(value));
+	return Number.isNaN(date.getTime()) ? 'غير متوفر' : date.toLocaleDateString('ar-JO', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+---
+
+<DashboardLayout title={role ? `تعديل دور ${role.name}` : 'تعديل الدور'} user={user}>
+	<div class="role-edit-page">
+		<DashboardAlert />
+		{!roleResult.ok || !role ? <section class="role-edit-empty"><h1>تعذّر فتح الدور</h1><p>{roleResult.ok ? 'الدور غير موجود أو تم حذفه.' : roleResult.message}</p><a href="/dashboard/roles">العودة إلى الأدوار</a></section> : <>
+			<header class="role-edit-header">
+				<div class="role-edit-heading"><a href="/dashboard/roles" aria-label="العودة"><svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6" /></svg></a><div><span>الأدوار / الدور #{role.id}</span><h1>تعديل الدور</h1><p>راجع اسم الدور والصلاحيات الممنوحة له قبل حفظ التغييرات.</p></div></div>
+				<div class="role-edit-links"><a href="/dashboard/permissions">إدارة الصلاحيات</a><a href="/dashboard/roles">كل الأدوار</a></div>
+			</header>
+
+			<section class="role-edit-hero">
+				<div class:list={['role-edit-icon', isProtected && 'protected']}><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" /><path d="m9 12 2 2 4-4" /></svg></div>
+				<div class="role-edit-identity"><div><h2>{role.name}</h2>{isProtected && <span>دور أساسي</span>}</div><p>Guard: <b dir="ltr">{role.guard_name || 'api'}</b> · أُنشئ في {formatDate(role.created_at)}</p></div>
+				<div class="role-edit-metrics"><div><strong data-selected-summary>{assignedIds.size}</strong><span>صلاحية ممنوحة</span></div><div><strong>{permissions.length}</strong><span>إجمالي المتاح</span></div><div><strong data-coverage-summary>{coverage}%</strong><span>نسبة التغطية</span></div></div>
+			</section>
+
+			{!isSuperAdmin && <div class="role-edit-notice"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg><div><strong>عرض تفاصيل الدور</strong><p>حفظ التعديلات متاح لحساب Super Admin فقط.</p></div></div>}
+			{isProtected && <div class="role-edit-protected"><strong>دور محمي:</strong><span>يمكن تعديل صلاحياته، لكن لا يمكن إعادة تسميته أو حذفه.</span></div>}
+
+			<form method="post" action="/api/dashboard/roles/save" class="role-edit-form">
+				<input type="hidden" name="id" value={role.id} />
+				<div class="role-editor-main">
+					<section class="role-edit-card">
+						<header><div><span>البيانات الأساسية</span><h2>هوية الدور</h2></div><small>اسم واضح يصف مسؤولية الفريق</small></header>
+						<div class="role-name-control"><label for="role-name">اسم الدور</label><input id="role-name" name="name" type="text" value={role.name} required minlength="2" maxlength="125" readonly={!isSuperAdmin || isProtected} /><small>{isProtected ? 'اسم الدور الأساسي محمي من التغيير.' : 'مثال: مدير المحتوى، مراجع التعليقات.'}</small></div>
+					</section>
+
+					<section class="role-edit-card permissions-editor">
+						<header><div><span>التحكم بالوصول</span><h2>صلاحيات الدور</h2></div><small><b data-selected-count>{assignedIds.size}</b> من {permissions.length} محددة</small></header>
+						<div class="permission-tools"><label><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg><input type="search" placeholder="ابحث في الصلاحيات..." data-role-permission-search /></label>{isSuperAdmin && <div><button type="button" data-select-visible>تحديد الظاهر</button><button type="button" data-clear-visible>إلغاء الظاهر</button></div>}</div>
+						<div class="permission-progress"><div><i style={`width:${coverage}%`} data-permission-progress></i></div><span data-progress-label>{coverage}% من الصلاحيات</span></div>
+						<div class="role-permission-groups">
+							{groups.map((group) => <section data-role-group><div class="role-group-head"><div><strong>{group.label}</strong><span><b data-group-count>{group.selected}</b> / {group.permissions.length}</span></div>{isSuperAdmin && <button type="button" data-toggle-role-group>تحديد المجموعة</button>}</div><div>{group.permissions.map((permission: any) => <label data-role-permission data-permission-name={String(permission.name).toLocaleLowerCase()}><input type="checkbox" name="permissions" value={permission.id} checked={assignedIds.has(Number(permission.id))} disabled={!isSuperAdmin} /><span><i></i><b dir="ltr">{permission.name}</b></span></label>)}</div></section>)}
+							{permissions.length === 0 && <div class="role-permissions-empty">لا توجد صلاحيات في النظام. <a href="/dashboard/permissions">أضف أول صلاحية</a></div>}
+						</div>
+					</section>
+				</div>
+
+				<aside class="role-editor-aside">
+					<section class="role-edit-card role-save-card"><header><div><span>مراجعة</span><h2>ملخص الوصول</h2></div></header><div class="role-summary-donut" style={`--coverage:${coverage * 3.6}deg`}><div><strong data-donut-value>{coverage}%</strong><span>تغطية</span></div></div><dl><div><dt>الدور</dt><dd>{role.name}</dd></div><div><dt>الصلاحيات</dt><dd><b data-aside-count>{assignedIds.size}</b> / {permissions.length}</dd></div><div><dt>آخر تحديث</dt><dd>{formatDate(role.updated_at)}</dd></div><div><dt>الحماية</dt><dd>{isProtected ? 'دور أساسي' : 'دور مخصص'}</dd></div></dl>{isSuperAdmin ? <button type="submit"><svg viewBox="0 0 24 24"><path d="M5 4h12l2 2v14H5V4Z" /><path d="M8 4v6h8V4M8 20v-6h8v6" /></svg>حفظ التغييرات</button> : <a href="/dashboard/roles">العودة إلى القائمة</a>}</section>
+					<section class="role-edit-card role-help-card"><h2>قاعدة أقل صلاحية</h2><p>امنح هذا الدور العمليات الضرورية فقط. الصلاحيات الزائدة تزيد أثر أي خطأ أو اختراق محتمل.</p><a href="/dashboard/permissions">فتح قاموس الصلاحيات</a></section>
+				</aside>
+			</form>
+		</>}
+	</div>
+
+	<script>
+		const roleInputs = [...document.querySelectorAll<HTMLInputElement>('.role-permission-groups input[type="checkbox"]')];
+		const totalPermissions = roleInputs.length;
+		const refreshRoleEditor = () => {
+			const selected = roleInputs.filter((input) => input.checked).length;
+			const percent = totalPermissions ? Math.round((selected / totalPermissions) * 100) : 0;
+			document.querySelectorAll<HTMLElement>('[data-selected-count],[data-selected-summary],[data-aside-count]').forEach((item) => item.textContent = String(selected));
+			document.querySelector<HTMLElement>('[data-coverage-summary]')!.textContent = `${percent}%`;
+			document.querySelector<HTMLElement>('[data-progress-label]')!.textContent = `${percent}% من الصلاحيات`;
+			document.querySelector<HTMLElement>('[data-permission-progress]')!.style.width = `${percent}%`;
+			document.querySelector<HTMLElement>('[data-donut-value]')!.textContent = `${percent}%`;
+			const donut = document.querySelector<HTMLElement>('.role-summary-donut'); if (donut) donut.style.setProperty('--coverage', `${percent * 3.6}deg`);
+			document.querySelectorAll<HTMLElement>('[data-role-group]').forEach((group) => { const inputs = [...group.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')]; const count = inputs.filter((input) => input.checked).length; const target = group.querySelector<HTMLElement>('[data-group-count]'); if (target) target.textContent = String(count); });
+		};
+		roleInputs.forEach((input) => input.addEventListener('change', refreshRoleEditor));
+		document.querySelectorAll<HTMLElement>('[data-role-group]').forEach((group) => group.querySelector('[data-toggle-role-group]')?.addEventListener('click', () => { const inputs = [...group.querySelectorAll<HTMLInputElement>('label:not([hidden]) input:not(:disabled)')]; const check = inputs.some((input) => !input.checked); inputs.forEach((input) => input.checked = check); refreshRoleEditor(); }));
+		document.querySelector('[data-select-visible]')?.addEventListener('click', () => { document.querySelectorAll<HTMLInputElement>('[data-role-permission]:not([hidden]) input:not(:disabled)').forEach((input) => input.checked = true); refreshRoleEditor(); });
+		document.querySelector('[data-clear-visible]')?.addEventListener('click', () => { document.querySelectorAll<HTMLInputElement>('[data-role-permission]:not([hidden]) input:not(:disabled)').forEach((input) => input.checked = false); refreshRoleEditor(); });
+		document.querySelector<HTMLInputElement>('[data-role-permission-search]')?.addEventListener('input', (event) => { const term = (event.currentTarget as HTMLInputElement).value.trim().toLocaleLowerCase(); document.querySelectorAll<HTMLElement>('[data-role-group]').forEach((group) => { let visible = 0; group.querySelectorAll<HTMLElement>('[data-role-permission]').forEach((item) => { item.hidden = !!term && !(item.dataset.permissionName || '').includes(term); if (!item.hidden) visible += 1; }); group.hidden = visible === 0; }); });
+	</script>
+
+	<style>
+		.role-edit-page{--re-blue:#1a4d8f;--re-green:#0f8464;--re-orange:#e8a244;--re-ink:#172a43;--re-muted:#758397;--re-line:#dde5ed;max-width:1420px;margin:0 auto;color:var(--re-ink)}
+		.role-edit-header{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:1rem}.role-edit-heading{display:flex;align-items:center;gap:.7rem}.role-edit-heading>a{display:grid;width:2.35rem;height:2.35rem;place-items:center;border:1px solid var(--re-line);border-radius:.52rem;background:#fff;color:var(--re-blue)}.role-edit-heading svg{width:.9rem;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;stroke-width:2}.role-edit-heading span{color:var(--re-blue);font-size:.7rem;font-weight:850}.role-edit-heading h1{margin:.1rem 0;color:#0b2342;font-size:1.5rem;font-weight:950}.role-edit-heading p{margin:0;color:var(--re-muted);font-size:.8rem}.role-edit-links{display:flex;gap:.4rem}.role-edit-links a{border:1px solid var(--re-line);border-radius:.48rem;background:#fff;padding:.48rem .65rem;color:#5e7187;font-size:.72rem;font-weight:800}.role-edit-links a:first-child{color:var(--re-blue)}
+		.role-edit-hero{display:grid;grid-template-columns:auto minmax(12rem,1fr) auto;align-items:center;gap:.8rem;margin-bottom:.8rem;border:1px solid var(--re-line);border-radius:.78rem;background:#fff;padding:.85rem .95rem}.role-edit-icon{display:grid;width:3.1rem;height:3.1rem;place-items:center;border-radius:.65rem;background:#edf4fb;color:var(--re-blue)}.role-edit-icon.protected{background:#eaf8f3;color:var(--re-green)}.role-edit-icon svg{width:1.25rem;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;stroke-width:1.8}.role-edit-identity>div{display:flex;align-items:center;gap:.35rem}.role-edit-identity h2{margin:0;color:#19324f;font-size:1rem;font-weight:950}.role-edit-identity>div span{border-radius:999px;background:#eaf8f3;padding:.18rem .38rem;color:var(--re-green);font-size:.58rem;font-weight:800}.role-edit-identity p{margin:.2rem 0 0;color:#8390a0;font-size:.68rem}.role-edit-metrics{display:grid;grid-template-columns:repeat(3,1fr);overflow:hidden;border:1px solid #e4eaf0;border-radius:.58rem}.role-edit-metrics>div{min-width:7rem;border-left:1px solid #e4eaf0;padding:.55rem .65rem}.role-edit-metrics>div:last-child{border-left:0}.role-edit-metrics strong,.role-edit-metrics span{display:block}.role-edit-metrics strong{color:#233b54;font-size:.9rem;font-weight:950}.role-edit-metrics span{margin-top:.1rem;color:#8a96a4;font-size:.6rem}
+		.role-edit-notice,.role-edit-protected{display:flex;align-items:center;gap:.5rem;margin-bottom:.8rem;border:1px solid #e5d7be;border-radius:.58rem;background:#fff9ef;padding:.58rem .72rem;color:#865c1e}.role-edit-notice svg{width:.9rem;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;stroke-width:1.8}.role-edit-notice strong,.role-edit-notice p{display:block}.role-edit-notice strong{font-size:.72rem}.role-edit-notice p{margin:.08rem 0 0;color:#9a7c50;font-size:.65rem}.role-edit-protected strong{font-size:.7rem}.role-edit-protected span{color:#987849;font-size:.66rem}
+		.role-edit-form{display:grid;grid-template-columns:minmax(0,1fr) 19rem;align-items:start;gap:.8rem}.role-editor-main,.role-editor-aside{display:grid;gap:.8rem}.role-edit-card{overflow:hidden;border:1px solid var(--re-line);border-radius:.75rem;background:#fff;box-shadow:0 1px 2px rgb(15 35 60/.04)}.role-edit-card>header{display:flex;align-items:center;justify-content:space-between;gap:1rem;border-bottom:1px solid #edf1f5;padding:.72rem .85rem}.role-edit-card>header span{color:var(--re-blue);font-size:.62rem;font-weight:850}.role-edit-card>header h2{margin:.08rem 0 0;color:#19324f;font-size:.88rem;font-weight:900}.role-edit-card>header small{color:#8995a3;font-size:.65rem}.role-edit-card>header small b{color:var(--re-blue)}.role-name-control{padding:.85rem}.role-name-control label{display:block;margin-bottom:.3rem;color:#40576f;font-size:.72rem;font-weight:850}.role-name-control input{width:100%;min-height:2.65rem;border:1px solid #d9e2eb;border-radius:.48rem;padding:.44rem .58rem;color:#243c54;font-family:inherit;font-size:.78rem}.role-name-control input:focus{border-color:#83a6d0;outline:0;box-shadow:0 0 0 3px rgb(26 77 143/.07)}.role-name-control input[readonly]{background:#f5f7f9;color:#69798b}.role-name-control small{display:block;margin-top:.3rem;color:#8895a4;font-size:.64rem}
+		.permission-tools{display:flex;align-items:center;justify-content:space-between;gap:.7rem;border-bottom:1px solid #edf1f5;padding:.65rem .8rem}.permission-tools>label{position:relative;min-width:14rem;flex:1}.permission-tools>label svg{position:absolute;top:50%;right:.6rem;width:.78rem;transform:translateY(-50%);fill:none;stroke:#8693a2;stroke-linecap:round;stroke-linejoin:round;stroke-width:1.8}.permission-tools input{width:100%;min-height:2.3rem;border:1px solid #dce4ec;border-radius:.45rem;padding:.38rem 1.9rem .38rem .5rem;color:#31485f;font-family:inherit;font-size:.72rem}.permission-tools>div{display:flex;gap:.3rem}.permission-tools button{border:1px solid #d9e2eb;border-radius:.4rem;background:#fff;padding:.38rem .5rem;color:var(--re-blue);font-family:inherit;font-size:.64rem;font-weight:800}.permission-progress{display:flex;align-items:center;gap:.55rem;padding:.55rem .8rem}.permission-progress>div{height:.35rem;flex:1;overflow:hidden;border-radius:999px;background:#e8edf2}.permission-progress i{display:block;height:100%;border-radius:inherit;background:var(--re-green)}.permission-progress span{color:#728194;font-size:.64rem;white-space:nowrap}
+		.role-permission-groups{display:grid;grid-template-columns:1fr 1fr;gap:.55rem;border-top:1px solid #edf1f5;background:#f8fafc;padding:.65rem}.role-permission-groups>section{overflow:hidden;border:1px solid #dfe6ed;border-radius:.55rem;background:#fff}.role-group-head{display:flex;align-items:center;justify-content:space-between;gap:.5rem;border-bottom:1px solid #edf1f5;background:#fbfcfd;padding:.5rem .55rem}.role-group-head strong,.role-group-head span{display:block}.role-group-head strong{color:#3a526a;font-size:.7rem}.role-group-head span{margin-top:.06rem;color:#8e99a6;font-size:.58rem}.role-group-head span b{color:var(--re-blue)}.role-group-head button{border:0;background:transparent;color:var(--re-blue);font-family:inherit;font-size:.58rem;font-weight:800}.role-permission-groups section>div:last-child{display:grid;grid-template-columns:1fr 1fr;gap:.15rem;padding:.35rem}.role-permission-groups label{position:relative;min-width:0}.role-permission-groups label>input{position:absolute;opacity:0}.role-permission-groups label>span{display:flex;min-height:2.05rem;align-items:center;gap:.32rem;border-radius:.36rem;padding:.28rem .34rem;color:#65778a;font-size:.62rem}.role-permission-groups label>span:hover{background:#f5f7f9}.role-permission-groups label i{display:grid;width:.78rem;height:.78rem;flex:none;place-items:center;border:1px solid #c9d4de;border-radius:.18rem}.role-permission-groups label input:checked+span{background:#edf4fb;color:var(--re-blue);font-weight:750}.role-permission-groups label input:checked+span i{border-color:var(--re-blue);background:var(--re-blue)}.role-permission-groups label input:checked+span i::after{width:.34rem;height:.18rem;border-bottom:1.5px solid #fff;border-left:1.5px solid #fff;content:"";transform:rotate(-45deg)}.role-permission-groups label input:disabled+span{cursor:default}.role-permission-groups label b{overflow:hidden;font-weight:inherit;text-overflow:ellipsis;white-space:nowrap}.role-permissions-empty{grid-column:1/-1;padding:2rem;color:#8491a1;text-align:center;font-size:.72rem}.role-permissions-empty a{color:var(--re-blue);font-weight:800}
+		.role-editor-aside{position:sticky;top:1rem}.role-save-card>header{justify-content:flex-start}.role-summary-donut{display:grid;width:7rem;height:7rem;margin:1rem auto;place-items:center;border-radius:50%;background:conic-gradient(var(--re-green) var(--coverage),#e9eef2 0);position:relative}.role-summary-donut::before{position:absolute;inset:.65rem;border-radius:50%;background:#fff;content:""}.role-summary-donut>div{position:relative;text-align:center}.role-summary-donut strong,.role-summary-donut span{display:block}.role-summary-donut strong{color:#203951;font-size:1rem;font-weight:950}.role-summary-donut span{color:#8794a2;font-size:.6rem}.role-save-card dl{margin:0;padding:0 .85rem}.role-save-card dl>div{display:flex;justify-content:space-between;gap:.5rem;border-top:1px solid #edf1f5;padding:.55rem 0}.role-save-card dt{color:#8190a0;font-size:.65rem}.role-save-card dd{margin:0;color:#3a5067;font-size:.67rem;font-weight:800}.role-save-card>button,.role-save-card>a{display:flex;min-height:2.45rem;align-items:center;justify-content:center;gap:.35rem;margin:.8rem;border:1px solid #16437d;border-radius:.46rem;background:var(--re-blue);color:#fff;font-family:inherit;font-size:.72rem;font-weight:850}.role-save-card>button svg{width:.8rem;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;stroke-width:1.8}.role-help-card{padding:.8rem}.role-help-card h2{margin:0;color:#324a62;font-size:.75rem}.role-help-card p{margin:.28rem 0;color:#7d8b9b;font-size:.65rem;line-height:1.75}.role-help-card a{color:var(--re-blue);font-size:.65rem;font-weight:800}.role-edit-empty{border:1px solid var(--re-line);border-radius:.7rem;background:#fff;padding:2rem;text-align:center}.role-edit-empty h1{margin:0;color:#304860;font-size:1rem}.role-edit-empty p{color:#8290a0;font-size:.75rem}.role-edit-empty a{display:inline-block;margin-top:.4rem;border-radius:.45rem;background:var(--re-blue);padding:.45rem .7rem;color:#fff;font-size:.7rem;font-weight:800}
+		:global(.dark) .role-edit-page{--re-ink:#e5edf5;--re-muted:#9aa9ba;--re-line:#344458}.dark .role-edit-heading h1,.dark .role-edit-identity h2,.dark .role-edit-card>header h2{color:#eef5fb}.dark .role-edit-heading>a,.dark .role-edit-links a,.dark .role-edit-hero,.dark .role-edit-card,.dark .role-edit-empty{background:#172334}.dark .role-edit-metrics,.dark .role-edit-metrics>div,.dark .role-edit-card>header,.dark .permission-tools,.dark .role-permission-groups,.dark .role-permission-groups>section,.dark .role-group-head,.dark .role-save-card dl>div{border-color:#344458}.dark .role-permission-groups{background:#111c2b}.dark .role-permission-groups>section,.dark .role-group-head,.dark .permission-tools button{background:#172334}.dark .role-name-control input,.dark .permission-tools input{border-color:#405066;background:#111c2b;color:#d9e3ed}.dark .role-summary-donut::before{background:#172334}.dark .role-summary-donut strong,.dark .role-save-card dd,.dark .role-group-head strong{color:#dbe5ee}
+		@media(max-width:1050px){.role-edit-form{grid-template-columns:1fr}.role-editor-aside{position:static;grid-template-columns:1fr 1fr}.role-edit-hero{grid-template-columns:auto 1fr}.role-edit-metrics{grid-column:1/-1}}
+		@media(max-width:720px){.role-edit-header{align-items:flex-start}.role-edit-heading p,.role-edit-links a:last-child{display:none}.role-edit-links{flex:none}.role-edit-hero{padding:.75rem}.role-edit-metrics{grid-template-columns:1fr 1fr}.role-edit-metrics>div{min-width:0}.role-edit-metrics>div:last-child{grid-column:1/-1;border-top:1px solid #e4eaf0}.role-permission-groups{grid-template-columns:1fr}.role-permission-groups section>div:last-child{grid-template-columns:1fr}.permission-tools{align-items:stretch;flex-direction:column}.permission-tools>label{min-width:0}.role-editor-aside{grid-template-columns:1fr}.role-edit-card>header{align-items:flex-start}.role-edit-card>header small{text-align:left}}
+		@media(max-width:430px){.role-edit-header{flex-direction:column}.role-edit-links{width:100%}.role-edit-links a{width:100%;text-align:center}.role-edit-identity>div{align-items:flex-start;flex-direction:column}.role-edit-metrics>div{padding:.5rem}.permission-tools>div button{flex:1}}
+	</style>
+</DashboardLayout>

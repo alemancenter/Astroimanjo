@@ -1,0 +1,15 @@
+@import "tailwindcss/utilities" source(none);
+
+@reference "./global.css";
+
+/* Kept as an isolated route bundle so the public global stylesheet stays small. */
+@source "../pages/[countryCode]/download";
+@source "../pages/download";
+@source "../components/ui/Breadcrumbs.astro";
+@source "../components/ui/ErrorState.astro";
+
+@layer components {
+	.download-page {
+		min-height: calc(100vh - 9rem);
+	}
+}

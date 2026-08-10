@@ -1,0 +1,13 @@
+@import "tailwindcss/utilities" source(none);
+
+@reference "./global.css";
+
+@source "../pages/login.astro";
+@source "../pages/register.astro";
+@source "../pages/account";
+@source "../components/ui/AuthShell.astro";
+@source "../components/ui/SocialLoginButtons.astro";
+@source "../components/ui/Breadcrumbs.astro";
+@source "../components/ui/DashboardAlert.astro";
+@source "../components/ui/Pagination.astro";
+@source "../components/ui/SocialIcon.astro";

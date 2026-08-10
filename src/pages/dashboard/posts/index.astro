@@ -1,0 +1,149 @@
+---
+import DashboardLayout from '../../../layouts/DashboardLayout.astro';
+import DashboardAlert from '../../../components/ui/DashboardAlert.astro';
+import Pagination from '../../../components/ui/Pagination.astro';
+import { requireDashboard } from '../../../lib/auth';
+import { apiFetch, apiFetchList } from '../../../lib/api';
+import { assetUrl } from '../../../lib/assets';
+
+const guard = await requireDashboard(Astro, 'manage posts');
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+
+const token = Astro.cookies.get('token')?.value;
+const params = Astro.url.searchParams;
+const search = params.get('search') || '';
+const categoryId = params.get('category_id') || '';
+const activeStatus = params.get('is_active') || '';
+const featured = params.get('featured') === '1' ? '1' : '';
+const page = Math.max(1, Number(params.get('page')) || 1);
+
+const [result, categoriesResult] = await Promise.all([
+	apiFetch<any[]>('/dashboard/posts', {
+		countryId: Astro.locals.countryId,
+		cookieHeader: `token=${token}`,
+		params: {
+			search: search || undefined,
+			category_id: categoryId || undefined,
+			is_active: activeStatus || undefined,
+			featured: featured || undefined,
+			page,
+			per_page: 20,
+		},
+	}),
+	apiFetchList<any>('/categories', { countryId: Astro.locals.countryId }),
+]);
+
+const posts = (Array.isArray(result.data) ? result.data : []).map((post: any) => ({
+	...post,
+	imgSrc: assetUrl(post.image_url || post.image, 64),
+}));
+const categories = categoriesResult.items;
+const meta = result.meta;
+const hasFilters = Boolean(search || categoryId || activeStatus || featured);
+---
+
+<DashboardLayout title="إدارة المنشورات" user={user}>
+	<DashboardAlert />
+	<div class="posts-page">
+		<header class="posts-page-header">
+			<div>
+				<span class="posts-eyebrow">إدارة المحتوى</span>
+				<h1>المنشورات والأخبار</h1>
+				<p>راجع أخبار المنصة وإعلاناتها، ونظّم حالتها وأقسامها من مكان واحد.</p>
+			</div>
+			<a href="/dashboard/posts/new" class="posts-create-button">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 5v14M5 12h14" /></svg>
+				<span>إضافة منشور</span>
+			</a>
+		</header>
+
+		<section class="posts-filter-card">
+			<form method="get" class="posts-filter-form" aria-label="تصفية المنشورات">
+				<label class="posts-search-field">
+					<span class="sr-only">البحث بالعنوان</span>
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7" /><path stroke-linecap="round" d="m20 20-4-4" /></svg>
+					<input type="search" name="search" value={search} placeholder="ابحث بعنوان المنشور..." />
+				</label>
+				<label class="posts-select-field"><span>القسم</span><select name="category_id"><option value="">جميع الأقسام</option>{categories.map((category: any) => <option value={category.id} selected={String(category.id) === categoryId}>{category.name}</option>)}</select></label>
+				<label class="posts-select-field"><span>الحالة</span><select name="is_active"><option value="">جميع الحالات</option><option value="1" selected={activeStatus === '1'}>منشور</option><option value="0" selected={activeStatus === '0'}>مسودة</option></select></label>
+				<label class="posts-select-field"><span>التمييز</span><select name="featured"><option value="">جميع المنشورات</option><option value="1" selected={featured === '1'}>المميزة فقط</option></select></label>
+				<button type="submit" class="posts-filter-button">تطبيق التصفية</button>
+				{hasFilters && <a href="/dashboard/posts" class="posts-clear-button">مسح التصفية</a>}
+			</form>
+			<div class="posts-result-count"><strong>{meta?.total ?? posts.length}</strong><span>منشور</span></div>
+		</section>
+
+		<section class="posts-table-card posts-desktop">
+			<div class="posts-table-heading">
+				<div><h2>قائمة المنشورات</h2><p>أحدث الأخبار والإعلانات المضافة إلى قاعدة البيانات الحالية.</p></div>
+				<span>{posts.length} نتيجة في الصفحة</span>
+			</div>
+			<div class="posts-table-scroll">
+				<table>
+					<thead><tr><th>المنشور</th><th>القسم</th><th>الحالة</th><th>النوع</th><th>المشاهدات</th><th>تاريخ الإنشاء</th><th><span class="sr-only">الإجراءات</span></th></tr></thead>
+					<tbody>
+						{posts.map((post: any) => (
+							<tr>
+								<td>
+									<div class="posts-title-cell">
+										{post.imgSrc ? <img src={post.imgSrc} alt="" loading="lazy" /> : <span class="posts-document-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M7 3h7l4 4v14H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm7 0v5h4M9 13h6m-6 4h4" /></svg></span>}
+										<div><a href={`/dashboard/posts/${post.id}/edit`}>{post.title}</a><small>رقم المنشور: {post.id}</small></div>
+									</div>
+								</td>
+								<td><span class="posts-category"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M3 6h7l2 2h9v11H3V6Z" /></svg>{post.category?.name || 'غير مصنّف'}</span></td>
+								<td><span class={post.is_active ? 'posts-status is-active' : 'posts-status is-draft'}><i></i>{post.is_active ? 'منشور' : 'مسودة'}</span></td>
+								<td>{post.is_featured ? <span class="posts-featured"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="m12 3 2.7 5.5 6 .9-4.3 4.2 1 6-5.4-2.9-5.4 2.9 1-6-4.3-4.2 6-.9L12 3Z" /></svg>مميز</span> : <span class="posts-regular">عادي</span>}</td>
+								<td><span class="posts-views"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" /><circle cx="12" cy="12" r="2.5" /></svg>{post.views || post.views_count || 0}</span></td>
+								<td><time datetime={post.created_at}>{post.created_at ? new Date(post.created_at).toLocaleDateString('ar-EG') : '—'}</time></td>
+								<td>
+									<div class="posts-actions">
+										<a href={`/dashboard/posts/${post.id}/edit`} class="posts-action" aria-label={`تعديل ${post.title}`} title="تعديل"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m4 20 4.3-1 9.9-9.9a2.1 2.1 0 0 0-3-3L5.3 16 4 20Zm9.8-12.5 3 3" /></svg></a>
+										<form method="post" action={`/api/dashboard/posts/${post.id}/toggle-status`}><input type="hidden" name="redirect_to" value={Astro.url.pathname + Astro.url.search} /><button type="submit" class="posts-action" aria-label={post.is_active ? 'تحويل إلى مسودة' : 'نشر'} title={post.is_active ? 'تحويل إلى مسودة' : 'نشر'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d={post.is_active ? 'M4 4l16 16M10.6 6.3A9.8 9.8 0 0 1 12 6c6 0 9.5 6 9.5 6a14 14 0 0 1-2.1 2.8M6.2 6.2C3.8 8 2.5 12 2.5 12S6 18 12 18c1.4 0 2.6-.3 3.7-.8M9.9 9.9a3 3 0 0 0 4.2 4.2' : 'M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6ZM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z'} /></svg></button></form>
+										<form method="post" action={`/api/dashboard/posts/${post.id}/delete`} data-confirm-delete><input type="hidden" name="redirect_to" value={Astro.url.pathname + Astro.url.search} /><button type="submit" class="posts-action is-delete" aria-label={`حذف ${post.title}`} title="حذف"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 7h16m-10 4v6m4-6v6m-7-10 .8 13h8.4L17 7m-7-3h4l1 3H9l1-3Z" /></svg></button></form>
+									</div>
+								</td>
+							</tr>
+						))}
+					</tbody>
+				</table>
+			</div>
+			{posts.length === 0 && <div class="posts-empty"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M7 3h7l4 4v14H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm7 0v5h4M9 13h6m-6 4h4" /></svg></span><h3>لا توجد منشورات مطابقة</h3><p>جرّب تغيير عبارة البحث أو خيارات التصفية.</p></div>}
+		</section>
+
+		<div class="posts-mobile">
+			{posts.map((post: any) => (
+				<article class="posts-mobile-card">
+					<div class="posts-mobile-head">
+						{post.imgSrc ? <img src={post.imgSrc} alt="" loading="lazy" /> : <span class="posts-document-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M7 3h7l4 4v14H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm7 0v5h4M9 13h6m-6 4h4" /></svg></span>}
+						<div><h2>{post.title}</h2><p>{post.category?.name || 'غير مصنّف'}</p></div>
+						<span class={post.is_active ? 'posts-status is-active' : 'posts-status is-draft'}><i></i>{post.is_active ? 'منشور' : 'مسودة'}</span>
+					</div>
+					<div class="posts-mobile-meta"><span>المشاهدات<strong>{post.views || post.views_count || 0}</strong></span><span>النوع<strong>{post.is_featured ? 'مميز' : 'عادي'}</strong></span><span>التاريخ<strong>{post.created_at ? new Date(post.created_at).toLocaleDateString('ar-EG') : '—'}</strong></span></div>
+					<div class="posts-mobile-actions"><a href={`/dashboard/posts/${post.id}/edit`}>تعديل</a><form method="post" action={`/api/dashboard/posts/${post.id}/toggle-status`}><input type="hidden" name="redirect_to" value={Astro.url.pathname + Astro.url.search} /><button type="submit">{post.is_active ? 'تحويل لمسودة' : 'نشر'}</button></form><form method="post" action={`/api/dashboard/posts/${post.id}/delete`} data-confirm-delete><input type="hidden" name="redirect_to" value={Astro.url.pathname + Astro.url.search} /><button type="submit" class="is-delete">حذف</button></form></div>
+				</article>
+			))}
+			{posts.length === 0 && <div class="posts-empty"><h3>لا توجد منشورات مطابقة</h3><p>جرّب تغيير عبارة البحث أو خيارات التصفية.</p></div>}
+		</div>
+
+		{meta && <Pagination currentPage={meta.current_page} lastPage={meta.last_page} url={Astro.url} />}
+	</div>
+
+	<script>
+		document.querySelectorAll<HTMLFormElement>('[data-confirm-delete]').forEach((form) => {
+			form.addEventListener('submit', (event) => {
+				if (!window.confirm('هل أنت متأكد من حذف هذا المنشور؟')) event.preventDefault();
+			});
+		});
+	</script>
+
+	<style>
+		.posts-page{--p-ink:#102a43;--p-muted:#718096;--p-line:#dfe6ee;max-width:1360px;margin-inline:auto;padding-bottom:2rem}.posts-page-header{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;margin-bottom:1rem}.posts-eyebrow{display:block;margin-bottom:.25rem;color:#1a4d8f;font-size:.65rem;font-weight:850}.posts-page-header h1{margin:0;color:#061a3a;font-size:clamp(1.35rem,1.1rem + .65vw,1.85rem);font-weight:900;line-height:1.3}.posts-page-header p{margin:.28rem 0 0;color:var(--p-muted);font-size:.75rem}.posts-create-button{display:inline-flex;min-height:2.6rem;align-items:center;justify-content:center;gap:.4rem;border:1px solid #16427d;border-radius:.6rem;background:#1a4d8f;padding:.5rem .9rem;color:#fff;font-size:.73rem;font-weight:850;box-shadow:0 2px 4px rgb(26 77 143 / .16)}.posts-create-button:hover{background:#153f76}.posts-create-button svg{width:1rem;height:1rem}
+		.posts-filter-card{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:1rem;border:1px solid var(--p-line);border-radius:.8rem;background:#fff;padding:.7rem;box-shadow:0 1px 2px rgb(15 23 42 / .06)}.posts-filter-form{display:flex;min-width:0;flex:1;flex-wrap:wrap;align-items:center;gap:.55rem}.posts-search-field{position:relative;display:block;min-width:13rem;flex:1}.posts-search-field svg{position:absolute;top:50%;right:.7rem;width:.9rem;height:.9rem;color:#8796a8;transform:translateY(-50%)}.posts-search-field input,.posts-select-field select{width:100%;min-height:2.35rem;border:1px solid #d9e2ec;border-radius:.5rem;background:#fff;color:var(--p-ink);font-size:.7rem}.posts-search-field input{padding:.45rem 2rem .45rem .65rem}.posts-search-field input:focus,.posts-select-field select:focus{border-color:#81a7da;outline:0;box-shadow:0 0 0 3px rgb(26 77 143 / .07)}.posts-select-field{display:flex;align-items:center;gap:.35rem}.posts-select-field>span{color:var(--p-muted);font-size:.62rem;font-weight:750}.posts-select-field select{width:8.25rem;padding:.4rem .5rem}.posts-filter-button,.posts-clear-button{display:inline-flex;min-height:2.35rem;align-items:center;justify-content:center;border-radius:.5rem;padding:.4rem .7rem;font-size:.66rem;font-weight:800}.posts-filter-button{border:1px solid #315f9f;background:#fff;color:#1a4d8f}.posts-filter-button:hover{background:#f7f9fc}.posts-clear-button{color:#64748b}.posts-clear-button:hover{color:#1a4d8f}.posts-result-count{display:flex;align-items:baseline;gap:.3rem;border-right:1px solid #e7ecf2;padding-inline:1rem .25rem;color:var(--p-muted);font-size:.65rem;white-space:nowrap}.posts-result-count strong{color:var(--p-ink);font-size:.9rem}
+		.posts-table-card{overflow:hidden;border:1px solid var(--p-line);border-radius:.85rem;background:#fff;box-shadow:0 1px 2px rgb(15 23 42 / .06)}.posts-table-heading{display:flex;align-items:center;justify-content:space-between;gap:1rem;border-bottom:1px solid #edf1f5;padding:.9rem 1rem}.posts-table-heading h2{margin:0;color:var(--p-ink);font-size:.85rem;font-weight:850}.posts-table-heading p{margin:.18rem 0 0;color:var(--p-muted);font-size:.62rem}.posts-table-heading>span{border:1px solid #e1e7ee;border-radius:999px;background:#f8fafc;padding:.25rem .55rem;color:#64748b;font-size:.6rem;font-weight:750}.posts-table-scroll{overflow-x:auto}.posts-table-card table{width:100%;border-collapse:collapse}.posts-table-card th{padding:.72rem .85rem;background:#f8fafc;color:#718096;font-size:.6rem;font-weight:800;text-align:right;white-space:nowrap}.posts-table-card td{padding:.72rem .85rem;border-top:1px solid #edf1f5;color:#64748b;font-size:.68rem;vertical-align:middle}.posts-table-card tbody tr{transition:background-color 140ms ease}.posts-table-card tbody tr:hover{background:#fafcff}
+		.posts-title-cell{display:flex;max-width:25rem;align-items:center;gap:.6rem}.posts-title-cell img,.posts-mobile-head>img{width:2.4rem;height:2.4rem;flex:none;border-radius:.5rem;object-fit:cover}.posts-document-icon{display:inline-grid;width:2rem;height:2rem;flex:none;place-items:center;border:1px solid #dce5ef;border-radius:.5rem;background:#f8fafc;color:#4c6f99}.posts-document-icon svg{width:1rem;height:1rem}.posts-title-cell>div{min-width:0}.posts-title-cell a{display:block;overflow:hidden;color:var(--p-ink);font-size:.71rem;font-weight:850;text-overflow:ellipsis;white-space:nowrap}.posts-title-cell a:hover{color:#1a4d8f}.posts-title-cell small{display:block;margin-top:.1rem;color:#9aa7b6;font-size:.55rem}.posts-category,.posts-views,.posts-featured{display:inline-flex;align-items:center;gap:.3rem}.posts-category svg,.posts-views svg,.posts-featured svg{width:.82rem;height:.82rem;color:#94a3b8}.posts-featured{border-radius:999px;background:#fff7e8;padding:.23rem .45rem;color:#a9680d;font-size:.58rem;font-weight:800}.posts-featured svg{color:#d58c27}.posts-regular{color:#94a3b8;font-size:.61rem}.posts-status{display:inline-flex;align-items:center;gap:.3rem;border-radius:999px;padding:.24rem .48rem;font-size:.58rem;font-weight:800}.posts-status i{width:.31rem;height:.31rem;border-radius:50%}.posts-status.is-active{background:#ecfdf5;color:#08785d}.posts-status.is-active i{background:#10b981}.posts-status.is-draft{background:#f1f5f9;color:#64748b}.posts-status.is-draft i{background:#94a3b8}.posts-actions{display:flex;align-items:center;justify-content:flex-end;gap:.3rem}.posts-action{display:inline-grid;width:1.85rem;height:1.85rem;place-items:center;border:1px solid #dfe6ee;border-radius:.45rem;background:#fff;color:#52667e}.posts-action:hover{border-color:#a8bdd8;color:#1a4d8f}.posts-action.is-delete:hover{border-color:#fecaca;background:#fff7f7;color:#dc2626}.posts-action svg{width:.85rem;height:.85rem}
+		.posts-empty{display:flex;min-height:15rem;align-items:center;justify-content:center;flex-direction:column;padding:2rem;text-align:center}.posts-empty>span{display:grid;width:3rem;height:3rem;place-items:center;border-radius:.75rem;background:#f1f5f9;color:#718096}.posts-empty svg{width:1.35rem;height:1.35rem}.posts-empty h3{margin:.7rem 0 0;color:var(--p-ink);font-size:.8rem}.posts-empty p{margin:.25rem 0 0;color:var(--p-muted);font-size:.65rem}.posts-mobile{display:none}.posts-mobile-card{border:1px solid var(--p-line);border-radius:.75rem;background:#fff;padding:.85rem;box-shadow:0 1px 2px rgb(15 23 42 / .06)}.posts-mobile-head{display:flex;align-items:flex-start;gap:.6rem}.posts-mobile-head>div{min-width:0;flex:1}.posts-mobile-head h2{margin:0;color:var(--p-ink);font-size:.75rem;line-height:1.65}.posts-mobile-head p{margin:.12rem 0 0;color:var(--p-muted);font-size:.59rem}.posts-mobile-meta{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.45rem;margin-top:.75rem}.posts-mobile-meta span{border:1px solid #edf1f5;border-radius:.5rem;padding:.42rem;color:#8b98a8;font-size:.56rem}.posts-mobile-meta strong{display:block;margin-top:.12rem;color:var(--p-ink);font-size:.64rem}.posts-mobile-actions{display:flex;gap:.4rem;margin-top:.75rem;border-top:1px solid #edf1f5;padding-top:.7rem}.posts-mobile-actions a,.posts-mobile-actions button{display:inline-flex;min-height:2.1rem;align-items:center;justify-content:center;border:1px solid #dce4ed;border-radius:.45rem;background:#fff;padding:.35rem .62rem;color:#42526a;font-size:.62rem;font-weight:750}.posts-mobile-actions .is-delete{color:#dc2626}
+		:global(.dark) .posts-page{--p-ink:#f8fafc;--p-muted:#94a3b8;--p-line:#334155}:global(.dark) .posts-page-header h1{color:#fff}:global(.dark) .posts-filter-card,:global(.dark) .posts-table-card,:global(.dark) .posts-mobile-card,:global(.dark) .posts-search-field input,:global(.dark) .posts-select-field select,:global(.dark) .posts-action,:global(.dark) .posts-mobile-actions a,:global(.dark) .posts-mobile-actions button{border-color:#334155;background:#0f2547;color:#cbd5e1}:global(.dark) .posts-table-card th,:global(.dark) .posts-table-heading>span{background:#0b1e38}:global(.dark) .posts-table-heading,:global(.dark) .posts-table-card td,:global(.dark) .posts-mobile-actions{border-color:#263b56}:global(.dark) .posts-table-card tbody tr:hover{background:#122b4c}
+		@media(max-width:767px){.posts-page-header{align-items:stretch;flex-direction:column}.posts-create-button{width:100%}.posts-filter-card{align-items:stretch;flex-direction:column}.posts-filter-form{align-items:stretch;flex-direction:column}.posts-search-field,.posts-select-field,.posts-select-field select{width:100%}.posts-select-field{align-items:stretch;flex-direction:column}.posts-result-count{border:0;border-top:1px solid #edf1f5;padding:.65rem .15rem 0}.posts-desktop{display:none}.posts-mobile{display:grid;gap:.7rem}}
+	</style>
+</DashboardLayout>

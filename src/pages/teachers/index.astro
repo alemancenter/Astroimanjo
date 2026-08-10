@@ -1,0 +1,71 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import '../../styles/misc-pages.css';
+import Breadcrumbs from '../../components/ui/Breadcrumbs.astro';
+import ErrorState from '../../components/ui/ErrorState.astro';
+import { apiFetch } from '../../lib/api';
+
+interface PlanDesign { code: string; name: string; price_jod: number; currency: string; duration_days: number; features: string[]; limits: Record<string, number>; }
+const countryId = Astro.locals.countryId;
+const [design, settingsResult] = await Promise.all([
+	apiFetch<PlanDesign>('/teacher-subscription/design', { countryId }),
+	apiFetch<Record<string, string>>('/front/settings', { countryId }),
+]);
+const plan = design.data;
+// Defaults to enabled when unset, so sites that never touch this new toggle keep today's behavior.
+const subscriptionsEnabled = settingsResult.data?.enable_teacher_subscriptions !== '0';
+---
+
+<Layout title="اشتراك المعلمين" description="اشترك كمعلم واحصل على نماذج امتحانات، خطط، وأدوات ذكاء اصطناعي حصرية للمعلمين.">
+	<Breadcrumbs items={[{ label: 'قسم المعلمين' }]} />
+
+	<section class="relative isolate overflow-hidden bg-graphite-950 py-16 text-white sm:py-24">
+		<div class="absolute -right-36 -top-48 -z-10 size-[34rem] rounded-full bg-royal-600/35 blur-[120px]" aria-hidden="true"></div>
+		<div class="absolute -bottom-48 left-0 -z-10 size-[28rem] rounded-full bg-emerald-brand-600/25 blur-[110px]" aria-hidden="true"></div>
+		<div class="container-shell grid items-center gap-12 lg:grid-cols-[1fr_.8fr]">
+			<div>
+				<span class="mb-5 inline-flex rounded-full bg-sunset-400 px-4 py-2 text-sm font-extrabold text-graphite-950">صُممت لتدعم عملك اليومي</span>
+				<h1 class="text-4xl font-black leading-tight sm:text-5xl">أدوات احترافية تمنح المعلم وقتًا أكبر للتعليم</h1>
+				<p class="mt-6 max-w-2xl text-lg leading-8 text-graphite-300">نماذج امتحانات وخطط فصلية وأوراق عمل وموارد قابلة للتعديل، مجمعة في مساحة واضحة تساعدك على إنجاز التحضير بكفاءة.</p>
+				<div class="mt-8 flex flex-col gap-3 sm:flex-row"><a href="#teacher-plan" class="btn-primary px-7 py-3.5 text-base">عرض تفاصيل الباقة</a><a href="/register" class="inline-flex min-h-12 items-center justify-center rounded-xl border border-white/20 px-7 py-3.5 font-bold hover:bg-white/10">إنشاء حساب مجاني</a></div>
+			</div>
+			<div class="grid gap-3 sm:grid-cols-2">
+				{[
+					['وفر وقت التحضير', 'موارد منظمة وجاهزة للتخصيص', 'text-royal-200 bg-royal-600/25'],
+					['طوّر محتواك', 'أدوات تساعدك على إنتاج مواد أفضل', 'text-emerald-brand-200 bg-emerald-brand-600/20'],
+					['تابع استخدامك', 'حدود واضحة وبيانات اشتراك مباشرة', 'text-sunset-200 bg-sunset-400/15'],
+					['اعمل بثقة', 'محتوى مخصص للمعلم العربي', 'text-white bg-white/[.07]'],
+				].map(([title, text, tone], i) => <div class={`rounded-2xl border border-white/10 p-5 ${tone} ${i % 2 ? 'sm:translate-y-5' : ''}`}><span class="mb-6 flex size-9 items-center justify-center rounded-xl bg-white/10 text-sm font-black">{i + 1}</span><h2 class="font-extrabold text-white">{title}</h2><p class="mt-2 text-sm leading-6 text-graphite-300">{text}</p></div>)}
+			</div>
+		</div>
+	</section>
+
+	<section id="teacher-plan" class="py-16 sm:py-20">
+		<div class="container-shell">
+			<header class="page-heading text-center"><span class="page-eyebrow">باقة واحدة واضحة</span><h2 class="page-title">كل ما تحتاجه خلال الفصل الدراسي</h2><p class="page-description mx-auto">لا توجد مستويات مربكة؛ تحصل على جميع المزايا ضمن اشتراك واحد.</p></header>
+			{!design.ok || !plan ? <ErrorState message={design.message} /> : <div class="surface-card mx-auto max-w-3xl overflow-hidden border-t-4 border-t-royal-600">
+				<div class="grid gap-8 p-6 sm:p-10 md:grid-cols-[.75fr_1.25fr]">
+					<div class="rounded-2xl bg-royal-50 p-6 text-center dark:bg-royal-950">
+						<p class="text-sm font-extrabold text-royal-700 dark:text-royal-200">{plan.name}</p>
+						<div class="mt-4 flex items-end justify-center gap-2"><span class="text-5xl font-black text-graphite-950 dark:text-white">{plan.price_jod}</span><span class="pb-1 text-sm font-bold text-graphite-500 dark:text-graphite-400">{plan.currency}</span></div>
+						<p class="mt-3 text-sm leading-6 text-graphite-600 dark:text-graphite-300">صالح لمدة {plan.duration_days} يومًا</p>
+					</div>
+					<div><h3 class="mb-5 text-lg font-extrabold text-graphite-950 dark:text-white">تشمل الباقة</h3><ul class="space-y-4">{plan.features.map((feature) => <li class="flex items-start gap-3 text-sm leading-6 text-graphite-700 dark:text-graphite-200"><span class="mt-0.5 flex size-5 flex-shrink-0 items-center justify-center rounded-full bg-emerald-brand-600 text-xs text-white">✓</span>{feature}</li>)}</ul></div>
+				</div>
+				<div class="border-t border-graphite-200 bg-graphite-50 p-6 dark:border-graphite-700 dark:bg-graphite-800/50">
+					{subscriptionsEnabled ? (
+						<>
+							<a href="/account/teacher/subscribe" class="btn-primary w-full py-3.5 text-base">اشترك الآن</a>
+							<p class="mt-3 text-center text-xs leading-5 text-graphite-500 dark:text-graphite-400">يُراجع إثبات التحويل يدويًا، ويتم إشعارك فور اعتماد الطلب.</p>
+						</>
+					) : (
+						<>
+							<span class="flex w-full cursor-not-allowed items-center justify-center rounded-xl bg-graphite-200 py-3.5 text-base font-bold text-graphite-500 dark:bg-graphite-700 dark:text-graphite-400">الاشتراك متوقف مؤقتًا</span>
+							<p class="mt-3 text-center text-xs leading-5 text-graphite-500 dark:text-graphite-400">التسجيل في باقة المعلمين غير متاح حاليًا، يرجى المحاولة لاحقًا.</p>
+						</>
+					)}
+				</div>
+			</div>}
+		</div>
+	</section>
+</Layout>

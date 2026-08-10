@@ -1,0 +1,84 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import '../../../styles/content-pages.css';
+import Breadcrumbs from '../../../components/ui/Breadcrumbs.astro';
+import ArticleCard from '../../../components/ui/ArticleCard.astro';
+import Pagination from '../../../components/ui/Pagination.astro';
+import EmptyState from '../../../components/ui/EmptyState.astro';
+import ErrorState from '../../../components/ui/ErrorState.astro';
+import { apiFetch, apiFetchList, applyListStatus } from '../../../lib/api';
+
+const countryCode = Astro.locals.countryCode!;
+const countryId = Astro.locals.countryId;
+const params = Astro.url.searchParams;
+const q = params.get('q') || '';
+const classId = params.get('class_id') || '';
+const subjectId = params.get('subject_id') || '';
+const page = Math.max(1, Number(params.get('page')) || 1);
+// Google recommends not indexing filter/search permutations of a listing page — only the
+// unfiltered (optionally paginated) URL is worth indexing as its own result. The canonical
+// tag already drops these params (see SeoHead.astro), but canonical alone is just a hint;
+// noindex is the explicit signal. `follow` (not nofollow) so crawlers still reach the
+// articles linked from a filtered results page.
+const hasFilters = !!(q || classId || subjectId);
+
+const { items: classes } = await apiFetchList<any>('/school-classes', { countryId });
+
+const subjects = classId
+  ? (await apiFetchList<any>(`/filter/subjects/${classId}`, { countryId })).items
+  : [];
+
+const articlesResult = await apiFetch<any[]>('/articles', {
+  countryId,
+  // The backend filters by grade_level (see ArticleFilter), not class_id — omitting this
+  // meant picking a class without also picking a subject silently showed every subject's
+  // articles instead of narrowing to that class.
+  params: { q, grade_level: classId || undefined, subject_id: subjectId || undefined, page, per_page: 12 },
+});
+const articles = Array.isArray(articlesResult.data) ? articlesResult.data : [];
+const meta = articlesResult.meta;
+applyListStatus(Astro, articlesResult);
+---
+
+<Layout title="المقالات والملفات الدراسية" description="ابحث وتصفح جميع المقالات والملفات الدراسية." hreflangSafe noindex={hasFilters}>
+  <Breadcrumbs items={[{ label: 'المقالات' }]} />
+  <div class="page-shell">
+    <header class="page-heading"><span class="page-eyebrow">مكتبة المحتوى</span><h1 class="page-title">المقالات والملفات الدراسية</h1><p class="page-description">ابحث بالكلمة أو صفّ النتائج حسب الصف والمادة للوصول إلى الملف المناسب بسرعة.</p></header>
+    <form method="get" class="surface-card mb-10 flex flex-wrap gap-3 p-4 sm:p-5" aria-label="البحث وتصفية المقالات">
+      <input type="text" name="q" value={q} placeholder="ابحث عن مقال أو ملف..." class="form-control min-w-[220px] flex-1" />
+      <select name="class_id" onchange="this.form.submit()" class="form-control w-auto min-w-40">
+        <option value="">كل الصفوف</option>
+        {classes.map((cls: any) => (
+          <option value={cls.id} selected={String(cls.id) === classId}>{cls.grade_name}</option>
+        ))}
+      </select>
+      {
+        classId && (
+          <select name="subject_id" onchange="this.form.submit()" class="form-control w-auto min-w-40">
+            <option value="">كل المواد</option>
+            {subjects.map((subject: any) => (
+              <option value={subject.id} selected={String(subject.id) === subjectId}>{subject.subject_name}</option>
+            ))}
+          </select>
+        )
+      }
+      <button type="submit" class="btn-primary">بحث</button>
+    </form>
+    {
+      !articlesResult.ok ? (
+        <ErrorState message={articlesResult.message} />
+      ) : articles.length > 0 ? (
+        <>
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {articles.map((article: any, i: number) => (
+              <ArticleCard article={article} href={`/${countryCode}/lesson/articles/${article.id}`} index={i} />
+            ))}
+          </div>
+          {meta && <Pagination currentPage={meta.current_page} lastPage={meta.last_page} url={Astro.url} />}
+        </>
+      ) : (
+        <EmptyState message="لم يتم العثور على نتائج مطابقة." />
+      )
+    }
+  </div>
+</Layout>

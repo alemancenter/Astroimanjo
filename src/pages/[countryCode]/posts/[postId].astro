@@ -1,0 +1,178 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import '../../../styles/content-pages.css';
+import AdSensePlacement from '../../../components/AdSensePlacement.astro';
+import ArticleAttachments from '../../../components/ArticleAttachments.astro';
+import ArticleComments from '../../../components/ArticleComments.astro';
+import Breadcrumbs from '../../../components/ui/Breadcrumbs.astro';
+import ErrorState from '../../../components/ui/ErrorState.astro';
+import { apiFetch, applyNotFoundStatus } from '../../../lib/api';
+import { assetUrl } from '../../../lib/assets';
+
+const { postId } = Astro.params;
+const countryCode = Astro.locals.countryCode!;
+const countryId = Astro.locals.countryId;
+const params = Astro.url.searchParams;
+const formError = params.get('error');
+const commentSent = params.get('comment_sent') === '1';
+
+const [result, settingsResult, adStatusResult] = await Promise.all([
+	apiFetch<any>(`/posts/${postId}`, { countryId }),
+	apiFetch<Record<string, string>>('/front/settings', { countryId }),
+	apiFetch<{ eligible: boolean; adsense_risk: string }>(`/posts/${postId}/ad-status`, { countryId, params: { country: countryCode } }),
+]);
+const post = result.data;
+if (!result.ok || !post) applyNotFoundStatus(Astro, result);
+
+const settings = settingsResult.data ?? {};
+const imageSrc = assetUrl(post?.image, 1200);
+const keywords: any[] = Array.isArray(post?.keywords_rel) ? post.keywords_rel.filter((keyword: any) => keyword?.keyword) : [];
+const files: any[] = Array.isArray(post?.files) ? post.files : [];
+const currentUrl = Astro.url.pathname;
+
+const stripHtml = (html = '') => html
+	.replace(/<script[\s\S]*?<\/script>/gi, ' ')
+	.replace(/<style[\s\S]*?<\/style>/gi, ' ')
+	.replace(/<[^>]+>/g, ' ')
+	.replace(/&nbsp;/g, ' ')
+	.replace(/\s+/g, ' ')
+	.trim();
+const plainContent = stripHtml(post?.content || '');
+const description = post?.meta_description?.trim() || (plainContent ? `${plainContent.slice(0, 170)}${plainContent.length > 170 ? '…' : ''}` : undefined);
+const wordCount = plainContent ? plainContent.split(/\s+/).filter(Boolean).length : 0;
+const readingMinutes = Math.max(1, Math.ceil(wordCount / 200));
+
+const publishedAt = post?.created_at;
+const updatedAt = post?.updated_at;
+const wasUpdated = Boolean(publishedAt && updatedAt && new Date(updatedAt).getTime() - new Date(publishedAt).getTime() > 24 * 60 * 60 * 1000);
+const formatDate = (value?: string) => value ? new Date(value).toLocaleDateString('ar-JO', { year: 'numeric', month: 'long', day: 'numeric' }) : '—';
+const viewCount = Number(post?.views || 0);
+
+const adsenseClient = settings.adsense_client?.trim() || '';
+const adsEligible = Boolean(post && adStatusResult.ok && adStatusResult.data?.eligible && wordCount >= 150 && adsenseClient);
+
+const siteOrigin = Astro.site ? Astro.site.origin : Astro.url.origin;
+const canonicalUrl = new URL(Astro.url.pathname, siteOrigin).toString();
+const siteName = settings.site_name?.trim() || 'موقع الإيمان التعليمي';
+const jsonLd = post ? [
+	{
+		'@context': 'https://schema.org', '@type': 'Article', headline: post.title, description,
+		image: imageSrc || undefined, datePublished: publishedAt, dateModified: updatedAt || publishedAt,
+		author: post.author?.name ? { '@type': 'Person', name: post.author.name } : { '@type': 'Organization', name: siteName },
+		publisher: { '@type': 'Organization', name: siteName }, mainEntityOfPage: canonicalUrl,
+		wordCount, articleSection: post.category?.name || undefined, inLanguage: 'ar',
+	},
+	{
+		'@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
+			{ '@type': 'ListItem', position: 1, name: 'الرئيسية', item: siteOrigin },
+			{ '@type': 'ListItem', position: 2, name: 'الأقسام', item: `${siteOrigin}/${countryCode}/categories` },
+			...(post.category ? [{ '@type': 'ListItem', position: 3, name: post.category.name, item: `${siteOrigin}/${countryCode}/posts/category/${post.category.id}` }] : []),
+			{ '@type': 'ListItem', position: post.category ? 4 : 3, name: post.title },
+		],
+	},
+] : undefined;
+---
+
+<Layout title={post?.title || 'المنشور'} description={description} canonical={canonicalUrl} image={imageSrc || undefined} jsonLd={jsonLd} enableAds={adsEligible}>
+	<div id="reading-progress" class="fixed inset-x-0 top-0 z-[70] h-0.5 origin-right scale-x-0 bg-gradient-to-l from-royal-600 via-emerald-brand-600 to-sunset-400" aria-hidden="true"></div>
+
+	{!result.ok || !post ? (
+		<div class="container-shell py-14"><ErrorState message={result.ok ? 'المنشور غير موجود.' : result.message} /></div>
+	) : (
+		<article>
+			<header class="relative overflow-hidden border-b border-graphite-200 bg-white dark:border-graphite-800 dark:bg-graphite-950">
+				<div class="pointer-events-none absolute -right-32 -top-44 size-[30rem] rounded-full bg-royal-100/60 blur-3xl dark:bg-royal-900/20" aria-hidden="true"></div>
+				<div class="container-shell relative grid max-w-7xl items-center gap-8 py-9 sm:py-12 lg:grid-cols-[minmax(0,1fr)_28rem] lg:py-14">
+					<div class="min-w-0">
+						<a href={post.category ? `/${countryCode}/posts/category/${post.category.id}` : `/${countryCode}/categories`} class="mb-4 inline-flex items-center gap-2 rounded-full border border-royal-100 bg-royal-50 px-3 py-1.5 text-xs font-extrabold text-royal-700 transition hover:border-royal-300 dark:border-royal-900 dark:bg-royal-950 dark:text-royal-200">{post.category?.name || 'منشور تعليمي'}</a>
+						<h1 class="max-w-4xl text-3xl font-black leading-[1.45] tracking-tight text-graphite-950 sm:text-4xl lg:text-[2.65rem] dark:text-white">{post.title}</h1>
+						{description && <p class="mt-4 max-w-3xl text-sm font-medium leading-8 text-graphite-600 sm:text-base dark:text-graphite-300">{description}</p>}
+						<div class="mt-6 flex flex-wrap items-center gap-3">
+							<a href="#post-content-start" class="btn-primary">قراءة المنشور<svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m6 9 6 6 6-6" /></svg></a>
+							<button type="button" data-copy-post class="btn-outline"><svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 13a5 5 0 0 0 7.07.07l2-2a5 5 0 0 0-7.07-7.07l-1.15 1.15M14 11a5 5 0 0 0-7.07-.07l-2 2A5 5 0 0 0 12 20l1.15-1.15" /></svg><span data-copy-label>نسخ الرابط</span></button>
+						</div>
+						<div class="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-xs font-bold text-graphite-500 dark:text-graphite-400">
+							{post.author?.name && <span>{post.author.name}</span>}
+							<span>{formatDate(publishedAt)}</span><span>{viewCount.toLocaleString('ar-JO')} مشاهدة</span><span>{readingMinutes.toLocaleString('ar-JO')} دقيقة قراءة</span>
+						</div>
+					</div>
+					{imageSrc ? (
+						<figure class="overflow-hidden rounded-2xl border border-graphite-200 bg-graphite-100 shadow-lifted dark:border-graphite-700 dark:bg-graphite-900"><img src={imageSrc} alt={post.alt || post.title} width="900" height="600" class="aspect-[4/3] w-full object-cover" loading="eager" fetchpriority="high" onerror="this.closest('figure')?.remove()" /></figure>
+					) : (
+						<section class="grid grid-cols-2 gap-3 rounded-2xl border border-graphite-200 bg-white/85 p-4 shadow-soft dark:border-graphite-700 dark:bg-graphite-900/85" aria-label="ملخص المنشور">
+							<div class="rounded-xl bg-royal-50 p-4 dark:bg-royal-950"><strong class="block text-xl font-black text-royal-700 dark:text-royal-200">{viewCount.toLocaleString('ar-JO')}</strong><span class="mt-1 block text-xs font-bold text-graphite-500">مشاهدة</span></div>
+							<div class="rounded-xl bg-emerald-brand-50 p-4 dark:bg-emerald-brand-950"><strong class="block text-xl font-black text-emerald-brand-700 dark:text-emerald-brand-200">{readingMinutes.toLocaleString('ar-JO')}</strong><span class="mt-1 block text-xs font-bold text-graphite-500">دقيقة قراءة</span></div>
+						</section>
+					)}
+				</div>
+			</header>
+
+			<Breadcrumbs items={[
+				{ label: 'الأقسام التعليمية', href: `/${countryCode}/categories` },
+				...(post.category ? [{ label: post.category.name, href: `/${countryCode}/posts/category/${post.category.id}` }] : []),
+				{ label: post.title },
+			]} />
+
+			{adsEligible && <div class="container-shell max-w-7xl pt-7 sm:pt-9"><AdSensePlacement client={adsenseClient} desktopConfig={settings.google_ads_desktop_news} mobileConfig={settings.google_ads_mobile_news} placement="post-top" /></div>}
+
+			<div class="container-shell max-w-7xl py-8 sm:py-10 lg:py-12">
+				<div class="grid grid-cols-1 gap-7 lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-8 xl:gap-10">
+					<main class="min-w-0">
+						<section id="post-content-start" class="scroll-mt-28 overflow-hidden rounded-2xl border border-graphite-200 bg-white shadow-soft dark:border-graphite-700 dark:bg-graphite-900" aria-labelledby="post-content-heading">
+							<header class="flex items-center justify-between gap-4 border-b border-graphite-200 bg-gradient-to-l from-royal-50 via-white to-emerald-brand-50 px-5 py-4 dark:border-graphite-700 dark:from-royal-950/50 dark:via-graphite-900 dark:to-emerald-brand-950/30 sm:px-7">
+								<div class="flex items-center gap-3"><span class="flex size-9 items-center justify-center rounded-xl bg-royal-600 text-white"><svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M5 4h10l4 4v12H5zM8 12h8m-8 4h6" /></svg></span><div><span class="block text-[10px] font-extrabold text-royal-600 dark:text-royal-300">تفاصيل المنشور</span><h2 id="post-content-heading" class="text-sm font-black text-graphite-950 sm:text-base dark:text-white">المحتوى</h2></div></div>
+								<span class="hidden rounded-full bg-white px-3 py-1.5 text-[11px] font-extrabold text-graphite-500 shadow-sm sm:block dark:bg-graphite-800 dark:text-graphite-300">{wordCount.toLocaleString('ar-JO')} كلمة</span>
+							</header>
+							<div class="article-content prose-edu overflow-x-auto px-5 py-6 sm:px-8 sm:py-8 lg:px-10 lg:py-10" set:html={post.content} />
+						</section>
+
+						{files.length > 0 && <div class="mt-7 lg:hidden"><ArticleAttachments files={files} countryCode={countryCode} headingId="post-attachments-mobile-heading" /></div>}
+
+						{keywords.length > 0 && <section class="mt-7 rounded-2xl border border-graphite-200 bg-white p-5 shadow-soft dark:border-graphite-700 dark:bg-graphite-900" aria-label="الكلمات المفتاحية"><div class="flex flex-wrap items-center gap-2"><svg class="ml-1 size-4 text-graphite-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m20 13-7 7-10-10V3h7l10 10Z"/><circle cx="7.5" cy="7.5" r="1" fill="currentColor"/></svg>{keywords.map((keyword: any) => <a href={`/${countryCode}/posts/keyword/${encodeURIComponent(keyword.keyword)}`} class="rounded-full border border-graphite-200 bg-graphite-50 px-3 py-1.5 text-xs font-bold text-graphite-600 transition hover:border-royal-300 hover:bg-royal-50 hover:text-royal-700 dark:border-graphite-700 dark:bg-graphite-800 dark:text-graphite-300">#{keyword.keyword}</a>)}</div></section>}
+
+						{adsEligible && <div class="my-14 sm:my-16"><AdSensePlacement client={adsenseClient} desktopConfig={settings.google_ads_in_article_post} mobileConfig={settings.google_ads_in_article_post} placement="post-in-content" /></div>}
+
+						<ArticleComments
+							contentId={post.id}
+							commentableType="App\\Models\\Post"
+							inputId="post-comment"
+							countryCode={countryCode}
+							countryId={countryId}
+							currentUrl={currentUrl}
+							formError={formError}
+							commentSent={commentSent}
+							server:defer
+						>
+							<div slot="fallback" id="comments" class="surface-card mt-10 scroll-mt-28 animate-pulse p-5 sm:p-7" aria-label="جارٍ تحميل التعليقات">
+								<div class="mb-6 h-6 w-32 rounded bg-graphite-100 dark:bg-graphite-800" />
+								<div class="h-28 rounded-xl bg-graphite-50 dark:bg-graphite-800/50" />
+							</div>
+						</ArticleComments>
+					</main>
+
+					<aside class="space-y-5 lg:sticky lg:top-28 lg:self-start">
+						{files.length > 0 && <div class="hidden lg:block"><ArticleAttachments files={files} countryCode={countryCode} headingId="post-attachments-desktop-heading" /></div>}
+						<section class="surface-card overflow-hidden"><header class="flex items-center gap-2 border-b border-graphite-200 bg-graphite-50 px-5 py-4 dark:border-graphite-700 dark:bg-graphite-800/60"><svg class="size-4 text-royal-600 dark:text-royal-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5h16v14H4zM8 9h8m-8 4h8" /></svg><h2 class="text-sm font-extrabold text-graphite-950 dark:text-white">معلومات المنشور</h2></header><dl class="divide-y divide-graphite-100 px-5 text-sm dark:divide-graphite-800">
+							{post.category?.name && <div class="flex items-start justify-between gap-4 py-3"><dt class="text-graphite-500 dark:text-graphite-400">القسم</dt><dd class="text-left font-extrabold text-graphite-900 dark:text-white">{post.category.name}</dd></div>}
+							<div class="flex items-start justify-between gap-4 py-3"><dt class="text-graphite-500 dark:text-graphite-400">تاريخ النشر</dt><dd class="text-left font-extrabold text-graphite-900 dark:text-white">{formatDate(publishedAt)}</dd></div>
+							{wasUpdated && <div class="flex items-start justify-between gap-4 py-3"><dt class="text-graphite-500 dark:text-graphite-400">آخر تحديث</dt><dd class="text-left font-extrabold text-graphite-900 dark:text-white">{formatDate(updatedAt)}</dd></div>}
+							<div class="flex justify-between gap-4 py-3"><dt class="text-graphite-500 dark:text-graphite-400">المشاهدات</dt><dd class="font-extrabold text-graphite-900 dark:text-white">{viewCount.toLocaleString('ar-JO')}</dd></div>
+							<div class="flex justify-between gap-4 py-3"><dt class="text-graphite-500 dark:text-graphite-400">وقت القراءة</dt><dd class="font-extrabold text-graphite-900 dark:text-white">{readingMinutes.toLocaleString('ar-JO')} دقيقة</dd></div>
+						</dl></section>
+						<button type="button" data-copy-post class="surface-card flex w-full items-center justify-center gap-2 px-4 py-3.5 text-sm font-extrabold text-graphite-700 transition hover:border-royal-300 hover:bg-royal-50 hover:text-royal-700 dark:text-graphite-200 dark:hover:border-royal-700 dark:hover:bg-royal-950"><svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 13a5 5 0 0 0 7.07.07l2-2a5 5 0 0 0-7.07-7.07l-1.15 1.15M14 11a5 5 0 0 0-7.07-.07l-2 2A5 5 0 0 0 12 20l1.15-1.15" /></svg><span data-copy-label>نسخ رابط المنشور</span></button>
+					</aside>
+				</div>
+
+				{adsEligible && <div class="mt-14 sm:mt-16"><AdSensePlacement client={adsenseClient} desktopConfig={settings.google_ads_desktop_news_2} mobileConfig={settings.google_ads_mobile_news_2} placement="post-bottom" /></div>}
+			</div>
+		</article>
+	)}
+
+	{post && <script define:vars={{ postId, countryCode }}>navigator.sendBeacon(`/api/posts/${postId}/increment-view?country=${countryCode}`, new Blob());</script>}
+	<script>
+		const progress = document.querySelector<HTMLElement>('#reading-progress');
+		const updateProgress = () => { const scrollable = document.documentElement.scrollHeight - window.innerHeight; const value = scrollable > 0 ? Math.min(1, window.scrollY / scrollable) : 0; if (progress) progress.style.transform = `scaleX(${value})`; };
+		updateProgress(); window.addEventListener('scroll', updateProgress, { passive: true });
+		document.querySelectorAll<HTMLButtonElement>('[data-copy-post]').forEach((button) => button.addEventListener('click', async () => { const label = button.querySelector<HTMLElement>('[data-copy-label]'); try { await navigator.clipboard.writeText(window.location.href); if (label) label.textContent = 'تم نسخ الرابط'; setTimeout(() => { if (label) label.textContent = button.closest('aside') ? 'نسخ رابط المنشور' : 'نسخ الرابط'; }, 1800); } catch { if (label) label.textContent = 'تعذر النسخ'; } }));
+	</script>
+</Layout>

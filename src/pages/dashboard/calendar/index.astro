@@ -1,0 +1,191 @@
+---
+import DashboardLayout from '../../../layouts/DashboardLayout.astro';
+import DashboardAlert from '../../../components/ui/DashboardAlert.astro';
+import { requireDashboard } from '../../../lib/auth';
+import { apiFetch } from '../../../lib/api';
+import { COUNTRIES, getCountryById } from '../../../lib/countries';
+
+const guard = await requireDashboard(Astro, 'manage calendar');
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+
+const pad = (value: number) => String(value).padStart(2, '0');
+const dateKey = (date: Date) => `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`;
+const localDateKey = (date: Date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+const requestedMonth = Astro.url.searchParams.get('month') || '';
+const now = new Date();
+const monthMatch = requestedMonth.match(/^(\d{4})-(0[1-9]|1[0-2])$/);
+const year = monthMatch ? Number(monthMatch[1]) : now.getFullYear();
+const monthIndex = monthMatch ? Number(monthMatch[2]) - 1 : now.getMonth();
+const monthKey = `${year}-${pad(monthIndex + 1)}`;
+const view = Astro.url.searchParams.get('view') === 'list' ? 'list' : 'month';
+const monthStart = new Date(Date.UTC(year, monthIndex, 1));
+const monthEnd = new Date(Date.UTC(year, monthIndex + 1, 0));
+const gridStart = new Date(Date.UTC(year, monthIndex, 1 - monthStart.getUTCDay()));
+const cells = Math.ceil((monthStart.getUTCDay() + monthEnd.getUTCDate()) / 7) * 7;
+const gridDays = Array.from({ length: cells }, (_, index) => new Date(gridStart.getTime() + index * 86400000));
+const gridEnd = gridDays[gridDays.length - 1];
+const todayKey = localDateKey(now);
+
+const token = Astro.cookies.get('token')?.value;
+const result = await apiFetch<any[]>('/dashboard/calendar/events', {
+	countryId: Astro.locals.countryId,
+	cookieHeader: `token=${token}`,
+	params: { start: dateKey(gridStart), end: dateKey(gridEnd) },
+});
+const events = Array.isArray(result.data) ? result.data : [];
+const eventKey = (event: any) => String(event.event_date || '').slice(0, 10);
+const eventsByDay = new Map<string, any[]>();
+for (const event of events) {
+	const key = eventKey(event);
+	const list = eventsByDay.get(key) || [];
+	list.push(event);
+	eventsByDay.set(key, list);
+}
+const monthEvents = events
+	.filter((event: any) => eventKey(event).startsWith(monthKey))
+	.sort((a: any, b: any) => eventKey(a).localeCompare(eventKey(b)));
+const upcomingEvents = monthEvents.filter((event: any) => eventKey(event) >= todayKey);
+const pastEvents = monthEvents.filter((event: any) => eventKey(event) < todayKey);
+const nextEvent = upcomingEvents[0];
+const currentCountry = getCountryById(Astro.locals.countryId);
+const monthLabel = new Intl.DateTimeFormat('ar-EG', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(monthStart);
+const previousMonth = new Date(Date.UTC(year, monthIndex - 1, 1));
+const nextMonth = new Date(Date.UTC(year, monthIndex + 1, 1));
+const todayMonth = `${now.getFullYear()}-${pad(now.getMonth() + 1)}`;
+const weekdayNames = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+
+function calendarUrl(targetMonth: string, targetView = view): string {
+	const params = new URLSearchParams();
+	params.set('country', Astro.locals.countryId);
+	params.set('month', targetMonth);
+	if (targetView === 'list') params.set('view', 'list');
+	return `/dashboard/calendar?${params.toString()}`;
+}
+
+function formatEventDate(key: string) {
+	const [eventYear, eventMonth, eventDay] = key.split('-').map(Number);
+	return new Intl.DateTimeFormat('ar-EG', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(eventYear, eventMonth - 1, eventDay)));
+}
+
+const currentUrl = calendarUrl(monthKey, view);
+---
+
+<DashboardLayout title="إدارة التقويم" user={user}>
+	<DashboardAlert />
+
+	<div class="calendar-page">
+		<header class="calendar-page-header">
+			<div>
+				<span class="calendar-eyebrow">إدارة المنصة</span>
+				<h1>التقويم والفعاليات</h1>
+				<p>نظّم المواعيد الأكاديمية والأحداث المهمة التي تظهر للطلاب والزوار.</p>
+			</div>
+			<div class="calendar-header-actions">
+				<label class="calendar-country-control"><span aria-hidden="true">{currentCountry.flag}</span><select id="calendar-country-select" data-current={Astro.locals.countryId} aria-label="تبديل قاعدة البيانات">{COUNTRIES.map((country) => <option value={country.id} selected={country.id === Astro.locals.countryId}>{country.name}</option>)}</select></label>
+				<button type="button" class="calendar-create-button" data-create-event data-date={todayKey}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-width="1.8" d="M12 5v14M5 12h14" /></svg>حدث جديد</button>
+			</div>
+		</header>
+
+		<section class="calendar-summary" aria-label="ملخص أحداث الشهر">
+			<div><span class="is-blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M5 4v3m14-3v3M4 9h16M5 6h14a1 1 0 0 1 1 1v13H4V7a1 1 0 0 1 1-1Z" /></svg></span><p>أحداث الشهر<strong>{monthEvents.length.toLocaleString('ar-EG')}</strong></p></div>
+			<div><span class="is-green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m5 12 4 4L19 6" /></svg></span><p>الأحداث القادمة<strong>{upcomingEvents.length.toLocaleString('ar-EG')}</strong></p></div>
+			<div><span class="is-orange"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="8" /><path stroke-linecap="round" stroke-width="1.7" d="M12 8v4l3 2" /></svg></span><p>أحداث منتهية<strong>{pastEvents.length.toLocaleString('ar-EG')}</strong></p></div>
+			<div class="calendar-next-event"><span>الموعد القادم</span>{nextEvent ? <><strong>{nextEvent.title}</strong><small>{formatEventDate(eventKey(nextEvent))}</small></> : <strong>لا يوجد موعد قادم هذا الشهر</strong>}</div>
+		</section>
+
+		<section class="calendar-card">
+			<div class="calendar-toolbar">
+				<div class="calendar-navigation"><a href={calendarUrl(dateKey(previousMonth).slice(0, 7))} aria-label="الشهر السابق"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m9 5 7 7-7 7" /></svg></a><h2>{monthLabel}</h2><a href={calendarUrl(dateKey(nextMonth).slice(0, 7))} aria-label="الشهر التالي"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m15 5-7 7 7 7" /></svg></a><a href={calendarUrl(todayMonth)} class="calendar-today-button">اليوم</a></div>
+				<div class="calendar-toolbar-side"><form method="get" class="calendar-month-picker"><input type="hidden" name="country" value={Astro.locals.countryId} /><input type="hidden" name="view" value={view === 'list' ? 'list' : ''} /><input type="month" name="month" value={monthKey} aria-label="اختيار الشهر" /><button type="submit">انتقال</button></form><nav class="calendar-view-switch" aria-label="طريقة العرض"><a href={calendarUrl(monthKey)} class={view === 'month' ? 'is-active' : ''}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="4" y="4" width="16" height="16" rx="1" /><path d="M4 9h16M9 9v11m6-11v11" /></svg>شهري</a><a href={calendarUrl(monthKey, 'list')} class={view === 'list' ? 'is-active' : ''}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-width="1.8" d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" /></svg>قائمة</a></nav></div>
+			</div>
+
+			{!result.ok ? (
+				<div class="calendar-error"><strong>تعذّر تحميل أحداث التقويم</strong><p>{result.message}</p><a href={currentUrl}>إعادة المحاولة</a></div>
+			) : view === 'month' ? (
+				<>
+					<div class="calendar-month-view">
+						<div class="calendar-weekdays">{weekdayNames.map((day) => <span>{day}</span>)}</div>
+						<div class="calendar-grid">
+							{gridDays.map((day) => {
+								const key = dateKey(day);
+								const dayEvents = eventsByDay.get(key) || [];
+								const inMonth = day.getUTCMonth() === monthIndex;
+								return <div class:list={['calendar-day', !inMonth && 'is-outside', key === todayKey && 'is-today', dayEvents.length && 'has-events']}><button type="button" class="calendar-day-number" data-create-event data-date={key} aria-label={`إضافة حدث في ${key}`}>{day.getUTCDate().toLocaleString('ar-EG')}</button><div class="calendar-day-events">{dayEvents.slice(0, 3).map((event: any) => <button type="button" class="calendar-event-chip" data-edit-event data-id={event.id} data-title={event.title} data-description={event.description || ''} data-date={eventKey(event)} title={event.title}><i></i><span>{event.title}</span></button>)}{dayEvents.length > 3 && <small>+{(dayEvents.length - 3).toLocaleString('ar-EG')} أحداث أخرى</small>}</div></div>;
+							})}
+						</div>
+					</div>
+					<div class="calendar-mobile-agenda"><div class="calendar-agenda-heading"><h3>أحداث {monthLabel}</h3><span>{monthEvents.length.toLocaleString('ar-EG')} حدث</span></div>{monthEvents.map((event: any) => <article class="calendar-agenda-item"><time datetime={eventKey(event)}><strong>{Number(eventKey(event).slice(8, 10)).toLocaleString('ar-EG')}</strong><span>{new Intl.DateTimeFormat('ar-EG', { month: 'short', timeZone: 'UTC' }).format(new Date(`${eventKey(event)}T00:00:00Z`))}</span></time><button type="button" data-edit-event data-id={event.id} data-title={event.title} data-description={event.description || ''} data-date={eventKey(event)}><strong>{event.title}</strong><small>{event.description || 'دون وصف إضافي'}</small></button></article>)}{monthEvents.length === 0 && <div class="calendar-empty"><strong>لا توجد أحداث في هذا الشهر</strong><p>يمكنك إضافة أول حدث من الزر أعلاه.</p></div>}</div>
+				</>
+			) : (
+				<div class="calendar-list-view">
+					<div class="calendar-list-heading"><div><h3>أحداث {monthLabel}</h3><p>جميع الأحداث مرتبة زمنيًا من بداية الشهر.</p></div><span>{monthEvents.length.toLocaleString('ar-EG')} حدث</span></div>
+					<div class="calendar-list-scroll"><table><thead><tr><th>التاريخ</th><th>الحدث</th><th>الوصف</th><th>الحالة</th><th><span class="sr-only">الإجراءات</span></th></tr></thead><tbody>{monthEvents.map((event: any) => { const key = eventKey(event); const upcoming = key >= todayKey; return <tr><td><time datetime={key}><strong>{formatEventDate(key)}</strong><small>{key}</small></time></td><td><button type="button" class="calendar-event-title" data-edit-event data-id={event.id} data-title={event.title} data-description={event.description || ''} data-date={key}>{event.title}</button></td><td><p>{event.description || '—'}</p></td><td><span class:list={['calendar-event-status', upcoming ? 'is-upcoming' : 'is-past']}><i></i>{upcoming ? 'قادم' : 'منتهي'}</span></td><td><div class="calendar-row-actions"><button type="button" data-edit-event data-id={event.id} data-title={event.title} data-description={event.description || ''} data-date={key} aria-label={`تعديل ${event.title}`} title="تعديل"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m4 20 4.3-1 9.9-9.9a2.1 2.1 0 0 0-3-3L5.3 16 4 20Zm9.8-12.5 3 3" /></svg></button><form method="post" action={`/api/dashboard/calendar/${event.id}/delete`} data-confirm-delete><input type="hidden" name="redirect_to" value={currentUrl} /><button type="submit" aria-label={`حذف ${event.title}`} title="حذف"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 7h16m-10 4v6m4-6v6m-7-10 .8 13h8.4L17 7m-7-3h4l1 3H9l1-3Z" /></svg></button></form></div></td></tr>; })}</tbody></table></div>
+					{monthEvents.length === 0 && <div class="calendar-empty"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M5 4v3m14-3v3M4 9h16M5 6h14a1 1 0 0 1 1 1v13H4V7a1 1 0 0 1 1-1Z" /></svg></span><strong>لا توجد أحداث في هذا الشهر</strong><p>انتقل إلى شهر آخر أو أضف حدثًا جديدًا.</p></div>}
+				</div>
+			)}
+		</section>
+	</div>
+
+	<dialog id="calendar-event-dialog" class="calendar-dialog">
+		<div class="calendar-dialog-card">
+			<div class="calendar-dialog-head"><div><span id="calendar-dialog-eyebrow">حدث جديد</span><h2 id="calendar-dialog-title">إضافة حدث إلى التقويم</h2><p>في قاعدة بيانات {currentCountry.name}</p></div><button type="button" data-close-dialog aria-label="إغلاق"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-width="1.8" d="m7 7 10 10M17 7 7 17" /></svg></button></div>
+			<form method="post" action="/api/dashboard/calendar/save" class="calendar-event-form">
+				<input id="calendar-event-id" type="hidden" name="id" />
+				<input type="hidden" name="redirect_to" value={currentUrl} />
+				<label><span>عنوان الحدث</span><input id="calendar-event-title-input" type="text" name="title" required minlength="2" maxlength="500" autocomplete="off" placeholder="مثال: بداية الفصل الدراسي الثاني" /></label>
+				<label><span>تاريخ الحدث</span><input id="calendar-event-date" type="date" name="event_date" required /></label>
+				<label><span>الوصف <small>اختياري</small></span><textarea id="calendar-event-description" name="description" rows="4" placeholder="تفاصيل إضافية عن الحدث..."></textarea></label>
+				<div class="calendar-dialog-actions"><button type="button" data-close-dialog>إلغاء</button><button id="calendar-save-label" type="submit">إضافة الحدث</button></div>
+			</form>
+		</div>
+	</dialog>
+
+	<script>
+		const dialog = document.getElementById('calendar-event-dialog') as HTMLDialogElement | null;
+		const eventId = document.getElementById('calendar-event-id') as HTMLInputElement | null;
+		const titleInput = document.getElementById('calendar-event-title-input') as HTMLInputElement | null;
+		const dateInput = document.getElementById('calendar-event-date') as HTMLInputElement | null;
+		const descriptionInput = document.getElementById('calendar-event-description') as HTMLTextAreaElement | null;
+		const dialogEyebrow = document.getElementById('calendar-dialog-eyebrow');
+		const dialogTitle = document.getElementById('calendar-dialog-title');
+		const saveLabel = document.getElementById('calendar-save-label');
+		const openDialog = (button: HTMLElement, editing = false) => {
+			if (eventId) eventId.value = editing ? button.dataset.id || '' : '';
+			if (titleInput) titleInput.value = editing ? button.dataset.title || '' : '';
+			if (dateInput) dateInput.value = button.dataset.date || '';
+			if (descriptionInput) descriptionInput.value = editing ? button.dataset.description || '' : '';
+			if (dialogEyebrow) dialogEyebrow.textContent = editing ? 'تعديل الموعد' : 'حدث جديد';
+			if (dialogTitle) dialogTitle.textContent = editing ? 'تعديل بيانات الحدث' : 'إضافة حدث إلى التقويم';
+			if (saveLabel) saveLabel.textContent = editing ? 'حفظ التعديلات' : 'إضافة الحدث';
+			dialog?.showModal();
+			window.setTimeout(() => titleInput?.focus(), 60);
+		};
+		document.querySelectorAll<HTMLElement>('[data-create-event]').forEach((button) => button.addEventListener('click', () => openDialog(button)));
+		document.querySelectorAll<HTMLElement>('[data-edit-event]').forEach((button) => button.addEventListener('click', () => openDialog(button, true)));
+		document.querySelectorAll('[data-close-dialog]').forEach((button) => button.addEventListener('click', () => dialog?.close()));
+		dialog?.addEventListener('click', (event) => { if (event.target === dialog) dialog.close(); });
+		document.querySelectorAll<HTMLFormElement>('[data-confirm-delete]').forEach((form) => form.addEventListener('submit', (event) => { if (!window.confirm('سيتم حذف هذا الحدث نهائيًا. هل تريد المتابعة؟')) event.preventDefault(); }));
+		const countrySelect = document.getElementById('calendar-country-select') as HTMLSelectElement | null;
+		countrySelect?.addEventListener('change', () => {
+			if (countrySelect.value === countrySelect.dataset.current) return;
+			const url = new URL(window.location.href);
+			url.searchParams.set('country', countrySelect.value);
+			window.location.href = url.toString();
+		});
+	</script>
+
+	<style>
+		.calendar-page{--ca-ink:#102a43;--ca-muted:#718096;--ca-line:#dfe6ee;max-width:1360px;margin-inline:auto;padding-bottom:2rem}.calendar-page-header{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;margin-bottom:1rem}.calendar-eyebrow{display:block;margin-bottom:.25rem;color:#1a4d8f;font-size:.65rem;font-weight:850}.calendar-page-header h1{margin:0;color:#061a3a;font-size:clamp(1.35rem,1.1rem + .65vw,1.85rem);font-weight:900;line-height:1.3}.calendar-page-header p{margin:.28rem 0 0;color:var(--ca-muted);font-size:.75rem}.calendar-header-actions{display:flex;align-items:center;gap:.55rem}.calendar-country-control{display:flex;min-height:2.6rem;align-items:center;gap:.4rem;border:1px solid var(--ca-line);border-radius:.6rem;background:#fff;padding:.35rem .55rem}.calendar-country-control select{border:0;background:transparent;color:var(--ca-ink);font-family:inherit;font-size:.66rem;font-weight:750;outline:0}.calendar-create-button{display:inline-flex;min-height:2.6rem;align-items:center;justify-content:center;gap:.4rem;border:1px solid #16427d;border-radius:.6rem;background:#1a4d8f;padding:.5rem .9rem;color:#fff;font-family:inherit;font-size:.73rem;font-weight:850;box-shadow:0 2px 4px rgb(26 77 143/.16)}.calendar-create-button svg{width:1rem;height:1rem}
+		.calendar-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) 1.35fr;gap:.65rem;margin-bottom:1rem}.calendar-summary>div{display:flex;min-height:4.3rem;align-items:center;gap:.65rem;border:1px solid var(--ca-line);border-radius:.75rem;background:#fff;padding:.65rem .75rem;box-shadow:0 1px 2px rgb(15 23 42/.04)}.calendar-summary>div>span[class]{display:grid;width:2.35rem;height:2.35rem;flex:none;place-items:center;border-radius:.55rem}.calendar-summary svg{width:1.05rem;height:1.05rem}.calendar-summary .is-blue{background:#edf4fc;color:#1a4d8f}.calendar-summary .is-green{background:#edf9f5;color:#0f8464}.calendar-summary .is-orange{background:#fff7eb;color:#c77712}.calendar-summary p{margin:0;color:var(--ca-muted);font-size:.59rem}.calendar-summary p strong{display:block;margin-top:.08rem;color:var(--ca-ink);font-size:.9rem;font-weight:900}.calendar-next-event{display:grid!important;align-content:center!important;border-right:3px solid #1a4d8f!important}.calendar-next-event>span{color:#1a4d8f;font-size:.54rem;font-weight:800}.calendar-next-event strong{overflow:hidden;margin-top:.08rem;color:var(--ca-ink);font-size:.65rem;text-overflow:ellipsis;white-space:nowrap}.calendar-next-event small{margin-top:.08rem;color:var(--ca-muted);font-size:.51rem}
+		.calendar-card{overflow:hidden;border:1px solid var(--ca-line);border-radius:.85rem;background:#fff;box-shadow:0 1px 2px rgb(15 23 42/.06)}.calendar-toolbar{display:flex;align-items:center;justify-content:space-between;gap:1rem;border-bottom:1px solid #edf1f5;padding:.75rem .85rem}.calendar-navigation,.calendar-toolbar-side,.calendar-month-picker,.calendar-view-switch{display:flex;align-items:center;gap:.38rem}.calendar-navigation>a:not(.calendar-today-button){display:grid;width:2rem;height:2rem;place-items:center;border:1px solid #dce4ed;border-radius:.45rem;color:#52667e}.calendar-navigation svg{width:.8rem;height:.8rem}.calendar-navigation h2{min-width:8rem;margin:0;color:var(--ca-ink);font-size:.78rem;font-weight:900;text-align:center}.calendar-today-button{margin-right:.15rem;border-radius:.4rem;padding:.35rem .5rem;color:#1a4d8f;font-size:.58rem;font-weight:800}.calendar-month-picker{border-left:1px solid #e3e9ef;padding-left:.65rem}.calendar-month-picker input{height:2rem;border:1px solid #dce4ed;border-radius:.43rem;background:#fff;padding:.25rem .4rem;color:#52667e;font-family:inherit;font-size:.58rem}.calendar-month-picker button{height:2rem;border:1px solid #dce4ed;border-radius:.43rem;background:#fff;padding:.3rem .5rem;color:#1a4d8f;font-family:inherit;font-size:.56rem;font-weight:800}.calendar-view-switch{border-radius:.48rem;background:#f1f4f7;padding:.18rem}.calendar-view-switch a{display:inline-flex;min-height:1.72rem;align-items:center;gap:.25rem;border-radius:.35rem;padding:.28rem .48rem;color:#718096;font-size:.56rem;font-weight:800}.calendar-view-switch a.is-active{background:#fff;color:#1a4d8f;box-shadow:0 1px 2px rgb(15 23 42/.1)}.calendar-view-switch svg{width:.7rem;height:.7rem}
+		.calendar-weekdays{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border-bottom:1px solid #e8edf2;background:#f8fafc}.calendar-weekdays span{padding:.55rem;color:#718096;font-size:.56rem;font-weight:800;text-align:center}.calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr))}.calendar-day{min-height:7rem;border-bottom:1px solid #edf1f5;border-left:1px solid #edf1f5;padding:.38rem}.calendar-day:nth-child(7n){border-left:0}.calendar-day.is-outside{background:#fafbfc}.calendar-day.is-outside>*{opacity:.48}.calendar-day.is-today{background:#f8fbff;box-shadow:inset 0 0 0 1px #acc7e5}.calendar-day-number{display:grid;width:1.55rem;height:1.55rem;place-items:center;border:0;border-radius:50%;background:transparent;color:#52667e;font-family:inherit;font-size:.59rem;font-weight:800}.calendar-day-number:hover{background:#edf4fc;color:#1a4d8f}.calendar-day.is-today .calendar-day-number{background:#1a4d8f;color:#fff}.calendar-day-events{display:grid;gap:.23rem;margin-top:.22rem}.calendar-event-chip{display:flex;min-width:0;align-items:center;gap:.3rem;border:0;border-radius:.35rem;background:#edf4fc;padding:.25rem .35rem;color:#1a4d8f;font-family:inherit;font-size:.53rem;font-weight:750;text-align:right}.calendar-event-chip:hover{background:#dfeefa}.calendar-event-chip i{width:.28rem;height:.28rem;flex:none;border-radius:50%;background:#1a4d8f}.calendar-event-chip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.calendar-day-events small{padding-inline:.25rem;color:#8795a5;font-size:.48rem}.calendar-mobile-agenda{display:none}
+		.calendar-list-heading,.calendar-agenda-heading{display:flex;align-items:center;justify-content:space-between;gap:1rem;border-bottom:1px solid #edf1f5;padding:.8rem .9rem}.calendar-list-heading h3,.calendar-agenda-heading h3{margin:0;color:var(--ca-ink);font-size:.72rem;font-weight:850}.calendar-list-heading p{margin:.14rem 0 0;color:var(--ca-muted);font-size:.55rem}.calendar-list-heading>span,.calendar-agenda-heading>span{border:1px solid #e1e7ee;border-radius:999px;background:#f8fafc;padding:.23rem .5rem;color:#64748b;font-size:.55rem;font-weight:750}.calendar-list-scroll{overflow-x:auto}.calendar-list-view table{width:100%;border-collapse:collapse}.calendar-list-view th{padding:.68rem .75rem;background:#f8fafc;color:#718096;font-size:.58rem;font-weight:800;text-align:right;white-space:nowrap}.calendar-list-view td{padding:.7rem .75rem;border-top:1px solid #edf1f5;color:#64748b;font-size:.64rem;vertical-align:middle}.calendar-list-view time{display:grid;min-width:9rem}.calendar-list-view time strong{color:#52667e;font-size:.59rem}.calendar-list-view time small{color:#9aa6b4;font-size:.49rem}.calendar-event-title{border:0;background:transparent;color:var(--ca-ink);font-family:inherit;font-size:.65rem;font-weight:850;text-align:right}.calendar-event-title:hover{color:#1a4d8f}.calendar-list-view td>p{display:-webkit-box;overflow:hidden;max-width:27rem;margin:0;line-height:1.6;-webkit-box-orient:vertical;-webkit-line-clamp:2}.calendar-event-status{display:inline-flex;align-items:center;gap:.28rem;border-radius:999px;padding:.23rem .45rem;font-size:.54rem;font-weight:800}.calendar-event-status i{width:.28rem;height:.28rem;border-radius:50%;background:currentColor}.calendar-event-status.is-upcoming{background:#edf9f5;color:#0f8464}.calendar-event-status.is-past{background:#f1f5f9;color:#718096}.calendar-row-actions{display:flex;justify-content:flex-end;gap:.28rem}.calendar-row-actions button{display:grid;width:1.75rem;height:1.75rem;place-items:center;border:1px solid #dfe6ee;border-radius:.42rem;background:#fff;color:#64748b}.calendar-row-actions>form button:hover{border-color:#fecaca;color:#dc2626}.calendar-row-actions svg{width:.78rem;height:.78rem}
+		.calendar-empty,.calendar-error{display:flex;min-height:14rem;align-items:center;justify-content:center;flex-direction:column;padding:2rem;text-align:center}.calendar-empty>span{display:grid;width:3rem;height:3rem;place-items:center;border-radius:.75rem;background:#f1f5f9;color:#718096}.calendar-empty svg{width:1.3rem;height:1.3rem}.calendar-empty strong,.calendar-error strong{margin-top:.6rem;color:var(--ca-ink);font-size:.72rem}.calendar-empty p,.calendar-error p{margin:.2rem 0 0;color:var(--ca-muted);font-size:.58rem}.calendar-error a{margin-top:.55rem;color:#1a4d8f;font-size:.6rem;font-weight:800}.calendar-agenda-item{display:flex;align-items:stretch;gap:.55rem;border-bottom:1px solid #edf1f5;padding:.65rem .75rem}.calendar-agenda-item>time{display:grid;width:2.65rem;flex:none;place-content:center;border-radius:.5rem;background:#edf4fc;color:#1a4d8f;text-align:center}.calendar-agenda-item>time strong{font-size:.72rem}.calendar-agenda-item>time span{font-size:.48rem}.calendar-agenda-item>button{display:grid;min-width:0;flex:1;align-content:center;border:0;background:transparent;font-family:inherit;text-align:right}.calendar-agenda-item>button strong{overflow:hidden;color:var(--ca-ink);font-size:.64rem;text-overflow:ellipsis;white-space:nowrap}.calendar-agenda-item>button small{display:-webkit-box;overflow:hidden;margin-top:.12rem;color:var(--ca-muted);font-size:.52rem;-webkit-box-orient:vertical;-webkit-line-clamp:1}
+		.calendar-dialog{width:min(92vw,32rem);max-width:none;border:0;border-radius:.9rem;background:transparent;padding:0}.calendar-dialog::backdrop{background:rgb(4 16 35/.58);backdrop-filter:blur(2px)}.calendar-dialog-card{overflow:hidden;border:1px solid #dce4ed;border-radius:.9rem;background:#fff;box-shadow:0 20px 55px rgb(6 26 58/.22)}.calendar-dialog-head{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;border-bottom:1px solid #edf1f5;padding:1.1rem 1.2rem}.calendar-dialog-head span{color:#1a4d8f;font-size:.57rem;font-weight:850}.calendar-dialog-head h2{margin:.2rem 0 0;color:#102a43;font-size:1rem;font-weight:900}.calendar-dialog-head p{margin:.2rem 0 0;color:#718096;font-size:.61rem}.calendar-dialog-head>button{display:grid;width:2rem;height:2rem;place-items:center;border:1px solid #dfe6ee;border-radius:.45rem;background:#fff;color:#64748b}.calendar-dialog-head svg{width:.85rem;height:.85rem}.calendar-event-form{display:grid;gap:.75rem;padding:1.2rem}.calendar-event-form label>span{display:block;margin-bottom:.3rem;color:#344b63;font-size:.62rem;font-weight:800}.calendar-event-form label>span small{color:#94a3b8;font-size:.52rem;font-weight:600}.calendar-event-form input,.calendar-event-form textarea{width:100%;border:1px solid #d9e2ec;border-radius:.52rem;background:#fff;padding:.5rem .65rem;color:#102a43;font-family:inherit;font-size:.68rem}.calendar-event-form input{min-height:2.45rem}.calendar-event-form textarea{resize:vertical}.calendar-event-form input:focus,.calendar-event-form textarea:focus{border-color:#81a7da;outline:0;box-shadow:0 0 0 3px rgb(26 77 143/.07)}.calendar-dialog-actions{display:flex;justify-content:flex-end;gap:.45rem;margin-top:.2rem;border-top:1px solid #edf1f5;padding-top:.8rem}.calendar-dialog-actions button{min-height:2.25rem;border-radius:.48rem;padding:.4rem .8rem;font-family:inherit;font-size:.62rem;font-weight:800}.calendar-dialog-actions button:first-child{border:1px solid #dce4ed;background:#fff;color:#64748b}.calendar-dialog-actions button:last-child{border:1px solid #16427d;background:#1a4d8f;color:#fff}
+		:global(.dark) .calendar-page{--ca-ink:#f8fafc;--ca-muted:#94a3b8;--ca-line:#334155}:global(.dark) .calendar-page-header h1{color:#fff}:global(.dark) .calendar-country-control,:global(.dark) .calendar-summary>div,:global(.dark) .calendar-card,:global(.dark) .calendar-month-picker input,:global(.dark) .calendar-month-picker button,:global(.dark) .calendar-row-actions button{border-color:#334155;background:#0f2547;color:#cbd5e1}:global(.dark) .calendar-toolbar,:global(.dark) .calendar-list-heading,:global(.dark) .calendar-list-view td,:global(.dark) .calendar-agenda-item{border-color:#263b56}:global(.dark) .calendar-weekdays,:global(.dark) .calendar-list-view th{background:#0b1e38}:global(.dark) .calendar-day{border-color:#263b56}:global(.dark) .calendar-day.is-outside{background:#0d213d}:global(.dark) .calendar-day.is-today{background:#122d4f}:global(.dark) .calendar-event-chip{background:#16375f;color:#9dc2ed}:global(.dark) .calendar-dialog-card{border-color:#334155;background:#0f2547}:global(.dark) .calendar-dialog-head,:global(.dark) .calendar-dialog-actions{border-color:#263b56}:global(.dark) .calendar-dialog-head h2,:global(.dark) .calendar-event-form label>span{color:#f8fafc}:global(.dark) .calendar-dialog-head>button,:global(.dark) .calendar-event-form input,:global(.dark) .calendar-event-form textarea,:global(.dark) .calendar-dialog-actions button:first-child{border-color:#40536a;background:#132943;color:#e2e8f0}
+		@media(max-width:950px){.calendar-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.calendar-toolbar{align-items:stretch;flex-direction:column}.calendar-toolbar-side{justify-content:space-between}}
+		@media(max-width:767px){.calendar-page-header{align-items:stretch;flex-direction:column}.calendar-header-actions{display:grid;grid-template-columns:1fr 1fr}.calendar-country-control,.calendar-create-button{justify-content:center}.calendar-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.calendar-next-event{grid-column:1/-1}.calendar-month-picker{display:none}.calendar-toolbar-side{justify-content:flex-end}.calendar-month-view{display:none}.calendar-mobile-agenda{display:block}.calendar-list-scroll{overflow:visible}.calendar-list-view table,.calendar-list-view thead,.calendar-list-view tbody,.calendar-list-view tr,.calendar-list-view td{display:block}.calendar-list-view thead{display:none}.calendar-list-view tr{border-bottom:1px solid #edf1f5;padding:.7rem}.calendar-list-view td{border:0;padding:.18rem 0}.calendar-list-view td:last-child{margin-top:.35rem}.calendar-row-actions{justify-content:flex-start}.calendar-list-view time{min-width:0}.calendar-list-view td>p{max-width:none}.calendar-event-status{margin-top:.2rem}}
+		@media(max-width:430px){.calendar-summary{grid-template-columns:1fr}.calendar-navigation{width:100%;justify-content:space-between}.calendar-navigation h2{min-width:0}.calendar-toolbar-side{justify-content:center}.calendar-view-switch{width:100%}.calendar-view-switch a{flex:1;justify-content:center}}
+	</style>
+</DashboardLayout>

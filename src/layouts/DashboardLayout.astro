@@ -1,0 +1,219 @@
+---
+import '@fontsource-variable/alexandria';
+import '../styles/global.css';
+import '../styles/dashboard.css';
+import SeoHead from '../components/ui/SeoHead.astro';
+import BrandMark from '../components/ui/BrandMark.astro';
+import CountrySwitcher from '../components/CountrySwitcher.astro';
+import DashboardNavIcon from '../components/dashboard/DashboardNavIcon.astro';
+import { apiFetch } from '../lib/api';
+import { assetUrl } from '../lib/assets';
+import { hasPermission, isAdmin, type AuthUser } from '../lib/auth';
+import { DASHBOARD_NAV_ITEMS, type DashboardNavItem } from '../lib/dashboard-nav';
+
+interface Props {
+	title: string;
+	user: AuthUser;
+	description?: string;
+}
+
+const { title, user, description } = Astro.props;
+const pathname = Astro.url.pathname;
+const settingsResult = await apiFetch<Record<string, string>>('/front/settings', {
+	countryId: Astro.locals.countryId,
+});
+const siteName = settingsResult.data?.site_name?.trim() || 'موقع الإيمان التعليمي';
+const siteLogo = assetUrl(settingsResult.data?.site_logo?.trim(), 96);
+const hasNavPermission = (permission: DashboardNavItem['permission']) => !permission || (Array.isArray(permission)
+	? permission.some((name) => hasPermission(user, name))
+	: hasPermission(user, permission));
+const visibleItems = DASHBOARD_NAV_ITEMS.filter(
+	(item) => (!item.adminOnly || isAdmin(user)) && hasNavPermission(item.permission)
+);
+const groupOrder: DashboardNavItem['group'][] = [
+	'الرئيسية',
+	'المحتوى',
+	'الأكاديمي',
+	'المستخدمون',
+	'التواصل',
+	'النظام والذكاء',
+];
+const visibleGroups = groupOrder
+	.map((label) => ({ label, items: visibleItems.filter((item) => item.group === label) }))
+	.filter((group) => group.items.length > 0);
+const isActive = (href: string) => (href === '/dashboard' ? pathname === href : pathname.startsWith(href));
+const activeItem = visibleItems.find((item) => isActive(item.href));
+const activeGroup = activeItem?.group || 'الرئيسية';
+const roleLabel = user.roles?.[0]?.name || 'حساب إداري';
+const avatarUrl = assetUrl(user.profile_photo_path, 96) || user.profile_photo_url || null;
+---
+
+<!doctype html>
+<html lang="ar" dir="rtl">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<meta name="theme-color" content="#061A3A" />
+		<meta name="generator" content={Astro.generator} />
+		<SeoHead title={`${title} - لوحة التحكم`} description={description} siteName={siteName} noindex />
+		<script is:inline>
+			const theme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+			document.documentElement.classList.toggle('dark', theme === 'dark');
+			localStorage.setItem('theme', theme);
+		</script>
+	</head>
+	<body class="font-sans antialiased">
+		<a href="#dashboard-content" class="skip-link">تجاوز إلى المحتوى</a>
+		<div class="min-h-screen bg-graphite-50 dark:bg-graphite-950 lg:flex">
+			<div id="dashboard-overlay" class="fixed inset-0 z-40 hidden bg-graphite-950/70 backdrop-blur-sm lg:hidden" aria-hidden="true"></div>
+
+			<aside id="dashboard-sidebar" class="dashboard-sidebar fixed inset-y-0 right-0 z-50 flex w-[17rem] translate-x-full flex-col overflow-hidden border-l border-white/10 bg-[#061A3A] text-white shadow-xl shadow-graphite-950/20 transition-transform duration-300 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0">
+				<div class="relative flex min-h-24 items-center justify-between border-b border-white/10 px-5">
+					<a href="/dashboard" class="group flex min-w-0 items-center gap-3">
+						<span class="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/15 bg-white shadow-sm">
+							{siteLogo ? <img src={siteLogo} alt="" class="size-full object-contain p-1" /> : <BrandMark class="size-10" />}
+						</span>
+						<span class="min-w-0">
+							<strong class="block truncate text-sm font-extrabold text-white">{siteName}</strong>
+							<span class="mt-1 flex items-center gap-1.5 text-[11px] font-bold text-royal-200">
+								<span class="size-1.5 rounded-full bg-emerald-brand-400 shadow-[0_0_8px_#34d399]"></span>
+								منطقة الإدارة
+							</span>
+						</span>
+					</a>
+					<button id="dashboard-close" type="button" class="inline-flex size-10 items-center justify-center rounded-xl text-graphite-300 transition hover:bg-white/10 hover:text-white lg:hidden" aria-label="إغلاق القائمة">
+						<svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m6 6 12 12M18 6 6 18" /></svg>
+					</button>
+				</div>
+
+				<nav class="dashboard-sidebar-scroll relative flex-1 overflow-y-auto px-3 py-5" aria-label="تنقل لوحة التحكم">
+					{visibleGroups.map((group) => (
+						<details class="dashboard-nav-group group mb-3" open>
+							<summary class="flex cursor-pointer list-none items-center justify-between px-3 py-2 text-[11px] font-extrabold tracking-wide text-graphite-400 marker:hidden transition hover:text-white">
+								<span>{group.label}</span>
+								<svg class="size-3.5 transition group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m19 9-7 7-7-7" /></svg>
+							</summary>
+							<div class="mt-1 space-y-1">
+								{group.items.map((item) => (
+									<a
+										href={item.href}
+										aria-current={isActive(item.href) ? 'page' : undefined}
+										class={`dashboard-nav-link group/link relative flex min-h-10 items-center gap-3 overflow-hidden rounded-lg px-3 py-2 text-sm font-bold transition ${isActive(item.href) ? 'bg-white/12 text-white shadow-sm' : 'text-graphite-300 hover:bg-white/[0.07] hover:text-white'}`}
+									>
+										<span class={`flex size-8 shrink-0 items-center justify-center rounded-md transition ${isActive(item.href) ? 'bg-royal-600 text-white' : 'bg-white/[0.06] text-graphite-400 group-hover/link:bg-white/10 group-hover/link:text-white'}`}>
+											<DashboardNavIcon name={item.icon} class="size-[18px]" />
+										</span>
+										<span class="truncate">{item.label}</span>
+										{isActive(item.href) && <span class="absolute inset-y-2 right-0 w-1 rounded-l-full bg-sunset-400"></span>}
+									</a>
+								))}
+							</div>
+						</details>
+					))}
+				</nav>
+
+				<div class="relative border-t border-white/10 p-3">
+					<div class="rounded-lg border border-white/10 bg-white/[0.06] p-2.5">
+						<div class="flex items-center gap-3">
+							<span class="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-royal-600 font-extrabold text-white">
+								{avatarUrl ? <img src={avatarUrl} alt="" class="size-full object-cover" /> : user.name.charAt(0)}
+							</span>
+							<span class="min-w-0 flex-1">
+								<strong class="block truncate text-xs font-extrabold text-white">{user.name}</strong>
+								<span class="mt-0.5 block truncate text-[10px] text-graphite-400">{roleLabel}</span>
+							</span>
+							<a href="/" class="inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-graphite-400 transition hover:bg-white/10 hover:text-white" aria-label="العودة إلى الموقع" title="العودة إلى الموقع">
+								<svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m14 7-5 5 5 5M9 12h11M4 5v14" /></svg>
+							</a>
+						</div>
+					</div>
+				</div>
+			</aside>
+
+			<div class="min-w-0 flex-1">
+				<header class="sticky top-0 z-30 flex min-h-16 items-center justify-between gap-4 border-b border-graphite-200/80 bg-white/95 px-4 backdrop-blur sm:px-6 xl:px-8 dark:border-graphite-800 dark:bg-graphite-950/95">
+					<div class="flex min-w-0 items-center gap-3">
+						<button id="dashboard-open" type="button" class="icon-button shrink-0 lg:hidden" aria-label="فتح قائمة لوحة التحكم" aria-controls="dashboard-sidebar" aria-expanded="false">
+							<svg class="size-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
+						</button>
+						<div class="min-w-0">
+							<p class="mb-0.5 flex items-center gap-1.5 text-[11px] font-bold text-graphite-400">
+								<span>الإدارة</span><span aria-hidden="true">/</span><span class="text-royal-600 dark:text-royal-300">{activeGroup}</span>
+							</p>
+							<h1 class="truncate text-base font-extrabold text-graphite-950 sm:text-lg dark:text-white">{title}</h1>
+						</div>
+					</div>
+
+					<div class="flex shrink-0 items-center gap-1.5 sm:gap-2">
+						<div class="hidden xl:block"><CountrySwitcher /></div>
+						<button id="dashboard-theme-toggle" type="button" class="icon-button" aria-label="تبديل المظهر" title="تبديل المظهر">
+							<svg data-theme-icon="light" class="hidden size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v2m0 14v2M5.64 5.64l1.42 1.42m9.88 9.88 1.42 1.42M3 12h2m14 0h2M5.64 18.36l1.42-1.42m9.88-9.88 1.42-1.42M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z" /></svg>
+							<svg data-theme-icon="dark" class="hidden size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.5 15.5A9 9 0 1 1 8.5 3.5a7 7 0 0 0 12 12Z" /></svg>
+						</button>
+						<details class="dashboard-user-menu group relative">
+							<summary class="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-xl border border-graphite-200 bg-white py-1.5 pr-1.5 pl-2 marker:hidden transition hover:border-royal-300 hover:bg-royal-50 dark:border-graphite-700 dark:bg-graphite-900 dark:hover:border-royal-600 dark:hover:bg-graphite-800">
+								<span class="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-gradient-to-br from-royal-600 to-emerald-brand-600 text-xs font-extrabold text-white">
+									{avatarUrl ? <img src={avatarUrl} alt="" class="size-full object-cover" /> : user.name.charAt(0)}
+								</span>
+								<span class="hidden max-w-28 truncate text-xs font-extrabold text-graphite-800 sm:block dark:text-white">{user.name}</span>
+								<svg class="hidden size-3.5 text-graphite-400 transition group-open:rotate-180 sm:block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m19 9-7 7-7-7" /></svg>
+							</summary>
+							<div class="absolute left-0 mt-2 w-64 overflow-hidden rounded-2xl border border-graphite-200 bg-white p-2 shadow-lifted dark:border-graphite-700 dark:bg-graphite-900">
+								<div class="border-b border-graphite-100 px-3 py-3 dark:border-graphite-800">
+									<p class="truncate text-sm font-extrabold text-graphite-900 dark:text-white">{user.name}</p>
+									<p class="mt-1 truncate text-xs text-graphite-400">{user.email}</p>
+								</div>
+								<a href="/account" class="flex min-h-10 items-center gap-2.5 rounded-xl px-3 text-sm font-bold text-graphite-700 transition hover:bg-graphite-50 hover:text-royal-700 dark:text-graphite-200 dark:hover:bg-graphite-800 dark:hover:text-white"><DashboardNavIcon name="users" class="size-4" />حسابي</a>
+								<a href="/" class="flex min-h-10 items-center gap-2.5 rounded-xl px-3 text-sm font-bold text-graphite-700 transition hover:bg-graphite-50 hover:text-royal-700 dark:text-graphite-200 dark:hover:bg-graphite-800 dark:hover:text-white"><svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 11 12 4l9 7v9H3v-9ZM9 20v-6h6v6" /></svg>عرض الموقع</a>
+								<form method="post" action="/api/auth/logout" class="mt-1 border-t border-graphite-100 pt-1 dark:border-graphite-800">
+									<button type="submit" class="flex min-h-10 w-full items-center gap-2.5 rounded-xl px-3 text-sm font-bold text-red-600 transition hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-950/40"><svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M17 16l4-4m0 0-4-4m4 4H7m6 4v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1" /></svg>تسجيل الخروج</button>
+								</form>
+							</div>
+						</details>
+					</div>
+				</header>
+
+				<main id="dashboard-content" class="dashboard-canvas min-h-[calc(100vh-4rem)] px-4 py-5 sm:px-6 sm:py-6 xl:px-8">
+					<div class="mx-auto w-full max-w-[1600px]"><slot /></div>
+				</main>
+			</div>
+		</div>
+
+		<script>
+			const sidebar = document.getElementById('dashboard-sidebar');
+			const overlay = document.getElementById('dashboard-overlay');
+			const openButton = document.getElementById('dashboard-open');
+			const toggleSidebar = (open: boolean) => {
+				sidebar?.classList.toggle('translate-x-full', !open);
+				overlay?.classList.toggle('hidden', !open);
+				document.body.classList.toggle('overflow-hidden', open);
+				openButton?.setAttribute('aria-expanded', String(open));
+			};
+			document.getElementById('dashboard-open')?.addEventListener('click', () => toggleSidebar(true));
+			document.getElementById('dashboard-close')?.addEventListener('click', () => toggleSidebar(false));
+			overlay?.addEventListener('click', () => toggleSidebar(false));
+			sidebar?.querySelectorAll('a').forEach((link) => link.addEventListener('click', () => toggleSidebar(false)));
+			document.addEventListener('keydown', (event) => { if (event.key === 'Escape') toggleSidebar(false); });
+
+			const themeButton = document.getElementById('dashboard-theme-toggle');
+			const syncThemeIcons = () => {
+				const dark = document.documentElement.classList.contains('dark');
+				document.querySelector('[data-theme-icon="light"]')?.classList.toggle('hidden', !dark);
+				document.querySelector('[data-theme-icon="dark"]')?.classList.toggle('hidden', dark);
+			};
+			themeButton?.addEventListener('click', () => {
+				const dark = document.documentElement.classList.toggle('dark');
+				localStorage.setItem('theme', dark ? 'dark' : 'light');
+				syncThemeIcons();
+			});
+			syncThemeIcons();
+
+			document.addEventListener('click', (event) => {
+				document.querySelectorAll<HTMLDetailsElement>('.dashboard-user-menu[open]').forEach((details) => {
+					if (!details.contains(event.target as Node)) details.removeAttribute('open');
+				});
+			});
+		</script>
+	</body>
+</html>

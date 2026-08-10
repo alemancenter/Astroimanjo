@@ -1,0 +1,299 @@
+---
+import Layout from '../../../../layouts/Layout.astro';
+import '../../../../styles/content-pages.css';
+import ArticleAttachments from '../../../../components/ArticleAttachments.astro';
+import ArticleComments from '../../../../components/ArticleComments.astro';
+import AdSensePlacement from '../../../../components/AdSensePlacement.astro';
+import Breadcrumbs from '../../../../components/ui/Breadcrumbs.astro';
+import ErrorState from '../../../../components/ui/ErrorState.astro';
+import { apiFetch, applyNotFoundStatus } from '../../../../lib/api';
+
+const { id } = Astro.params;
+const countryCode = Astro.locals.countryCode!;
+const countryId = Astro.locals.countryId;
+
+const params = Astro.url.searchParams;
+const formError = params.get('error');
+const commentSent = params.get('comment_sent') === '1';
+
+const [articleResult, settingsResult, adStatusResult] = await Promise.all([
+	apiFetch<any>(`/articles/${id}`, { countryId }),
+	apiFetch<Record<string, string>>('/front/settings', { countryId }),
+	apiFetch<{ eligible: boolean; adsense_risk: string }>(`/articles/${id}/ad-status`, { countryId, params: { country: countryCode } }),
+]);
+const article = articleResult.data;
+if (!articleResult.ok || !article) applyNotFoundStatus(Astro, articleResult);
+
+const classResult = article?.grade_level || article?.subject?.grade_level
+	? await apiFetch<any>(`/school-classes/${article.grade_level || article.subject.grade_level}`, { countryId })
+	: { data: null } as any;
+
+const schoolClass = classResult.data;
+const files: any[] = Array.isArray(article?.files) ? article.files : [];
+const keywords: any[] = Array.from(
+	new Map(
+		(Array.isArray(article?.keywords_rel) ? article.keywords_rel : [])
+			.filter((keyword: any) => keyword?.keyword)
+			.map((keyword: any) => [String(keyword.keyword).trim(), keyword]),
+	).values(),
+);
+
+const stripHtml = (html = '') => html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+const plainContent = stripHtml(article?.content || '');
+const description = article?.meta_description?.trim() || (plainContent ? `${plainContent.slice(0, 170)}${plainContent.length > 170 ? '…' : ''}` : undefined);
+const wordCount = plainContent ? plainContent.split(/\s+/).filter(Boolean).length : 0;
+const readingMinutes = Math.max(1, Math.ceil(wordCount / 200));
+const settings = settingsResult.data ?? {};
+const adsenseClient = settings.adsense_client?.trim() || '';
+// Avoid monetizing thin/failed content even when no audit decision exists. The
+// public audit endpoint is the authority; this local word threshold is a final
+// quality guard against low-value article pages.
+const adsEligible = Boolean(article && adStatusResult.ok && adStatusResult.data?.eligible && wordCount >= 150 && adsenseClient);
+
+const publishedAt = article?.published_at || article?.created_at;
+const updatedAt = article?.updated_at;
+const formatDate = (value?: string) => value ? new Date(value).toLocaleDateString('ar-JO', { year: 'numeric', month: 'long', day: 'numeric' }) : '—';
+const wasUpdated = Boolean(publishedAt && updatedAt && new Date(updatedAt).getTime() - new Date(publishedAt).getTime() > 24 * 60 * 60 * 1000);
+const viewCount = Number(article?.visit_count || 0);
+
+const currentUrl = Astro.url.pathname + Astro.url.search;
+const siteOrigin = Astro.site ? Astro.site.origin : Astro.url.origin;
+const canonicalUrl = new URL(Astro.url.pathname, siteOrigin).toString();
+// Matches Layout.astro's own fallback so JSON-LD stays in sync with the visible title/branding
+// even when settings hasn't loaded a custom name.
+const siteName = settings.site_name?.trim() || 'موقع الإيمان التعليمي';
+
+// Articles have no image field on the backend (unlike posts, which have Image/Alt — see
+// article.go vs post.go) — fall back to the first embedded content image, same as what
+// actually renders when the article body displays. Only used if it's already an absolute
+// URL (Google's structured-data guidelines expect image to be fully qualified); a relative
+// path in article HTML would need assetUrl() resolution the CMS doesn't guarantee here.
+const contentImageMatch = article?.content?.match(/<img[^>]+src=["']([^"']+)["']/i);
+const contentImage = contentImageMatch?.[1]?.startsWith('http') ? contentImageMatch[1] : undefined;
+
+// Articles also have no queryable author name (AuthorID is a raw FK, never joined server-side
+// — see article_repository.go), so this always falls back to Organization, same as posts do
+// when a post has no linked author. For lesson/curriculum content this is an accurate
+// attribution anyway — these aren't personally-bylined posts, they're institutional material.
+const jsonLd = article
+	? [
+			{
+				'@context': 'https://schema.org',
+				'@type': 'Article',
+				headline: article.title,
+				description,
+				image: contentImage,
+				datePublished: publishedAt,
+				dateModified: updatedAt || publishedAt,
+				author: { '@type': 'Organization', name: siteName },
+				publisher: { '@type': 'Organization', name: siteName },
+				mainEntityOfPage: canonicalUrl,
+				wordCount,
+				articleSection: article.subject?.subject_name || undefined,
+				keywords: keywords.length ? keywords.map((kw: any) => kw.keyword).join(', ') : undefined,
+				inLanguage: 'ar',
+			},
+			{
+				'@context': 'https://schema.org',
+				'@type': 'BreadcrumbList',
+				itemListElement: [
+					{ '@type': 'ListItem', position: 1, name: 'الرئيسية', item: siteOrigin },
+					{ '@type': 'ListItem', position: 2, name: 'الصفوف الدراسية', item: `${siteOrigin}/${countryCode}/classes` },
+					...(schoolClass ? [{ '@type': 'ListItem', position: 3, name: schoolClass.grade_name, item: `${siteOrigin}/${countryCode}/lesson/${schoolClass.id}` }] : []),
+					{ '@type': 'ListItem', position: schoolClass ? 4 : 3, name: article.title },
+				],
+			},
+		]
+	: undefined;
+---
+
+<Layout title={article?.title || 'المقال'} description={description} canonical={canonicalUrl} image={contentImage} jsonLd={jsonLd} enableAds={adsEligible}>
+	<div id="reading-progress" class="fixed inset-x-0 top-0 z-[70] h-0.5 origin-right scale-x-0 bg-gradient-to-l from-royal-600 via-emerald-brand-600 to-sunset-400" aria-hidden="true"></div>
+
+	{
+		!articleResult.ok || !article ? (
+			<div class="container-shell py-14"><ErrorState message={articleResult.ok ? 'المقال غير موجود.' : articleResult.message} /></div>
+		) : (
+			<article>
+				<header class="relative overflow-hidden border-b border-graphite-200 bg-white dark:border-graphite-800 dark:bg-graphite-950">
+					<div class="pointer-events-none absolute -right-32 -top-48 size-[34rem] rounded-full bg-royal-100/70 blur-3xl dark:bg-royal-900/20" aria-hidden="true"></div>
+					<div class="pointer-events-none absolute -bottom-40 left-10 size-80 rounded-full bg-emerald-brand-100/50 blur-3xl dark:bg-emerald-brand-900/15" aria-hidden="true"></div>
+
+					<div class="container-shell relative grid max-w-7xl gap-8 py-9 sm:py-12 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-end lg:py-14">
+						<div class="max-w-4xl">
+							<span class="mb-4 inline-flex items-center gap-2 rounded-full border border-royal-100 bg-royal-50 px-3 py-1.5 text-xs font-extrabold text-royal-700 dark:border-royal-900 dark:bg-royal-950 dark:text-royal-200">
+								<svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 4h10l4 4v12H5zM15 4v4h4M8 12h8m-8 4h6" /></svg>
+								مورد من المكتبة التعليمية
+							</span>
+							<div class="mb-4 flex flex-wrap gap-2">
+								{schoolClass?.grade_name && <span class="badge bg-emerald-brand-50 text-emerald-brand-800 dark:bg-emerald-brand-950 dark:text-emerald-brand-200">{schoolClass.grade_name}</span>}
+								{article.subject?.subject_name && <span class="badge-primary">{article.subject.subject_name}</span>}
+								{article.semester?.semester_name && <span class="badge border border-graphite-200 bg-white/90 text-graphite-700 dark:border-graphite-700 dark:bg-graphite-900 dark:text-graphite-200">{article.semester.semester_name}</span>}
+							</div>
+							<h1 class="text-3xl font-black leading-[1.45] tracking-tight text-graphite-950 sm:text-4xl lg:text-[2.65rem] dark:text-white">{article.title}</h1>
+							{description && <p class="mt-4 max-w-3xl text-sm font-medium leading-8 text-graphite-600 sm:text-base dark:text-graphite-300">{description}</p>}
+							<div class="mt-6 flex flex-wrap items-center gap-3">
+								<a href="#article-content-start" class="btn-primary">ابدأ القراءة<svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m6 9 6 6 6-6" /></svg></a>
+								<a href="#comments" class="btn-outline"><svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8Z" /></svg>التعليقات</a>
+								<button type="button" data-copy-article class="btn-outline"><svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 13a5 5 0 0 0 7.07.07l2-2a5 5 0 0 0-7.07-7.07l-1.15 1.15M14 11a5 5 0 0 0-7.07-.07l-2 2A5 5 0 0 0 12 20l1.15-1.15" /></svg><span data-copy-label>نسخ الرابط</span></button>
+							</div>
+						</div>
+
+						<section class="grid grid-cols-2 gap-2 rounded-2xl border border-graphite-200 bg-white/85 p-3 shadow-soft backdrop-blur dark:border-graphite-700 dark:bg-graphite-900/85 sm:gap-3 sm:p-4" aria-label="ملخص المقال">
+							<div class="rounded-xl bg-royal-50 p-3.5 dark:bg-royal-950"><strong class="block text-xl font-black text-royal-700 dark:text-royal-200">{viewCount.toLocaleString('ar-JO')}</strong><span class="mt-1 block text-[10px] font-bold text-graphite-500 dark:text-graphite-400">مشاهدة</span></div>
+							<div class="rounded-xl bg-emerald-brand-50 p-3.5 dark:bg-emerald-brand-950"><strong class="block text-xl font-black text-emerald-brand-700 dark:text-emerald-brand-200">{readingMinutes.toLocaleString('ar-JO')}</strong><span class="mt-1 block text-[10px] font-bold text-graphite-500 dark:text-graphite-400">دقيقة قراءة</span></div>
+							<div class="rounded-xl bg-sunset-50 p-3.5 dark:bg-sunset-900/25"><strong class="block text-xl font-black text-sunset-700 dark:text-sunset-300">{files.length.toLocaleString('ar-JO')}</strong><span class="mt-1 block text-[10px] font-bold text-graphite-500 dark:text-graphite-400">ملف مرفق</span></div>
+							<div class="rounded-xl bg-graphite-100 p-3.5 dark:bg-graphite-800"><strong class="block text-xs font-black leading-6 text-graphite-800 dark:text-white">{formatDate(publishedAt)}</strong><span class="mt-1 block text-[10px] font-bold text-graphite-500 dark:text-graphite-400">تاريخ النشر</span></div>
+						</section>
+					</div>
+				</header>
+
+				<Breadcrumbs items={[
+					{ label: 'الصفوف الدراسية', href: `/${countryCode}/classes` },
+					...(schoolClass ? [{ label: schoolClass.grade_name, href: `/${countryCode}/lesson/${schoolClass.id}` }] : []),
+					...(article?.subject ? [{ label: article.subject.subject_name, href: `/${countryCode}/lesson/subjects/${article.subject.id}` }] : []),
+					{ label: article.title },
+				]} />
+
+				{adsEligible && (
+					<div class="container-shell max-w-7xl pt-7 sm:pt-9">
+						<AdSensePlacement
+							client={adsenseClient}
+							desktopConfig={settings.google_ads_desktop_article}
+							mobileConfig={settings.google_ads_mobile_article}
+							placement="article-top"
+						/>
+					</div>
+				)}
+
+				<div class="container-shell max-w-7xl py-8 sm:py-10 lg:py-12">
+					<div class="grid grid-cols-1 gap-7 lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-8 xl:gap-10">
+						<main class="min-w-0">
+							<section id="article-content-start" class="scroll-mt-28 overflow-hidden rounded-2xl border border-graphite-200 bg-white shadow-soft dark:border-graphite-700 dark:bg-graphite-900" aria-labelledby="article-content-heading">
+								<header class="flex items-center justify-between gap-4 border-b border-graphite-200 bg-gradient-to-l from-royal-50 via-white to-emerald-brand-50 px-5 py-4 dark:border-graphite-700 dark:from-royal-950/50 dark:via-graphite-900 dark:to-emerald-brand-950/30 sm:px-7">
+									<div class="flex items-center gap-3">
+										<span class="flex size-9 items-center justify-center rounded-xl bg-royal-600 text-white"><svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 5h16v14H4zM8 9h8m-8 4h8m-8 4h5" /></svg></span>
+										<div><span class="block text-[10px] font-extrabold text-royal-600 dark:text-royal-300">المادة التعليمية</span><h2 id="article-content-heading" class="text-sm font-black text-graphite-950 sm:text-base dark:text-white">محتوى المقال</h2></div>
+									</div>
+									<span class="hidden rounded-full bg-white px-3 py-1.5 text-[11px] font-extrabold text-graphite-500 shadow-sm sm:block dark:bg-graphite-800 dark:text-graphite-300">{wordCount.toLocaleString('ar-JO')} كلمة</span>
+								</header>
+								<div class="article-content overflow-x-auto px-5 py-6 sm:px-8 sm:py-8 lg:px-10 lg:py-10" set:html={article.content} />
+							</section>
+
+							{files.length > 0 && (
+								<div class="mt-7 lg:hidden">
+									<ArticleAttachments files={files} countryCode={countryCode} headingId="article-attachments-mobile-heading" />
+								</div>
+							)}
+
+							{keywords.length > 0 && (
+								<section class="mt-7 rounded-2xl border border-graphite-200 bg-white p-5 shadow-soft dark:border-graphite-700 dark:bg-graphite-900" aria-label="الكلمات المفتاحية">
+									<div class="flex flex-wrap items-center gap-2">
+										<svg class="ml-1 size-4 text-graphite-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m20 13-7 7-10-10V3h7l10 10Z"/><circle cx="7.5" cy="7.5" r="1" fill="currentColor"/></svg>
+										{keywords.map((kw: any) => <a href={`/${countryCode}/lesson/articles/keyword/${encodeURIComponent(kw.keyword)}`} class="rounded-full border border-graphite-200 bg-graphite-50 px-3 py-1.5 text-xs font-bold text-graphite-600 transition hover:border-royal-300 hover:bg-royal-50 hover:text-royal-700 dark:border-graphite-700 dark:bg-graphite-800 dark:text-graphite-300">#{kw.keyword}</a>)}
+									</div>
+								</section>
+							)}
+
+							{adsEligible && (
+								<div class="my-14 sm:my-16">
+									<AdSensePlacement
+										client={adsenseClient}
+										desktopConfig={settings.google_ads_in_article_article}
+										mobileConfig={settings.google_ads_in_article_article}
+										placement="article-in-content"
+									/>
+								</div>
+							)}
+
+							<ArticleComments
+								articleId={article.id}
+								countryCode={countryCode}
+								countryId={countryId}
+								currentUrl={currentUrl}
+								formError={formError}
+								commentSent={commentSent}
+								server:defer
+							>
+								<div slot="fallback" id="comments" class="surface-card mt-10 scroll-mt-28 animate-pulse p-5 sm:p-7">
+									<div class="mb-6 h-6 w-32 rounded bg-graphite-100 dark:bg-graphite-800" />
+									<div class="h-24 rounded-xl bg-graphite-50 dark:bg-graphite-800/50" />
+								</div>
+							</ArticleComments>
+
+							{adsEligible && (
+								<div class="mt-14 sm:mt-16">
+									<AdSensePlacement
+										client={adsenseClient}
+										desktopConfig={settings.google_ads_desktop_article_2}
+										mobileConfig={settings.google_ads_mobile_article_2}
+										placement="article-bottom"
+									/>
+								</div>
+							)}
+						</main>
+
+						<aside class="space-y-5 lg:sticky lg:top-28 lg:self-start">
+							{files.length > 0 && (
+								<div class="hidden lg:block">
+									<ArticleAttachments files={files} countryCode={countryCode} headingId="article-attachments-desktop-heading" />
+								</div>
+							)}
+
+							<section class="surface-card overflow-hidden">
+								<header class="flex items-center gap-2 border-b border-graphite-200 bg-graphite-50 px-5 py-4 dark:border-graphite-700 dark:bg-graphite-800/60">
+									<svg class="size-4 text-royal-600 dark:text-royal-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></svg>
+									<h2 class="text-sm font-extrabold text-graphite-950 dark:text-white">معلومات المقال</h2>
+								</header>
+								<dl class="divide-y divide-graphite-100 px-5 text-sm dark:divide-graphite-800">
+									{article.grade_level && <div class="flex items-start justify-between gap-4 py-3"><dt class="text-graphite-500 dark:text-graphite-400">الصف الدراسي</dt><dd class="text-left font-extrabold text-graphite-900 dark:text-white">{schoolClass?.grade_name || article.grade_level}</dd></div>}
+									{article.subject?.subject_name && <div class="flex items-start justify-between gap-4 py-3"><dt class="text-graphite-500 dark:text-graphite-400">المادة</dt><dd class="text-left font-extrabold text-graphite-900 dark:text-white">{article.subject.subject_name}</dd></div>}
+									{article.semester?.semester_name && <div class="flex items-start justify-between gap-4 py-3"><dt class="text-graphite-500 dark:text-graphite-400">الفصل</dt><dd class="text-left font-extrabold text-graphite-900 dark:text-white">{article.semester.semester_name}</dd></div>}
+									<div class="flex items-start justify-between gap-4 py-3"><dt class="text-graphite-500 dark:text-graphite-400">تاريخ النشر</dt><dd class="text-left font-extrabold text-graphite-900 dark:text-white">{formatDate(publishedAt)}</dd></div>
+									{wasUpdated && <div class="flex items-start justify-between gap-4 py-3"><dt class="text-graphite-500 dark:text-graphite-400">آخر تحديث</dt><dd class="text-left font-extrabold text-graphite-900 dark:text-white">{formatDate(updatedAt)}</dd></div>}
+									<div class="flex items-center justify-between gap-4 py-3"><dt class="text-graphite-500 dark:text-graphite-400">المشاهدات</dt><dd class="font-extrabold text-graphite-900 dark:text-white">{viewCount.toLocaleString('ar-EG')}</dd></div>
+									<div class="flex items-center justify-between gap-4 py-3"><dt class="text-graphite-500 dark:text-graphite-400">وقت القراءة</dt><dd class="font-extrabold text-graphite-900 dark:text-white">{readingMinutes.toLocaleString('ar-EG')} دقيقة</dd></div>
+								</dl>
+							</section>
+
+							<button type="button" data-copy-article class="surface-card flex w-full items-center justify-center gap-2 px-4 py-3.5 text-sm font-extrabold text-graphite-700 transition hover:border-royal-300 hover:bg-royal-50 hover:text-royal-700 dark:text-graphite-200 dark:hover:border-royal-700 dark:hover:bg-royal-950">
+								<svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 13a5 5 0 0 0 7.07.07l2-2a5 5 0 0 0-7.07-7.07l-1.15 1.15M14 11a5 5 0 0 0-7.07-.07l-2 2A5 5 0 0 0 12 20l1.15-1.15"/></svg>
+								<span data-copy-label>نسخ رابط المقال</span>
+							</button>
+						</aside>
+					</div>
+				</div>
+			</article>
+		)
+	}
+
+	{article && (
+		<script define:vars={{ articleId: article.id, countryCode }}>
+			navigator.sendBeacon(`/api/articles/${articleId}/increment-view?country=${countryCode}`, new Blob());
+		</script>
+	)}
+
+	<script>
+		const progress = document.querySelector<HTMLElement>('#reading-progress');
+		const updateProgress = () => {
+			const scrollable = document.documentElement.scrollHeight - window.innerHeight;
+			const value = scrollable > 0 ? Math.min(1, window.scrollY / scrollable) : 0;
+			if (progress) progress.style.transform = `scaleX(${value})`;
+		};
+		updateProgress();
+		window.addEventListener('scroll', updateProgress, { passive: true });
+
+		document.querySelectorAll<HTMLButtonElement>('[data-copy-article]').forEach((button) => {
+			button.addEventListener('click', async () => {
+				const label = button.querySelector<HTMLElement>('[data-copy-label]');
+				try {
+					await navigator.clipboard.writeText(window.location.href);
+					if (label) label.textContent = 'تم نسخ الرابط';
+					setTimeout(() => { if (label) label.textContent = button.closest('aside') ? 'نسخ رابط المقال' : 'نسخ الرابط'; }, 1800);
+				} catch {
+					if (label) label.textContent = 'تعذر النسخ';
+				}
+			});
+		});
+	</script>
+</Layout>

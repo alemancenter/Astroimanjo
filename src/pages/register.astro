@@ -1,0 +1,62 @@
+---
+import Layout from '../layouts/Layout.astro';
+import '../styles/auth-pages.css';
+import AuthShell from '../components/ui/AuthShell.astro';
+import SocialLoginButtons from '../components/ui/SocialLoginButtons.astro';
+import { apiFetch } from '../lib/api';
+import { getCurrentUser } from '../lib/auth';
+
+// Already signed in — creating a second account from the same session makes no sense.
+const currentUser = await getCurrentUser(Astro);
+if (currentUser) return Astro.redirect('/');
+
+const error = Astro.url.searchParams.get('error');
+const settings = (await apiFetch<Record<string, string>>('/front/settings', {
+	countryId: Astro.locals.countryId,
+})).data ?? {};
+const googleClientId = settings.google_client_id?.trim() || '';
+const facebookAppId = settings.facebook_app_id?.trim() || '';
+---
+
+<Layout title="إنشاء حساب" description="أنشئ حسابًا جديدًا في موقع الإيمان التعليمي." noindex>
+	<AuthShell title="إنشاء حساب" eyebrow="ابدأ رحلتك" description="انضم إلى موقع الإيمان التعليمي للوصول إلى المحتوى والخدمات التعليمية.">
+		{error && <div class="alert-error mb-6" role="alert">{error}</div>}
+
+		<SocialLoginButtons
+			googleClientId={googleClientId}
+			facebookAppId={facebookAppId}
+			redirectTo="/account"
+			action="register"
+		/>
+
+		{(googleClientId || facebookAppId) && (
+			<div class="my-6 flex items-center gap-4" aria-hidden="true">
+				<span class="h-px flex-1 bg-graphite-200 dark:bg-graphite-700"></span>
+				<span class="text-xs font-bold text-graphite-400 dark:text-graphite-500">أو أنشئ حسابًا بالبريد الإلكتروني</span>
+				<span class="h-px flex-1 bg-graphite-200 dark:bg-graphite-700"></span>
+			</div>
+		)}
+
+		<form method="post" action="/api/auth/register" class="space-y-5">
+			<div>
+				<label for="name" class="form-label">الاسم الكامل</label>
+				<input id="name" type="text" name="name" required autocomplete="name" class="form-control" placeholder="اكتب اسمك الكامل" />
+			</div>
+			<div>
+				<label for="email" class="form-label">البريد الإلكتروني</label>
+				<input id="email" type="email" name="email" required autocomplete="email" inputmode="email" dir="ltr" class="form-control text-left" placeholder="name@example.com" />
+			</div>
+			<div>
+				<label for="password" class="form-label">كلمة المرور</label>
+				<input id="password" type="password" name="password" required minlength="8" autocomplete="new-password" dir="ltr" class="form-control text-left" placeholder="8 أحرف على الأقل" />
+				<p class="form-hint">استخدم ثمانية أحرف على الأقل مع أرقام ورموز لزيادة الأمان.</p>
+			</div>
+			<div>
+				<label for="password_confirmation" class="form-label">تأكيد كلمة المرور</label>
+				<input id="password_confirmation" type="password" name="password_confirmation" required minlength="8" autocomplete="new-password" dir="ltr" class="form-control text-left" placeholder="أعد كتابة كلمة المرور" />
+			</div>
+			<button type="submit" class="btn-primary w-full py-3.5">إنشاء الحساب</button>
+			<p class="text-center text-sm text-graphite-600 dark:text-graphite-300">لديك حساب بالفعل؟ <a href="/login" class="font-bold text-royal-600 hover:underline dark:text-royal-300">تسجيل الدخول</a></p>
+		</form>
+	</AuthShell>
+</Layout>

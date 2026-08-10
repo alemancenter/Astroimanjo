@@ -1,0 +1,8 @@
+---
+// Bare /{countryCode}/lesson has no page of its own — "lesson" is only ever a URL prefix for
+// a specific class (/lesson/{classId}) or subject (/lesson/subjects/{id}). Someone landing
+// here (an old bookmark, a guessed URL, a crawler) means "the classes section", so send them
+// to the real classes index instead of a dead end.
+const { countryCode } = Astro.params;
+return Astro.redirect(`/${countryCode}/classes`, 307);
+---

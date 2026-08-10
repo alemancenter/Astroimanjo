@@ -1,0 +1,61 @@
+---
+import DashboardLayout from '../../../layouts/DashboardLayout.astro';
+import DashboardAlert from '../../../components/ui/DashboardAlert.astro';
+import TeacherSubTabs from '../../../components/dashboard/TeacherSubTabs.astro';
+import { requireDashboard } from '../../../lib/auth';
+import { apiFetch } from '../../../lib/api';
+
+const guard = await requireDashboard(Astro, 'manage teacher subscriptions');
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+
+const token = Astro.cookies.get('token')?.value;
+const [financeResult, usageResult] = await Promise.all([
+	apiFetch<any>('/dashboard/teacher-subscriptions/reports/finance', { countryId: Astro.locals.countryId, cookieHeader: `token=${token}` }),
+	apiFetch<any>('/dashboard/teacher-subscriptions/reports/analytics', { countryId: Astro.locals.countryId, cookieHeader: `token=${token}` }),
+]);
+const finance = financeResult.data ?? {};
+const usage = usageResult.data ?? {};
+
+const financeCards = [
+	['إجمالي الإيرادات', `${finance.total_revenue_jod ?? 0} JOD`],
+	['إيرادات هذا الشهر', `${finance.current_month_revenue_jod ?? 0} JOD`],
+	['طلبات مقبولة', finance.approved_orders ?? 0],
+	['طلبات قيد المراجعة', finance.pending_orders ?? 0],
+	['طلبات مرفوضة', finance.rejected_orders ?? 0],
+	['اشتراكات نشطة', finance.active_subscriptions ?? 0],
+	['اشتراكات منتهية', finance.expired_subscriptions ?? 0],
+];
+const usageCards = [
+	['إجمالي التنزيلات', usage.total_downloads ?? 0],
+	['توليدات الذكاء الاصطناعي', usage.total_ai_generations ?? 0],
+	['الملفات المميزة', usage.total_premium_files ?? 0],
+	['عدد المعلمين', usage.total_teachers ?? 0],
+	['الأجهزة النشطة', usage.active_devices ?? 0],
+];
+---
+
+<DashboardLayout title="تقارير اشتراكات المعلمين" user={user}>
+	<DashboardAlert />
+	<TeacherSubTabs active="reports" />
+
+	<h2 class="mb-4 text-lg font-extrabold text-graphite-950 dark:text-white">التقرير المالي</h2>
+	<div class="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
+		{financeCards.map(([label, value]) => (
+			<div class="surface-card p-5">
+				<p class="mb-1 text-sm text-graphite-400">{label}</p>
+				<p class="text-xl font-extrabold text-graphite-950 dark:text-white">{value}</p>
+			</div>
+		))}
+	</div>
+
+	<h2 class="mb-4 text-lg font-extrabold text-graphite-950 dark:text-white">تقرير الاستخدام</h2>
+	<div class="grid grid-cols-2 gap-4 sm:grid-cols-5">
+		{usageCards.map(([label, value]) => (
+			<div class="surface-card p-5">
+				<p class="mb-1 text-sm text-graphite-400">{label}</p>
+				<p class="text-xl font-extrabold text-graphite-950 dark:text-white">{value}</p>
+			</div>
+		))}
+	</div>
+</DashboardLayout>

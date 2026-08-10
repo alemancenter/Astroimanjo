@@ -1,0 +1,244 @@
+---
+import { assetUrl } from '../../lib/assets';
+import { COUNTRIES, getCountryById } from '../../lib/countries';
+
+interface Props {
+	category?: any;
+	categories: any[];
+	countryId: string;
+}
+
+const { category, categories, countryId } = Astro.props;
+const currentCountry = getCountryById(countryId);
+const imageSrc = assetUrl(category?.image_url || category?.image, 720);
+const iconSrc = assetUrl(category?.icon_image_url || category?.icon_image, 180);
+const currentId = String(category?.id ?? '');
+
+const descendants = new Set<string>();
+const collectDescendants = (parentId: string) => {
+	for (const item of categories) {
+		if (String(item.parent_id ?? '') === parentId && !descendants.has(String(item.id))) {
+			descendants.add(String(item.id));
+			collectDescendants(String(item.id));
+		}
+	}
+};
+if (currentId) collectDescendants(currentId);
+
+const parentOptions = categories.filter((item: any) => {
+	const id = String(item.id);
+	return id !== currentId && !descendants.has(id);
+});
+---
+
+<div class="category-form-page">
+	<header class="category-form-header">
+		<div class="category-form-heading">
+			<a href="/dashboard/categories" class="category-back-button" aria-label="العودة إلى التصنيفات">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m15 18-6-6 6-6" /></svg>
+			</a>
+			<div>
+				<span class="category-eyebrow">تنظيم المحتوى</span>
+				<h1>{category?.id ? 'تعديل التصنيف' : 'إضافة تصنيف جديد'}</h1>
+				<p>أنشئ بنية واضحة للمنشورات وحدد مكان التصنيف وطريقة ظهوره للزائر.</p>
+			</div>
+		</div>
+
+		<div class="category-country-control">
+			<span class="category-country-flag" aria-hidden="true">{currentCountry.flag}</span>
+			<div><small>قاعدة البيانات</small><strong>{currentCountry.name}</strong></div>
+			<select id="category-country-select" data-current={countryId} aria-label="تبديل قاعدة البيانات">
+				{COUNTRIES.map((country) => <option value={country.id} selected={country.id === countryId}>{country.name}</option>)}
+			</select>
+		</div>
+	</header>
+
+	<form id="category-editor-form" method="post" action="/api/dashboard/categories/save" enctype="multipart/form-data" class="category-editor-grid">
+		{category?.id && <input type="hidden" name="id" value={category.id} />}
+
+		<main class="category-main-column">
+			<section class="category-card">
+				<div class="category-card-heading">
+					<div class="category-step">01</div>
+					<div><h2>بيانات التصنيف</h2><p>الاسم والرابط اللذان يعرّفان التصنيف داخل الموقع.</p></div>
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M3 6h7l2 2h9v11H3V6Z" /></svg>
+				</div>
+
+				<div class="category-field">
+					<div class="category-label-row"><label for="name">اسم التصنيف</label><span id="category-name-count">0 / 255</span></div>
+					<input id="name" type="text" name="name" maxlength="255" required value={category?.name ?? ''} placeholder="مثال: أخبار التعليم" autocomplete="off" />
+					<small>استخدم اسمًا قصيرًا وواضحًا يصف نوع المنشورات الموجودة داخله.</small>
+				</div>
+
+				<div class="category-field">
+					<div class="category-label-row"><label for="slug">الرابط المختصر</label><span>اختياري</span></div>
+					<div class="category-slug-field">
+						<input id="slug" type="text" name="slug" maxlength="300" value={category?.slug ?? ''} placeholder="يُنشأ تلقائيًا من الاسم" dir="ltr" autocomplete="off" />
+						<span>/category/</span>
+					</div>
+					<small>يمكنك تركه فارغًا ليقوم النظام بإنشائه تلقائيًا. استخدم أحرفًا وأرقامًا وشرطات فقط.</small>
+				</div>
+			</section>
+
+			<section class="category-card">
+				<div class="category-card-heading">
+					<div class="category-step">02</div>
+					<div><h2>الموقع داخل الهيكل</h2><p>ضع التصنيف رئيسيًا أو اربطه بتصنيف أب لبناء قائمة مرتبة.</p></div>
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M6 4v5m0 0h8m-8 0v7m8-7V5m0 4v7m0 0h4m-4 0h-4" /></svg>
+				</div>
+
+				<div class="category-hierarchy-grid">
+					<div class="category-field">
+						<label for="parent_id">التصنيف الأب</label>
+						<select id="parent_id" name="parent_id">
+							<option value="">تصنيف رئيسي — بدون أب</option>
+							{parentOptions.map((item: any) => (
+								<option value={item.id} selected={String(item.id) === String(category?.parent_id ?? '')}>
+									{'— '.repeat(Math.max(0, Number(item.depth || 0)))}{item.name}{item.is_active === false ? ' (معطّل)' : ''}
+								</option>
+							))}
+						</select>
+						<small>التصنيف الرئيسي يظهر في المستوى الأول، والفرعي يظهر تحته.</small>
+					</div>
+
+					<div class="category-field">
+						<div class="category-label-row"><label for="icon">رمز الأيقونة</label><span>اختياري</span></div>
+						<input id="icon" type="text" name="icon" maxlength="500" value={category?.icon ?? ''} placeholder="مثال: newspaper" dir="ltr" />
+						<small>اسم الرمز المعتمد في الواجهة، ويمكن استخدام صورة أيقونة بدلًا منه.</small>
+					</div>
+				</div>
+
+				<div class="category-structure-note">
+					<span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9" /><path stroke-linecap="round" stroke-width="1.8" d="M12 11v5m0-8h.01" /></svg></span>
+					<div><strong>تسلسل واضح أفضل للزائر ومحركات البحث</strong><p>لا تجعل الهيكل عميقًا دون حاجة؛ غالبًا يكفي تصنيف رئيسي ومستوى فرعي واحد.</p></div>
+				</div>
+			</section>
+		</main>
+
+		<aside class="category-sidebar">
+			<section class="category-side-card">
+				<div class="category-side-heading"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="8.5" cy="9" r="1.5" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="m4 17 5-5 4 4 2-2 5 4" /></svg></span><div><h2>هوية التصنيف</h2><p>الصورة المستخدمة عند عرض التصنيف</p></div></div>
+
+				<label class="category-cover-drop" for="category-image-input">
+					<img id="category-image-preview" src={imageSrc || undefined} alt="" hidden={!imageSrc} />
+					<span id="category-image-placeholder" hidden={Boolean(imageSrc)}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 16V4m0 0L8 8m4-4 4 4M5 14v5h14v-5" /></svg><strong>اختر صورة الغلاف</strong><small>يفضل مقاس 1200 × 630</small></span>
+					<input id="category-image-input" type="file" name="image" accept="image/png,image/jpeg,image/webp,image/gif" />
+				</label>
+
+				<div class="category-icon-upload">
+					<div class="category-icon-preview" id="category-icon-preview-shell">
+						{iconSrc ? <img id="category-icon-preview" src={iconSrc} alt="" /> : <span id="category-icon-placeholder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M3 6h7l2 2h9v11H3V6Z" /></svg></span>}
+					</div>
+					<div><strong>صورة الأيقونة</strong><small id="category-icon-file-name">PNG أو SVG أو WEBP مربع</small><label for="category-icon-input">اختيار ملف</label></div>
+					<input id="category-icon-input" type="file" name="icon_image" accept="image/*" />
+				</div>
+			</section>
+
+			<section class="category-side-card">
+				<div class="category-side-heading"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6 1.7 1.7 0 0 0 10 3v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z" /></svg></span><div><h2>إعدادات الظهور</h2><p>تحكم في إتاحة التصنيف للزوار</p></div></div>
+				<div class="category-field">
+					<label for="is_active">الحالة</label>
+					<select id="is_active" name="is_active">
+						<option value="true" selected={!category || category?.is_active === true}>نشط ومتاح للزوار</option>
+						<option value="false" selected={category?.is_active === false}>معطّل ومخفي</option>
+					</select>
+				</div>
+				<div class="category-status-preview" id="category-status-preview" data-active={String(!category || category?.is_active === true)}><i></i><span><strong>{!category || category?.is_active === true ? 'التصنيف نشط' : 'التصنيف معطّل'}</strong><small>{!category || category?.is_active === true ? 'سيظهر ضمن خيارات التصنيف' : 'لن يظهر للزوار حتى تفعيله'}</small></span></div>
+			</section>
+
+			<button id="category-submit-button" type="submit" class="category-submit-button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M5 4h12l2 2v14H5V4Zm3 0v6h8V4M8 20v-6h8v6" /></svg><span>{category?.id ? 'حفظ التعديلات' : 'إنشاء التصنيف'}</span></button>
+			<a href="/dashboard/categories" class="category-cancel-button">إلغاء والعودة</a>
+		</aside>
+	</form>
+</div>
+
+<script>
+	const form = document.getElementById('category-editor-form') as HTMLFormElement | null;
+	const submitButton = document.getElementById('category-submit-button') as HTMLButtonElement | null;
+	const nameInput = document.getElementById('name') as HTMLInputElement | null;
+	const nameCount = document.getElementById('category-name-count');
+	const slugInput = document.getElementById('slug') as HTMLInputElement | null;
+	let slugWasEdited = Boolean(slugInput?.value);
+
+	const makeSlug = (value: string) => value.trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '');
+	const updateName = () => {
+		if (nameCount) nameCount.textContent = `${nameInput?.value.length ?? 0} / 255`;
+		if (!slugWasEdited && slugInput) slugInput.value = makeSlug(nameInput?.value ?? '');
+	};
+	nameInput?.addEventListener('input', updateName);
+	slugInput?.addEventListener('input', () => { slugWasEdited = Boolean(slugInput.value); });
+	updateName();
+
+	const bindImagePreview = (inputId: string, previewId: string, placeholderId?: string) => {
+		const input = document.getElementById(inputId) as HTMLInputElement | null;
+		input?.addEventListener('change', () => {
+			const file = input.files?.[0];
+			if (!file) return;
+			let preview = document.getElementById(previewId) as HTMLImageElement | null;
+			if (!preview && inputId === 'category-icon-input') {
+				preview = document.createElement('img');
+				preview.id = previewId;
+				document.getElementById('category-icon-preview-shell')?.replaceChildren(preview);
+			}
+			if (preview) {
+				preview.src = URL.createObjectURL(file);
+				preview.hidden = false;
+			}
+			const placeholder = placeholderId ? document.getElementById(placeholderId) : null;
+			if (placeholder) placeholder.hidden = true;
+			if (inputId === 'category-icon-input') {
+				const label = document.getElementById('category-icon-file-name');
+				if (label) label.textContent = file.name;
+			}
+		});
+	};
+	bindImagePreview('category-image-input', 'category-image-preview', 'category-image-placeholder');
+	bindImagePreview('category-icon-input', 'category-icon-preview');
+
+	const statusSelect = document.getElementById('is_active') as HTMLSelectElement | null;
+	const statusPreview = document.getElementById('category-status-preview');
+	const updateStatus = () => {
+		if (!statusPreview || !statusSelect) return;
+		const active = statusSelect.value === 'true';
+		statusPreview.dataset.active = String(active);
+		const strong = statusPreview.querySelector('strong');
+		const small = statusPreview.querySelector('small');
+		if (strong) strong.textContent = active ? 'التصنيف نشط' : 'التصنيف معطّل';
+		if (small) small.textContent = active ? 'سيظهر ضمن خيارات التصنيف' : 'لن يظهر للزوار حتى تفعيله';
+	};
+	statusSelect?.addEventListener('change', updateStatus);
+
+	form?.addEventListener('submit', () => {
+		if (!submitButton) return;
+		submitButton.disabled = true;
+		const label = submitButton.querySelector('span');
+		if (label) label.textContent = 'جارِ الحفظ...';
+	});
+
+	const countrySelect = document.getElementById('category-country-select') as HTMLSelectElement | null;
+	countrySelect?.addEventListener('change', () => {
+		if (countrySelect.value === countrySelect.dataset.current) return;
+		const url = new URL(window.location.href);
+		url.searchParams.set('country', countrySelect.value);
+		window.location.href = url.toString();
+	});
+</script>
+
+<style>
+	.category-form-page{--cat-ink:#102a43;--cat-muted:#718096;--cat-line:#dfe6ee;max-width:1180px;margin-inline:auto;padding-bottom:2rem;color:var(--cat-ink)}
+	.category-form-header{display:flex;align-items:center;justify-content:space-between;gap:1.25rem;margin-bottom:1rem;border:1px solid var(--cat-line);border-radius:.8rem;background:#fff;padding:1rem 1.1rem;box-shadow:0 1px 2px rgb(15 23 42/.05)}
+	.category-form-heading{display:flex;min-width:0;align-items:center;gap:.75rem}.category-back-button{display:grid;width:2.3rem;height:2.3rem;flex:none;place-items:center;border:1px solid #d9e2ec;border-radius:.55rem;color:#35516d}.category-back-button:hover{border-color:#9bb7dc;background:#f6f9fd;color:#1a4d8f}.category-back-button svg{width:1rem;height:1rem}.category-eyebrow{display:block;margin-bottom:.08rem;color:#1a4d8f;font-size:.63rem;font-weight:850}.category-form-heading h1{margin:0;color:#061a3a;font-size:clamp(1.2rem,1rem + .6vw,1.65rem);font-weight:900;line-height:1.35}.category-form-heading p{margin:.2rem 0 0;color:var(--cat-muted);font-size:.68rem}
+	.category-country-control{display:flex;align-items:center;gap:.55rem;flex:none}.category-country-flag{font-size:1.45rem}.category-country-control div{display:grid}.category-country-control small{color:var(--cat-muted);font-size:.56rem}.category-country-control strong{font-size:.7rem}.category-country-control select{min-height:2.25rem;border:1px solid #d9e2ec;border-radius:.5rem;background:#fff;padding:.35rem .55rem;color:var(--cat-ink);font-size:.68rem}
+	.category-editor-grid{display:grid;grid-template-columns:minmax(0,1fr) 18rem;align-items:start;gap:1rem}.category-main-column,.category-sidebar{display:grid;gap:1rem}.category-sidebar{position:sticky;top:1rem}.category-card,.category-side-card{border:1px solid var(--cat-line);border-radius:.8rem;background:#fff;box-shadow:0 1px 2px rgb(15 23 42/.05)}.category-card{padding:1.05rem}.category-side-card{padding:.9rem}
+	.category-card-heading{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:start;gap:.6rem;margin-bottom:1rem;border-bottom:1px solid #edf1f5;padding-bottom:.85rem}.category-step{display:grid;width:1.75rem;height:1.75rem;place-items:center;border-radius:.4rem;background:#edf4fc;color:#1a4d8f;font-size:.59rem;font-weight:900}.category-card-heading h2,.category-side-heading h2{margin:0;color:#102a43;font-size:.83rem;font-weight:900}.category-card-heading p,.category-side-heading p{margin:.12rem 0 0;color:var(--cat-muted);font-size:.61rem}.category-card-heading>svg{width:1.05rem;height:1.05rem;color:#1a4d8f}
+	.category-field{display:grid;gap:.35rem;margin-top:.9rem}.category-field:first-of-type{margin-top:0}.category-field label,.category-label-row label{color:#243b53;font-size:.67rem;font-weight:850}.category-label-row{display:flex;align-items:center;justify-content:space-between;gap:.7rem}.category-label-row span{color:#91a0b2;font-size:.57rem}.category-field input,.category-field select{width:100%;min-height:2.5rem;border:1px solid #d9e2ec;border-radius:.5rem;background:#fff;padding:.52rem .65rem;color:#102a43;font-family:inherit;font-size:.7rem;transition:border-color .15s,box-shadow .15s}.category-field input:focus,.category-field select:focus{border-color:#7da4d7;outline:0;box-shadow:0 0 0 3px rgb(26 77 143/.07)}.category-field small{color:#8796a8;font-size:.57rem;line-height:1.65}.category-slug-field{position:relative}.category-slug-field input{padding-left:4.35rem}.category-slug-field>span{position:absolute;top:50%;left:.7rem;color:#8a99aa;font-family:ui-monospace,monospace;font-size:.58rem;transform:translateY(-50%)}
+	.category-hierarchy-grid{display:grid;grid-template-columns:1.25fr .75fr;gap:.8rem}.category-structure-note{display:flex;align-items:flex-start;gap:.6rem;margin-top:1rem;border:1px solid #dce8f5;border-radius:.55rem;background:#f7fafe;padding:.7rem}.category-structure-note>span{display:grid;width:1.8rem;height:1.8rem;flex:none;place-items:center;border-radius:.4rem;background:#e8f1fb;color:#1a4d8f}.category-structure-note svg{width:.9rem;height:.9rem}.category-structure-note strong{display:block;color:#27415e;font-size:.64rem}.category-structure-note p{margin:.12rem 0 0;color:#718096;font-size:.57rem}
+	.category-side-heading{display:flex;align-items:flex-start;gap:.55rem;margin-bottom:.8rem}.category-side-heading>span{display:grid;width:1.9rem;height:1.9rem;flex:none;place-items:center;border-radius:.45rem;background:#edf4fc;color:#1a4d8f}.category-side-heading svg{width:.95rem;height:.95rem}
+	.category-cover-drop{position:relative;display:grid;min-height:9rem;cursor:pointer;overflow:hidden;place-items:center;border:1px dashed #afc2d8;border-radius:.6rem;background:#fafcfe;text-align:center}.category-cover-drop:hover{border-color:#1a4d8f;background:#f6f9fd}.category-cover-drop input,.category-icon-upload>input{position:absolute;width:1px;height:1px;opacity:0}.category-cover-drop img{width:100%;height:9rem;object-fit:cover}.category-cover-drop>span{display:grid;justify-items:center;gap:.22rem;color:#60758a}.category-cover-drop svg{width:1.25rem;height:1.25rem;color:#1a4d8f}.category-cover-drop strong{font-size:.66rem}.category-cover-drop small{color:#8796a8;font-size:.54rem}
+	.category-icon-upload{position:relative;display:flex;align-items:center;gap:.65rem;margin-top:.7rem;border:1px solid #e3e9ef;border-radius:.55rem;padding:.55rem}.category-icon-preview{display:grid;width:2.8rem;height:2.8rem;flex:none;overflow:hidden;place-items:center;border-radius:.5rem;background:#edf4fc;color:#1a4d8f}.category-icon-preview img{width:100%;height:100%;object-fit:cover}.category-icon-preview svg{width:1.15rem;height:1.15rem}.category-icon-upload>div:nth-child(2){display:grid;min-width:0;flex:1}.category-icon-upload strong{font-size:.64rem}.category-icon-upload small{overflow:hidden;color:#8796a8;font-size:.53rem;text-overflow:ellipsis;white-space:nowrap}.category-icon-upload label{margin-top:.23rem;cursor:pointer;color:#1a4d8f;font-size:.57rem;font-weight:800}
+	.category-status-preview{display:flex;align-items:center;gap:.55rem;margin-top:.7rem;border:1px solid #d7eee7;border-radius:.55rem;background:#f3fbf8;padding:.58rem;color:#0f8464}.category-status-preview[data-active="false"]{border-color:#e3e8ee;background:#f7f9fb;color:#64748b}.category-status-preview>i{width:.48rem;height:.48rem;flex:none;border-radius:50%;background:currentColor}.category-status-preview span{display:grid}.category-status-preview strong{font-size:.62rem}.category-status-preview small{color:#718096;font-size:.53rem}
+	.category-submit-button{display:flex;min-height:2.75rem;width:100%;align-items:center;justify-content:center;gap:.45rem;border:1px solid #16427d;border-radius:.6rem;background:#1a4d8f;padding:.6rem .8rem;color:#fff;font-size:.71rem;font-weight:900;box-shadow:0 2px 4px rgb(26 77 143/.18)}.category-submit-button:hover{background:#153f76}.category-submit-button:disabled{cursor:wait;opacity:.7}.category-submit-button svg{width:1rem;height:1rem}.category-cancel-button{display:flex;min-height:2.35rem;align-items:center;justify-content:center;color:#64748b;font-size:.64rem;font-weight:750}.category-cancel-button:hover{color:#1a4d8f}
+	:global(.dark) .category-form-page{--cat-ink:#e6edf5;--cat-muted:#93a4b8;--cat-line:#334155}:global(.dark) .category-form-header,:global(.dark) .category-card,:global(.dark) .category-side-card{background:#111827}:global(.dark) .category-form-heading h1,:global(.dark) .category-card-heading h2,:global(.dark) .category-side-heading h2,:global(.dark) .category-field label,:global(.dark) .category-label-row label{color:#f1f5f9}:global(.dark) .category-country-control select,:global(.dark) .category-field input,:global(.dark) .category-field select{border-color:#3b4a5c;background:#172033;color:#e6edf5}:global(.dark) .category-card-heading{border-color:#283548}:global(.dark) .category-back-button{border-color:#3b4a5c;color:#c7d2df}:global(.dark) .category-cover-drop{border-color:#52647a;background:#151e2d}:global(.dark) .category-icon-upload{border-color:#354255}:global(.dark) .category-structure-note{border-color:#334963;background:#142033}:global(.dark) .category-structure-note strong{color:#dbe8f5}:global(.dark) .category-status-preview{border-color:#245f51;background:#132a27}
+	@media(max-width:880px){.category-editor-grid{grid-template-columns:1fr}.category-sidebar{position:static;grid-template-columns:repeat(2,minmax(0,1fr))}.category-submit-button,.category-cancel-button{grid-column:1/-1}}
+	@media(max-width:640px){.category-form-header{align-items:flex-start;flex-direction:column}.category-country-control{width:100%;border-top:1px solid var(--cat-line);padding-top:.75rem}.category-country-control select{margin-inline-start:auto}.category-main-column,.category-sidebar{grid-template-columns:1fr;gap:.75rem}.category-card,.category-side-card{border-radius:.65rem;padding:.8rem}.category-hierarchy-grid{grid-template-columns:1fr}.category-form-heading p{display:none}}
+</style>

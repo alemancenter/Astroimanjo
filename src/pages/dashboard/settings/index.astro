@@ -1,0 +1,279 @@
+---
+import DashboardLayout from '../../../layouts/DashboardLayout.astro';
+import DashboardAlert from '../../../components/ui/DashboardAlert.astro';
+import { requireDashboard } from '../../../lib/auth';
+import { apiFetch } from '../../../lib/api';
+import { assetUrl } from '../../../lib/assets';
+
+const guard = await requireDashboard(Astro, 'manage settings');
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+
+const token = Astro.cookies.get('token')?.value;
+const result = await apiFetch<Record<string, string>>('/dashboard/settings', {
+	countryId: Astro.locals.countryId,
+	cookieHeader: `token=${token}`,
+});
+const settings = result.data ?? {};
+
+type FieldType = 'text' | 'password' | 'textarea' | 'url' | 'email' | 'number' | 'select' | 'toggle' | 'color' | 'image';
+interface Field { key: string; label: string; type?: FieldType; description?: string; placeholder?: string; options?: { value: string; label: string }[]; trueValue?: string; falseValue?: string; wide?: boolean; }
+interface Section { title: string; description: string; fields: Field[]; tone?: string; }
+interface SettingsTab { id: string; label: string; shortLabel: string; description: string; sections: Section[]; }
+
+const tabs: SettingsTab[] = [
+	{ id: 'general', label: 'الإعدادات العامة', shortLabel: 'عام', description: 'هوية الموقع، اللغة، المنطقة الزمنية وخيارات التشغيل الأساسية.', sections: [
+		{ title: 'هوية الموقع', description: 'المعلومات الأساسية التي تظهر للزائر وفي أجزاء الواجهة.', fields: [
+			{ key: 'site_name', label: 'اسم الموقع', placeholder: 'مركز الإيمان التعليمي' },
+			{ key: 'site_url', label: 'رابط الموقع', type: 'url', placeholder: 'https://imanjo.com' },
+			{ key: 'footer_text', label: 'نبذة الموقع في التذييل', type: 'textarea', wide: true, description: 'نص قصير يظهر أسفل الشعار في تذييل كل صفحة — ليس نص حقوق النشر (ذلك يُضاف تلقائيًا في أسفل التذييل).', placeholder: 'عالم المعلم العربي في موقع واحد؛ محتوى تعليمي وملفات دراسية وخطط ومقالات تخدم الطالب والمعلم وولي الأمر بصورة منظمة وموثوقة.' },
+		] },
+		{ title: 'اللغة والتوقيت', description: 'تنسيق اللغة والتاريخ والوقت في أجزاء النظام.', fields: [
+			{ key: 'site_language', label: 'لغة الموقع', type: 'select', options: [{ value: 'ar', label: 'العربية' }, { value: 'en', label: 'English' }] },
+			{ key: 'timezone', label: 'المنطقة الزمنية', placeholder: 'Asia/Amman' },
+			{ key: 'date_format', label: 'صيغة التاريخ', placeholder: 'Y-m-d' },
+			{ key: 'time_format', label: 'صيغة الوقت', placeholder: 'H:i' },
+		] },
+		{ title: 'خيارات التشغيل', description: 'تحكم مباشر في التسجيل والإشعارات والوصول إلى الملفات.', tone: 'switches', fields: [
+			{ key: 'maintenance_mode', label: 'وضع الصيانة', type: 'toggle', description: 'إيقاف الواجهة العامة مؤقتًا أثناء أعمال الصيانة.', trueValue: 'true', falseValue: 'false' },
+			{ key: 'enable_registration', label: 'السماح بالتسجيل', type: 'toggle', description: 'السماح للزوار بإنشاء حسابات جديدة.', trueValue: '1', falseValue: '0' },
+			{ key: 'enable_notifications', label: 'تفعيل الإشعارات', type: 'toggle', description: 'تشغيل إشعارات المنصة للمستخدمين.', trueValue: '1', falseValue: '0' },
+			{ key: 'require_login_for_download', label: 'الدخول قبل التنزيل', type: 'toggle', description: 'مطالبة الزائر بتسجيل الدخول قبل تحميل الملفات.', trueValue: 'true', falseValue: 'false' },
+				{ key: 'enable_teacher_subscriptions', label: 'اشتراكات المعلمين', type: 'toggle', description: 'إظهار زر الاشتراك في صفحة /teachers والسماح بإرسال طلبات اشتراك جديدة.', trueValue: '1', falseValue: '0' },
+		] },
+	] },
+	{ id: 'brand', label: 'الهوية والتواصل', shortLabel: 'الهوية', description: 'الشعار والألوان وبيانات التواصل وروابط الشبكات الاجتماعية.', sections: [
+		{ title: 'الشعار والألوان', description: 'اضبط الأصول البصرية والألوان المستخدمة في واجهة الموقع.', fields: [
+			{ key: 'site_logo', label: 'شعار الموقع', type: 'image' },
+			{ key: 'site_favicon', label: 'أيقونة المتصفح (Favicon)', type: 'image' },
+			{ key: 'site_og_image', label: 'صورة المشاركة الاجتماعية', type: 'image', wide: true },
+			{ key: 'primary_color', label: 'اللون الأساسي', type: 'color', placeholder: '#1A4D8F' },
+			{ key: 'secondary_color', label: 'اللون الثانوي', type: 'color', placeholder: '#0F8464' },
+		] },
+		{ title: 'بيانات التواصل', description: 'البيانات الرسمية التي تظهر في صفحات التواصل.', fields: [
+			{ key: 'contact_email', label: 'بريد التواصل', type: 'email', placeholder: 'info@example.com' },
+			{ key: 'site_email', label: 'بريد الموقع', type: 'email', placeholder: 'admin@example.com' },
+			{ key: 'contact_phone', label: 'رقم الهاتف', placeholder: '+962...' },
+			{ key: 'contact_address', label: 'العنوان', wide: true },
+		] },
+		{ title: 'التواصل الاجتماعي', description: 'اترك الحقل فارغًا لإخفاء الشبكة من الموقع.', fields: [
+			{ key: 'social_facebook', label: 'Facebook', type: 'url' }, { key: 'social_twitter', label: 'X / Twitter', type: 'url' },
+			{ key: 'social_instagram', label: 'Instagram', type: 'url' }, { key: 'social_linkedin', label: 'LinkedIn', type: 'url' },
+			{ key: 'social_tiktok', label: 'TikTok', type: 'url' }, { key: 'social_whatsapp', label: 'WhatsApp' },
+		] },
+	] },
+	{ id: 'seo', label: 'البحث والتحليلات', shortLabel: 'SEO', description: 'بيانات محركات البحث وأدوات القياس والإعلانات والحماية.', sections: [
+		{ title: 'تحسين محركات البحث', description: 'العنوان والوصف الافتراضيان عند مشاركة صفحات الموقع وفهرستها.', fields: [
+			{ key: 'meta_title', label: 'عنوان SEO', wide: true },
+			{ key: 'meta_description', label: 'وصف SEO', type: 'textarea', wide: true },
+			{ key: 'meta_keywords', label: 'الكلمات المفتاحية', wide: true, description: 'افصل الكلمات أو العبارات بفاصلة.' },
+			{ key: 'canonical_url', label: 'الرابط الأساسي Canonical', type: 'url' },
+			{ key: 'sitemap_url', label: 'رابط خريطة الموقع', type: 'url' },
+		] },
+		{ title: 'التحليلات والإعلانات', description: 'معرّفات خدمات القياس والإعلانات المستخدمة في الواجهة.', fields: [
+			{ key: 'google_analytics_id', label: 'Google Analytics ID', placeholder: 'G-XXXXXXXXXX' },
+			{ key: 'adsense_client', label: 'AdSense Client', placeholder: 'ca-pub-...' },
+			{ key: 'facebook_pixel_id', label: 'Facebook Pixel ID' },
+		] },
+		{ title: 'حماية النماذج', description: 'مفاتيح Google reCAPTCHA الخاصة بحماية النماذج العامة.', fields: [
+			{ key: 'recaptcha_site_key', label: 'المفتاح العام' },
+			{ key: 'recaptcha_secret_key', label: 'المفتاح السري', type: 'password' },
+		] },
+	] },
+	{ id: 'auth', label: 'تسجيل الدخول الاجتماعي', shortLabel: 'الدخول', description: 'ربط تسجيل الدخول بحسابات Google وFacebook.', sections: [
+		{ title: 'تسجيل الدخول عبر Google', description: 'بيانات OAuth من Google Cloud Console.', fields: [
+			{ key: 'google_client_id', label: 'Google Client ID', wide: true },
+			{ key: 'google_client_secret', label: 'Google Client Secret', type: 'password', wide: true },
+			{ key: 'google_redirect_uri', label: 'Google Redirect URI', type: 'url', wide: true },
+		] },
+		{ title: 'تسجيل الدخول عبر Facebook', description: 'بيانات التطبيق من Meta for Developers.', fields: [
+			{ key: 'facebook_app_id', label: 'Facebook App ID' },
+			{ key: 'facebook_app_secret', label: 'Facebook App Secret', type: 'password' },
+			{ key: 'facebook_redirect_uri', label: 'Facebook Redirect URI', type: 'url', wide: true },
+		] },
+	] },
+	{ id: 'mail', label: 'البريد والرسائل المرتدة', shortLabel: 'البريد', description: 'إعداد SMTP وصندوق IMAP الخاص بمعالجة الرسائل المرتدة.', sections: [
+		{ title: 'خادم الإرسال SMTP', description: 'إعدادات الخادم المستخدم لإرسال رسائل النظام.', fields: [
+			{ key: 'mail_mailer', label: 'نوع الإرسال', type: 'select', options: [{ value: 'smtp', label: 'SMTP' }, { value: 'log', label: 'Log' }] },
+			{ key: 'mail_host', label: 'مضيف SMTP', placeholder: 'smtp.example.com' },
+			{ key: 'mail_port', label: 'المنفذ', type: 'number', placeholder: '587' },
+			{ key: 'mail_encryption', label: 'التشفير', type: 'select', options: [{ value: 'tls', label: 'TLS' }, { value: 'ssl', label: 'SSL' }, { value: '', label: 'دون تشفير' }] },
+			{ key: 'mail_username', label: 'اسم المستخدم' },
+			{ key: 'mail_password', label: 'كلمة المرور', type: 'password' },
+			{ key: 'mail_from_address', label: 'بريد المرسل', type: 'email' },
+			{ key: 'mail_from_name', label: 'اسم المرسل' },
+			{ key: 'mail_bounce_address', label: 'بريد الرسائل المرتدة', type: 'email', wide: true },
+		] },
+		{ title: 'معالجة الرسائل المرتدة IMAP', description: 'قراءة إشعارات الفشل تلقائيًا وتحديث حالة التسليم.', fields: [
+			{ key: 'bounce_processor_enabled', label: 'تفعيل معالج الرسائل المرتدة', type: 'toggle', description: 'تشغيل قراءة صندوق الرسائل المرتدة دوريًا.', trueValue: 'true', falseValue: 'false', wide: true },
+			{ key: 'bounce_imap_host', label: 'مضيف IMAP' },
+			{ key: 'bounce_imap_port', label: 'منفذ IMAP', type: 'number', placeholder: '993' },
+			{ key: 'bounce_imap_username', label: 'اسم مستخدم IMAP' },
+			{ key: 'bounce_imap_password', label: 'كلمة مرور IMAP', type: 'password' },
+			{ key: 'bounce_imap_tls', label: 'استخدام TLS', type: 'toggle', description: 'اتصال مشفر بخادم IMAP.', trueValue: 'true', falseValue: 'false', wide: true },
+		] },
+	] },
+	{ id: 'advanced', label: 'الإعدادات المتقدمة', shortLabel: 'متقدم', description: 'ملف robots ومواضع الإعلانات. عدّلها فقط عند الحاجة.', sections: [
+		{ title: 'تعليمات عناكب البحث', description: 'المحتوى الخام لملف robots.txt.', fields: [{ key: 'robots_txt', label: 'محتوى robots.txt', type: 'textarea', wide: true, placeholder: 'User-agent: *\nAllow: /' }] },
+	] },
+];
+
+const adConfigPlaceholder = '{"ad_slot":"1234567890","format":"auto","responsive":true}';
+const homeAdFields: Field[] = [
+	{ key: 'google_ads_desktop_home', label: 'بعد دليل الصفوف — سطح المكتب', type: 'textarea', description: 'الوحدة الأولى في الرئيسية، بين قسم الصفوف والأقسام التعليمية وبفاصل بصري واضح.', placeholder: adConfigPlaceholder, wide: true },
+	{ key: 'google_ads_mobile_home', label: 'بعد دليل الصفوف — الجوال', type: 'textarea', description: 'نسخة الجوال للوحدة الأولى. اتركها فارغة لاستخدام إعداد سطح المكتب.', placeholder: adConfigPlaceholder, wide: true },
+	{ key: 'google_ads_desktop_home_2', label: 'بعد أحدث المحتوى — سطح المكتب', type: 'textarea', description: 'الوحدة الثانية بعد بطاقات أحدث المقالات وقبل دعوة المعلمين.', placeholder: adConfigPlaceholder, wide: true },
+	{ key: 'google_ads_mobile_home_2', label: 'بعد أحدث المحتوى — الجوال', type: 'textarea', description: 'نسخة الجوال للوحدة الثانية. اتركها فارغة لاستخدام إعداد سطح المكتب.', placeholder: adConfigPlaceholder, wide: true },
+];
+tabs.find((tab) => tab.id === 'advanced')?.sections.push({
+	title: 'إعلانات الصفحة الرئيسية',
+	description: 'موضعان فقط بين أقسام المحتوى، بعيدًا عن البطاقات وأزرار التنقل. لا يظهر أي صندوق إذا كانت بيانات الوحدة فارغة أو غير صحيحة.',
+	fields: homeAdFields,
+});
+
+const articleAdFields: Field[] = [
+	{ key: 'google_ads_desktop_article', label: 'أعلى المقال — سطح المكتب', type: 'textarea', description: 'إعلان متجاوب بعد عنوان المقال ومسار التصفح وقبل منطقة القراءة.', placeholder: adConfigPlaceholder, wide: true },
+	{ key: 'google_ads_mobile_article', label: 'أعلى المقال — الجوال', type: 'textarea', description: 'نسخة الجوال للموضع العلوي. اتركه فارغًا لاستخدام إعداد سطح المكتب.', placeholder: adConfigPlaceholder, wide: true },
+	{ key: 'google_ads_in_article_article', label: 'إعلان داخل المقال', type: 'textarea', description: 'موضع In-Article بعد النص والكلمات المفتاحية وبفاصل واضح قبل التعليقات.', placeholder: '{"ad_slot":"1234567890","format":"fluid","ad_layout":"in-article","responsive":true}', wide: true },
+	{ key: 'google_ads_desktop_article_2', label: 'أسفل المقال — سطح المكتب', type: 'textarea', description: 'يظهر بعد انتهاء قسم التعليقات، بعيدًا عن المرفقات وأزرار التنزيل.', placeholder: adConfigPlaceholder, wide: true },
+	{ key: 'google_ads_mobile_article_2', label: 'أسفل المقال — الجوال', type: 'textarea', description: 'نسخة الجوال للموضع السفلي. اتركه فارغًا لاستخدام إعداد سطح المكتب.', placeholder: adConfigPlaceholder, wide: true },
+];
+tabs.find((tab) => tab.id === 'advanced')?.sections.push({
+	title: 'إعلانات صفحات المقالات',
+	description: 'ألصق إعداد الوحدة بصيغة JSON. لا يظهر أي موضع فارغ، كما تُخفى الإعلانات تلقائيًا عن المقالات غير المؤهلة أو القصيرة.',
+	fields: articleAdFields,
+});
+
+const postAdFields: Field[] = [
+	{ key: 'google_ads_desktop_news', label: 'أعلى المنشور — سطح المكتب', type: 'textarea', description: 'إعلان متجاوب بعد مقدمة المنشور ومسار التصفح وقبل المحتوى.', placeholder: adConfigPlaceholder, wide: true },
+	{ key: 'google_ads_mobile_news', label: 'أعلى المنشور — الجوال', type: 'textarea', description: 'نسخة الجوال للموضع العلوي. اتركه فارغًا لاستخدام إعداد سطح المكتب.', placeholder: adConfigPlaceholder, wide: true },
+	{ key: 'google_ads_in_article_post', label: 'إعلان داخل المنشور', type: 'textarea', description: 'موضع In-Article بعد نص المنشور والكلمات المفتاحية وبعيدًا عن المرفقات.', placeholder: '{"ad_slot":"1234567890","format":"fluid","ad_layout":"in-article","responsive":true}', wide: true },
+	{ key: 'google_ads_desktop_news_2', label: 'أسفل المنشور — سطح المكتب', type: 'textarea', description: 'يظهر في نهاية الصفحة بعد المحتوى والمرفقات بالكامل.', placeholder: adConfigPlaceholder, wide: true },
+	{ key: 'google_ads_mobile_news_2', label: 'أسفل المنشور — الجوال', type: 'textarea', description: 'نسخة الجوال للموضع السفلي. اتركه فارغًا لاستخدام إعداد سطح المكتب.', placeholder: adConfigPlaceholder, wide: true },
+];
+tabs.find((tab) => tab.id === 'advanced')?.sections.push({
+	title: 'إعلانات صفحات المنشورات',
+	description: 'مواضع مستقلة للمنشورات. لا يظهر الإعلان إلا عندما يكون المنشور مؤهلًا ويحتوي على محتوى كافٍ.',
+	fields: postAdFields,
+});
+
+const namedAdKeys = new Set([...homeAdFields, ...articleAdFields, ...postAdFields].map((field) => field.key));
+const otherAdKeys = Object.keys(settings).filter((key) => key.startsWith('google_ads_') && !namedAdKeys.has(key)).sort();
+if (otherAdKeys.length) tabs.find((tab) => tab.id === 'advanced')?.sections.push({
+	title: 'مواضع الإعلانات الأخرى', description: 'مواضع الصفحات العامة. قيمة فارغة تعني عدم عرض إعلان في ذلك الموضع.',
+	fields: otherAdKeys.map((key) => ({ key, label: key.replace('google_ads_', '').replaceAll('_', ' '), placeholder: adConfigPlaceholder })),
+});
+const allFields = tabs.flatMap((tab) => tab.sections.flatMap((section) => section.fields));
+const configuredCount = allFields.filter((field) => String(settings[field.key] ?? '').trim() !== '').length;
+const activeTab = tabs.some((tab) => tab.id === Astro.url.searchParams.get('tab')) ? Astro.url.searchParams.get('tab')! : 'general';
+const isTruthy = (value: unknown) => ['1', 'true', 'yes', 'on'].includes(String(value ?? '').toLowerCase());
+const colorValue = (value: unknown, fallback: string) => /^#[0-9a-f]{6}$/i.test(String(value || '')) ? String(value) : fallback;
+const numberFormat = (value: number) => new Intl.NumberFormat('ar-EG').format(value);
+---
+
+<DashboardLayout title="إعدادات المنصة" user={user}>
+	<div class="settings-page">
+		<DashboardAlert />
+		<header class="settings-header"><div><span>إدارة المنصة</span><h1>إعدادات المنصة</h1><p>اضبط تجربة الموقع والخدمات المتصلة من مركز إعدادات واحد ومنظم.</p></div><div class="settings-header-status"><i></i><div><strong>{result.ok ? 'الاتصال بالإعدادات سليم' : 'تعذّر تحميل بعض الإعدادات'}</strong><span>{numberFormat(configuredCount)} من {numberFormat(allFields.length)} حقلًا مضبوطًا</span></div></div></header>
+
+		<form method="post" action="/api/dashboard/settings/save" class="settings-form" data-settings-form>
+			<input type="hidden" name="_return_tab" value={activeTab} data-return-tab/>
+			<aside class="settings-nav-card"><div class="settings-nav-title"><span>أقسام الإعدادات</span><small>اختر القسم المطلوب تعديله</small></div><nav aria-label="أقسام الإعدادات">{tabs.map((tab, index) => <button type="button" data-settings-tab={tab.id} class:list={{ 'is-active': tab.id === activeTab }} aria-selected={tab.id === activeTab}><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">{index === 0 ? <><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3V2.8h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></> : index === 1 ? <><path d="M4 19h16M6 16l6-12 6 12Z"/><circle cx="12" cy="11" r="2"/></> : index === 2 ? <><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4M8 11h6m-3-3v6"/></> : index === 3 ? <><circle cx="9" cy="8" r="3"/><path d="M3 20c.5-4 2.5-6 6-6 2 0 3.5.7 4.5 2M16 12l2 2 4-5"/></> : index === 4 ? <><path d="M4 5h16v14H4zM4 7l8 6 8-6"/></> : <><path d="M5 4h14v16H5zM8 8h8m-8 4h8m-8 4h5"/></>}</svg></i><span><strong>{tab.label}</strong><small>{tab.description}</small></span><b>{numberFormat(tab.sections.reduce((sum, section) => sum + section.fields.length, 0))}</b></button>)}</nav><div class="settings-nav-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 9v4m0 4h.01M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z"/></svg><p>جميع التغييرات في التبويبات تُحفظ معًا عند الضغط على زر الحفظ.</p></div></aside>
+
+			<main class="settings-content">{tabs.map((tab) => <section class="settings-tab-panel" data-settings-panel={tab.id} hidden={tab.id !== activeTab}><header class="settings-panel-header"><div><span>{tab.shortLabel}</span><h2>{tab.label}</h2><p>{tab.description}</p></div><strong>{numberFormat(tab.sections.reduce((sum, section) => sum + section.fields.length, 0))} إعداد</strong></header>
+				<div class="settings-sections">{tab.sections.map((section) => <fieldset class:list={['settings-section', section.tone && `is-${section.tone}`]}><legend><span>{section.title}</span><small>{section.description}</small></legend><div class="settings-fields">{section.fields.map((field) => <div class:list={['settings-field', field.wide && 'is-wide', field.type === 'toggle' && 'is-toggle']}>
+					{field.type === 'toggle' ? <label class="settings-switch-row" for={field.key}><div><strong>{field.label}</strong>{field.description && <small>{field.description}</small>}</div><span class="settings-switch"><input type="hidden" name={field.key} value={field.falseValue || 'false'}/><input id={field.key} type="checkbox" name={field.key} value={field.trueValue || 'true'} checked={isTruthy(settings[field.key])}/><i></i></span></label> : <><label for={field.key}>{field.label}</label>{field.description && <small class="settings-field-hint">{field.description}</small>}{field.type === 'textarea' ? <textarea id={field.key} name={field.key} rows={field.key === 'robots_txt' ? 8 : 4} class:list={{ 'is-code': field.key === 'robots_txt' }} placeholder={field.placeholder}>{settings[field.key] ?? ''}</textarea> : field.type === 'select' ? <select id={field.key} name={field.key}>{field.options?.map((option) => <option value={option.value} selected={String(settings[field.key] ?? '') === option.value}>{option.label}</option>)}</select> : field.type === 'color' ? <div class="settings-color-field"><input type="color" name={field.key} value={colorValue(settings[field.key], field.key === 'primary_color' ? '#1A4D8F' : '#0F8464')} data-color-picker/><input type="text" value={colorValue(settings[field.key], field.key === 'primary_color' ? '#1A4D8F' : '#0F8464')} data-color-text maxlength="7" dir="ltr" aria-label={`${field.label} بصيغة HEX`}/></div> : field.type === 'image' ? <div class="settings-image-field" data-image-field data-upload-key={field.key}><div class="settings-image-preview" data-image-preview>{settings[field.key] ? <img src={assetUrl(settings[field.key], 200)} alt="" data-image-preview-img/> : <span data-image-preview-empty>لا توجد صورة</span>}</div><div class="settings-image-controls"><input type="hidden" name={field.key} value={settings[field.key] ?? ''} data-image-value/><label class="settings-image-upload-btn"><input type="file" accept="image/*" data-image-file hidden/><span data-image-upload-label>{settings[field.key] ? 'استبدال الصورة' : 'رفع صورة'}</span></label>{settings[field.key] && <button type="button" class="settings-image-remove-btn" data-image-remove>إزالة</button>}<small class="settings-image-status" data-image-status></small></div></div> : <div class:list={['settings-input-wrap', field.type === 'password' && 'has-secret']}><input id={field.key} type={field.type || 'text'} name={field.key} value={settings[field.key] ?? ''} placeholder={field.placeholder} autocomplete="off" dir={['url', 'email', 'password'].includes(field.type || '') ? 'ltr' : undefined}/>{field.type === 'password' && <button type="button" data-toggle-secret aria-label="إظهار أو إخفاء القيمة"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></svg></button>}</div>}</>}
+				</div>)}</div>{tab.id === 'mail' && section.title.includes('SMTP') && <div class="smtp-test-row"><div><strong>اختبار الاتصال</strong><span>تحقق من صحة بيانات الخادم الحالية قبل حفظها.</span></div><button type="submit" formaction="/api/dashboard/settings/smtp-test" formnovalidate><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m4 12 4 4L18 6"/></svg>اختبار SMTP</button></div>}</fieldset>)}</div>
+			</section>)}</main>
+
+			<footer class="settings-save-bar"><div class="settings-save-state"><i></i><span><strong data-save-state>الإعدادات محفوظة</strong><small data-save-hint>أي تعديل جديد سيظهر هنا قبل الحفظ.</small></span></div><div><button type="button" data-reset-settings disabled>التراجع عن التغييرات</button><button type="submit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 4h12l2 2v14H5zM8 4v6h8V4M8 20v-6h8v6"/></svg>حفظ كل الإعدادات</button></div></footer>
+		</form>
+	</div>
+
+	<script>
+		const settingsForm = document.querySelector<HTMLFormElement>('[data-settings-form]');
+		const tabButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-settings-tab]'));
+		const tabPanels = Array.from(document.querySelectorAll<HTMLElement>('[data-settings-panel]'));
+		const returnTab = document.querySelector<HTMLInputElement>('[data-return-tab]');
+		const showTab = (id: string) => { tabButtons.forEach((button) => { const active = button.dataset.settingsTab === id; button.classList.toggle('is-active', active); button.setAttribute('aria-selected', String(active)); }); tabPanels.forEach((panel) => { panel.hidden = panel.dataset.settingsPanel !== id; }); if (returnTab) returnTab.value = id; const url = new URL(window.location.href); url.searchParams.set('tab', id); history.replaceState(null, '', `${url.pathname}${url.search}`); };
+		tabButtons.forEach((button) => button.addEventListener('click', () => showTab(button.dataset.settingsTab || 'general')));
+		document.querySelectorAll<HTMLButtonElement>('[data-toggle-secret]').forEach((button) => button.addEventListener('click', () => { const input = button.parentElement?.querySelector<HTMLInputElement>('input'); if (!input) return; input.type = input.type === 'password' ? 'text' : 'password'; button.classList.toggle('is-visible', input.type === 'text'); }));
+		document.querySelectorAll<HTMLElement>('.settings-color-field').forEach((field) => { const picker = field.querySelector<HTMLInputElement>('[data-color-picker]'); const text = field.querySelector<HTMLInputElement>('[data-color-text]'); picker?.addEventListener('input', () => { if (text) text.value = picker.value.toUpperCase(); }); text?.addEventListener('input', () => { if (picker && /^#[0-9a-f]{6}$/i.test(text.value)) picker.value = text.value; }); });
+
+		// Logo/favicon/OG-image fields: upload immediately on file pick (same endpoint the
+		// article/post editors already use), then stash the returned path in a hidden input
+		// so it rides along with the rest of the form on the normal "save settings" submit —
+		// no change needed to the settings save route, which already persists any string field.
+		document.querySelectorAll<HTMLElement>('[data-image-field]').forEach((field) => {
+			const fileInput = field.querySelector<HTMLInputElement>('[data-image-file]');
+			const hiddenInput = field.querySelector<HTMLInputElement>('[data-image-value]');
+			const preview = field.querySelector<HTMLElement>('[data-image-preview]');
+			const status = field.querySelector<HTMLElement>('[data-image-status]');
+			const uploadLabel = field.querySelector<HTMLElement>('[data-image-upload-label]');
+
+			function setPreview(url: string) {
+				if (!preview) return;
+				preview.innerHTML = '';
+				if (url) {
+					const img = document.createElement('img');
+					img.src = url;
+					img.alt = '';
+					preview.appendChild(img);
+				} else {
+					const span = document.createElement('span');
+					span.textContent = 'لا توجد صورة';
+					preview.appendChild(span);
+				}
+			}
+
+			fileInput?.addEventListener('change', async () => {
+				const file = fileInput.files?.[0];
+				if (!file) return;
+				if (status) status.textContent = 'جارِ الرفع...';
+				fileInput.disabled = true;
+				try {
+					const formData = new FormData();
+					formData.set('image', file);
+					const res = await fetch('/api/dashboard/upload-image', { method: 'POST', body: formData });
+					const json: any = await res.json().catch(() => null);
+					if (!res.ok || !json?.success || !json.data?.path) throw new Error(json?.message || 'فشل رفع الصورة');
+					if (hiddenInput) hiddenInput.value = json.data.path;
+					setPreview(URL.createObjectURL(file));
+					if (uploadLabel) uploadLabel.textContent = 'استبدال الصورة';
+					if (status) status.textContent = 'تم الرفع — لا تنسَ حفظ الإعدادات.';
+					field.dispatchEvent(new Event('change', { bubbles: true }));
+				} catch (err) {
+					if (status) status.textContent = err instanceof Error ? err.message : 'فشل رفع الصورة';
+				} finally {
+					fileInput.disabled = false;
+					fileInput.value = '';
+				}
+			});
+
+			field.querySelector<HTMLButtonElement>('[data-image-remove]')?.addEventListener('click', (event) => {
+				if (hiddenInput) hiddenInput.value = '';
+				setPreview('');
+				if (uploadLabel) uploadLabel.textContent = 'رفع صورة';
+				(event.currentTarget as HTMLButtonElement).remove();
+				field.dispatchEvent(new Event('change', { bubbles: true }));
+			});
+		});
+
+		const initialData = settingsForm ? new FormData(settingsForm) : null;
+		const saveState = document.querySelector<HTMLElement>('[data-save-state]'); const saveHint = document.querySelector<HTMLElement>('[data-save-hint]'); const resetButton = document.querySelector<HTMLButtonElement>('[data-reset-settings]');
+		const setDirty = () => { if (saveState) saveState.textContent = 'توجد تغييرات غير محفوظة'; if (saveHint) saveHint.textContent = 'احفظ التغييرات قبل مغادرة الصفحة.'; document.querySelector('.settings-save-state')?.classList.add('is-dirty'); if (resetButton) resetButton.disabled = false; };
+		settingsForm?.addEventListener('input', setDirty); settingsForm?.addEventListener('change', setDirty);
+		resetButton?.addEventListener('click', () => { if (!settingsForm || !initialData) return; for (const [name, value] of initialData.entries()) { if (typeof value !== 'string') continue; const controls = settingsForm.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(`[name="${CSS.escape(name)}"]`); controls.forEach((control) => { if (control instanceof HTMLInputElement && control.type === 'checkbox') control.checked = control.value === value; else control.value = value; }); } document.querySelectorAll<HTMLElement>('.settings-color-field').forEach((field) => { const picker = field.querySelector<HTMLInputElement>('[data-color-picker]'); const text = field.querySelector<HTMLInputElement>('[data-color-text]'); if (picker && text) text.value = picker.value.toUpperCase(); }); if (saveState) saveState.textContent = 'تم التراجع عن التغييرات'; if (saveHint) saveHint.textContent = 'عادت الحقول إلى قيمها عند فتح الصفحة.'; document.querySelector('.settings-save-state')?.classList.remove('is-dirty'); resetButton.disabled = true; });
+		settingsForm?.addEventListener('submit', () => { const submit = settingsForm.querySelector<HTMLButtonElement>('button[type="submit"]:focus'); if (submit) { submit.disabled = true; const original = submit.textContent; submit.textContent = 'جارٍ التنفيذ...'; window.setTimeout(() => { submit.disabled = false; submit.textContent = original; }, 8000); } });
+	</script>
+
+	<style>
+		.settings-page{--si:#102a43;--sm:#718096;--sl:#dfe6ee;max-width:1400px;margin-inline:auto;padding-bottom:5.5rem}.settings-header{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;margin-bottom:1rem}.settings-header>div:first-child>span{display:block;margin-bottom:.2rem;color:#1a4d8f;font-size:.74rem;font-weight:850}.settings-header h1{margin:0;color:#061a3a;font-size:clamp(1.5rem,1.2rem + .8vw,2rem);font-weight:950}.settings-header p{margin:.28rem 0 0;color:var(--sm);font-size:.78rem}.settings-header-status{display:flex;align-items:center;gap:.5rem;border:1px solid var(--sl);border-radius:.65rem;background:#fff;padding:.55rem .7rem}.settings-header-status>i{width:.48rem;height:.48rem;border-radius:50%;background:#0f8464;box-shadow:0 0 0 4px #eaf8f3}.settings-header-status strong,.settings-header-status span{display:block}.settings-header-status strong{color:var(--si);font-size:.65rem}.settings-header-status span{margin-top:.06rem;color:#8a97a6;font-size:.55rem}.settings-form{display:grid;grid-template-columns:18rem minmax(0,1fr);align-items:start;gap:.8rem}.settings-nav-card{position:sticky;top:1rem;overflow:hidden;border:1px solid var(--sl);border-radius:.78rem;background:#fff;box-shadow:0 1px 3px rgb(15 23 42/.05)}.settings-nav-title{border-bottom:1px solid #edf1f5;padding:.72rem .78rem}.settings-nav-title span,.settings-nav-title small{display:block}.settings-nav-title span{color:var(--si);font-size:.72rem;font-weight:900}.settings-nav-title small{margin-top:.1rem;color:#8a97a6;font-size:.56rem}.settings-nav-card nav{display:grid;gap:.15rem;padding:.35rem}.settings-nav-card nav button{display:grid;width:100%;grid-template-columns:2rem minmax(0,1fr) auto;align-items:center;gap:.45rem;border:1px solid transparent;border-radius:.55rem;background:transparent;padding:.5rem;color:#64748b;font-family:inherit;text-align:right}.settings-nav-card nav button:hover{background:#f8fafc}.settings-nav-card nav button.is-active{border-color:#c9d9ec;background:#f3f7fc;color:#1a4d8f;box-shadow:inset -3px 0 #1a4d8f}.settings-nav-card nav button>i{display:grid;width:2rem;height:2rem;place-items:center;border-radius:.45rem;background:#f1f5f9}.settings-nav-card nav button.is-active>i{background:#e5eef9}.settings-nav-card nav svg{width:.88rem;height:.88rem}.settings-nav-card nav button>span{min-width:0}.settings-nav-card nav strong,.settings-nav-card nav small{display:block}.settings-nav-card nav strong{color:inherit;font-size:.66rem;font-weight:900}.settings-nav-card nav small{overflow:hidden;margin-top:.08rem;color:#8a97a6;font-size:.51rem;text-overflow:ellipsis;white-space:nowrap}.settings-nav-card nav b{display:grid;min-width:1.45rem;height:1.35rem;place-items:center;border-radius:999px;background:#f1f5f9;color:#718096;font-size:.55rem}.settings-nav-card nav button.is-active b{background:#dfeaf7;color:#1a4d8f}.settings-nav-note{display:flex;gap:.4rem;border-top:1px solid #edf1f5;background:#f8fafc;padding:.62rem .72rem;color:#718096}.settings-nav-note svg{width:.85rem;height:.85rem;flex:none}.settings-nav-note p{margin:0;font-size:.53rem;line-height:1.7}
+		.settings-content{min-width:0}.settings-tab-panel[hidden]{display:none}.settings-panel-header{display:flex;min-height:5.2rem;align-items:center;justify-content:space-between;gap:1rem;border:1px solid var(--sl);border-radius:.78rem;background:#fff;padding:.8rem .9rem;box-shadow:0 1px 3px rgb(15 23 42/.05)}.settings-panel-header>div>span{color:#1a4d8f;font-size:.56rem;font-weight:900}.settings-panel-header h2{margin:.08rem 0 0;color:var(--si);font-size:1rem;font-weight:950}.settings-panel-header p{margin:.12rem 0 0;color:var(--sm);font-size:.62rem}.settings-panel-header>strong{border:1px solid #dbe4ee;border-radius:999px;background:#f8fafc;padding:.3rem .55rem;color:#64748b;font-size:.58rem}.settings-sections{display:grid;gap:.65rem;margin-top:.65rem}.settings-section{min-width:0;border:1px solid var(--sl);border-radius:.78rem;background:#fff;padding:.85rem .9rem;box-shadow:0 1px 3px rgb(15 23 42/.04)}.settings-section legend{display:block;width:100%;padding:0 0 .65rem;border-bottom:1px solid #edf1f5}.settings-section legend span,.settings-section legend small{display:block}.settings-section legend span{color:var(--si);font-size:.75rem;font-weight:900}.settings-section legend small{margin-top:.12rem;color:#8a97a6;font-size:.57rem}.settings-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.7rem;margin-top:.75rem}.settings-field{min-width:0}.settings-field.is-wide{grid-column:1/-1}.settings-field>label{display:block;margin-bottom:.28rem;color:#344b63;font-size:.62rem;font-weight:850}.settings-field-hint{display:block;margin:-.12rem 0 .3rem;color:#8a97a6;font-size:.52rem}.settings-field input:not([type="checkbox"]):not([type="color"]),.settings-field select,.settings-field textarea{width:100%;border:1px solid #d9e2ec;border-radius:.5rem;background:#fff;padding:.48rem .58rem;color:var(--si);font-family:inherit;font-size:.65rem}.settings-field input:not([type="checkbox"]):not([type="color"]),.settings-field select{min-height:2.4rem}.settings-field textarea{resize:vertical;line-height:1.75}.settings-field textarea.is-code{direction:ltr;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;text-align:left}.settings-field input:focus,.settings-field select:focus,.settings-field textarea:focus{border-color:#81a7da;outline:0;box-shadow:0 0 0 3px rgb(26 77 143/.07)}.settings-input-wrap{position:relative}.settings-input-wrap.has-secret input{padding-left:2.25rem}.settings-input-wrap>button{position:absolute;top:50%;left:.35rem;display:grid;width:1.75rem;height:1.75rem;place-items:center;border:0;border-radius:.35rem;background:#f1f5f9;color:#718096;transform:translateY(-50%)}.settings-input-wrap>button.is-visible{background:#e7f0fb;color:#1a4d8f}.settings-input-wrap>button svg{width:.78rem;height:.78rem;stroke-width:1.7}.settings-color-field{display:grid;grid-template-columns:3rem minmax(0,1fr);gap:.4rem}.settings-color-field input[type="color"]{width:3rem;height:2.4rem;cursor:pointer;border:1px solid #d9e2ec;border-radius:.5rem;background:#fff;padding:.2rem}.settings-color-field input[type="text"]{text-align:left}.settings-section.is-switches .settings-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.settings-field.is-toggle{border:1px solid #e2e8f0;border-radius:.58rem;background:#fafcff;padding:.6rem}.settings-switch-row{display:flex!important;cursor:pointer;align-items:center;justify-content:space-between;gap:.8rem;margin:0!important}.settings-switch-row>div{min-width:0}.settings-switch-row strong,.settings-switch-row small{display:block}.settings-switch-row strong{color:var(--si);font-size:.64rem}.settings-switch-row small{margin-top:.1rem;color:#8a97a6;font-size:.52rem;line-height:1.6}.settings-switch{position:relative;flex:none}.settings-switch input[type="checkbox"]{position:absolute;opacity:0}.settings-switch>i{position:relative;display:block;width:2.4rem;height:1.3rem;border-radius:999px;background:#cbd5e1;transition:.18s}.settings-switch>i::after{position:absolute;top:.18rem;right:.18rem;width:.94rem;height:.94rem;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgb(15 23 42/.2);content:"";transition:.18s}.settings-switch input:checked+i{background:#0f8464}.settings-switch input:checked+i::after{right:1.28rem}.settings-switch input:focus-visible+i{outline:3px solid rgb(15 132 100/.15);outline-offset:2px}.smtp-test-row{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-top:.75rem;border:1px solid #cfe3da;border-radius:.6rem;background:#f5fbf8;padding:.6rem .7rem}.smtp-test-row strong,.smtp-test-row span{display:block}.smtp-test-row strong{color:#176b56;font-size:.62rem}.smtp-test-row span{margin-top:.08rem;color:#6d8b82;font-size:.52rem}.smtp-test-row button{display:inline-flex;min-height:2.15rem;align-items:center;gap:.3rem;border:1px solid #9bcfbe;border-radius:.45rem;background:#fff;padding:.35rem .6rem;color:#0f8464;font-family:inherit;font-size:.58rem;font-weight:850}.smtp-test-row button svg{width:.75rem;height:.75rem;stroke-width:1.8}
+		.settings-image-field{display:flex;gap:.65rem;align-items:flex-start}.settings-image-preview{display:flex;flex:none;width:4.5rem;height:4.5rem;align-items:center;justify-content:center;overflow:hidden;border:1px solid #d9e2ec;border-radius:.55rem;background:#f8fafc}.settings-image-preview img{width:100%;height:100%;object-fit:contain}.settings-image-preview span{padding:.2rem;color:#94a3b8;font-size:.5rem;text-align:center}.settings-image-controls{display:flex;min-width:0;flex:1;flex-wrap:wrap;align-items:center;gap:.4rem}.settings-image-upload-btn{display:inline-flex;min-height:2.15rem;cursor:pointer;align-items:center;border:1px solid #d9e2ec;border-radius:.45rem;background:#fff;padding:.35rem .6rem;color:#1a4d8f;font-size:.58rem;font-weight:850}.settings-image-upload-btn:hover{border-color:#81a7da;background:#f3f8ff}.settings-image-remove-btn{display:inline-flex;min-height:2.15rem;align-items:center;border:1px solid #f3c6c6;border-radius:.45rem;background:#fff;padding:.35rem .6rem;color:#b3261e;font-family:inherit;font-size:.58rem;font-weight:850}.settings-image-status{width:100%;color:#8a97a6;font-size:.52rem}
+		.settings-save-bar{position:fixed;z-index:20;right:calc(var(--dashboard-sidebar-width, 16rem) + 1rem);bottom:.7rem;left:1rem;display:flex;max-width:1400px;align-items:center;justify-content:space-between;gap:1rem;margin-inline:auto;border:1px solid #cdd8e4;border-radius:.75rem;background:rgb(255 255 255/.94);padding:.55rem .7rem;box-shadow:0 12px 35px rgb(15 23 42/.16);backdrop-filter:blur(10px)}.settings-save-state{display:flex;align-items:center;gap:.5rem}.settings-save-state>i{width:.48rem;height:.48rem;border-radius:50%;background:#0f8464;box-shadow:0 0 0 4px #eaf8f3}.settings-save-state.is-dirty>i{background:#e8a244;box-shadow:0 0 0 4px #fff4e3}.settings-save-state strong,.settings-save-state small{display:block}.settings-save-state strong{color:var(--si);font-size:.62rem}.settings-save-state small{margin-top:.05rem;color:#8a97a6;font-size:.51rem}.settings-save-bar>div:last-child{display:flex;gap:.4rem}.settings-save-bar button{display:inline-flex;min-height:2.35rem;align-items:center;justify-content:center;gap:.3rem;border-radius:.48rem;padding:.4rem .7rem;font-family:inherit;font-size:.62rem;font-weight:850}.settings-save-bar button:first-child{border:1px solid #d9e2ec;background:#fff;color:#64748b}.settings-save-bar button:first-child:disabled{cursor:not-allowed;opacity:.45}.settings-save-bar button:last-child{border:1px solid #16427d;background:#1a4d8f;color:#fff}.settings-save-bar button svg{width:.78rem;height:.78rem;stroke-width:1.8}
+		:global(.dark) .settings-page{--si:#f8fafc;--sm:#94a3b8;--sl:#334155}:global(.dark) .settings-header h1{color:#fff}:global(.dark) .settings-header-status,:global(.dark) .settings-nav-card,:global(.dark) .settings-panel-header,:global(.dark) .settings-section,:global(.dark) .settings-field input:not([type="checkbox"]):not([type="color"]),:global(.dark) .settings-field select,:global(.dark) .settings-field textarea,:global(.dark) .settings-color-field input[type="color"],:global(.dark) .settings-save-bar{border-color:#334155;background:#0f2547;color:#dbe5f0}:global(.dark) .settings-nav-title,:global(.dark) .settings-section legend{border-color:#263b56}:global(.dark) .settings-nav-card nav button:hover,:global(.dark) .settings-field.is-toggle{background:#132943}:global(.dark) .settings-nav-card nav button.is-active{border-color:#315b8f;background:#132d50}:global(.dark) .settings-nav-note{border-color:#263b56;background:#0b1e38}:global(.dark) .settings-field>label{color:#dbe5f0}:global(.dark) .smtp-test-row{border-color:#315b50;background:#102f2a}:global(.dark) .settings-save-bar button:first-child{border-color:#40536a;background:#132943;color:#cbd5e1}:global(.dark) .settings-image-preview{border-color:#334155;background:#0f2547}:global(.dark) .settings-image-upload-btn{border-color:#40536a;background:#132943;color:#cbd5e1}:global(.dark) .settings-image-remove-btn{border-color:#5a2e2e;background:#132943;color:#f3a5a5}
+		@media(max-width:1100px){.settings-form{grid-template-columns:1fr}.settings-nav-card{position:static}.settings-nav-title,.settings-nav-note{display:none}.settings-nav-card nav{display:flex;overflow-x:auto;padding:.35rem}.settings-nav-card nav button{min-width:10rem}.settings-nav-card nav button.is-active{box-shadow:inset 0 -2px #1a4d8f}.settings-save-bar{right:1rem}}
+		@media(max-width:700px){.settings-header{align-items:stretch;flex-direction:column}.settings-header-status{align-self:stretch}.settings-fields,.settings-section.is-switches .settings-fields{grid-template-columns:1fr}.settings-field.is-wide{grid-column:auto}.settings-panel-header{align-items:flex-start;flex-direction:column}.settings-panel-header>strong{align-self:flex-start}.settings-save-bar{align-items:stretch;flex-direction:column}.settings-save-bar>div:last-child{display:grid;grid-template-columns:1fr 1.25fr}.smtp-test-row{align-items:stretch;flex-direction:column}.smtp-test-row button{width:100%;justify-content:center}}
+	</style>
+</DashboardLayout>

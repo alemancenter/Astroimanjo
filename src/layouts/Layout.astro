@@ -1,23 +1,219 @@
+---
+import '@fontsource-variable/alexandria';
+import '../styles/global.css';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+import SeoHead from '../components/ui/SeoHead.astro';
+import { apiFetch } from '../lib/api';
+import { assetUrl } from '../lib/assets';
+import { generateShadeRamp } from '../lib/colorRamp';
+
+interface Props {
+	/** Omit to fall back to the site-wide meta_title setting (used by the homepage). */
+	title?: string;
+	description?: string;
+	canonical?: string;
+	image?: string;
+	noindex?: boolean;
+	jsonLd?: Record<string, unknown> | Record<string, unknown>[];
+	/** See SeoHead.astro — only pure listing/keyword-search pages should pass true. */
+	hreflangSafe?: boolean;
+	/**
+	 * Opt-in (default false) — the AdSense base loader (adsbygoogle.js + Funding Choices) only
+	 * loads when a page explicitly asks for it. This used to be opt-out (`disableAds`, default
+	 * false meaning ads ON), which meant every page that forgot to pass it — /login, /register,
+	 * /forgot-password, /reset-password, /account and its sub-pages (including
+	 * /account/messages, a private-communication screen Google's placement policy specifically
+	 * calls out), the 404 page, and anything else added later — served the base script by
+	 * default. With Auto Ads enabled in the AdSense account, that's enough for Google to place
+	 * ads on those pages with no explicit <AdSensePlacement> anywhere, which is exactly what
+	 * Google's Publisher Policies prohibit for functional/account/communication screens. Only
+	 * pass true on pages that actually carry ad placements and have been reviewed for it.
+	 */
+	enableAds?: boolean;
+}
+
+const { title, description, canonical, image, noindex, jsonLd, hreflangSafe, enableAds = false } = Astro.props;
+const settings = (await apiFetch<Record<string, string>>('/front/settings', { countryId: Astro.locals.countryId })).data ?? {};
+const siteName = settings.site_name?.trim() || 'موقع الإيمان التعليمي';
+const siteLogo = assetUrl(settings.site_logo?.trim(), 96);
+const siteFavicon = assetUrl(settings.site_favicon?.trim(), 64);
+const effectiveTitle = title || settings.meta_title?.trim() || 'الرئيسية';
+const effectiveDescription = description || settings.meta_description?.trim() || undefined;
+const effectiveImage = image || assetUrl(settings.site_og_image?.trim(), 1200) || undefined;
+
+const primaryRamp = generateShadeRamp(settings.primary_color?.trim());
+const secondaryRamp = generateShadeRamp(settings.secondary_color?.trim());
+const colorOverrideCSS = (() => {
+	const lines: string[] = [];
+	if (primaryRamp) for (const [shade, hex] of Object.entries(primaryRamp)) lines.push(`--color-royal-${shade}:${hex};`);
+	if (secondaryRamp) for (const [shade, hex] of Object.entries(secondaryRamp)) lines.push(`--color-emerald-brand-${shade}:${hex};`);
+	return lines.length ? `:root{${lines.join('')}}` : '';
+})();
+
+const gaId = settings.google_analytics_id?.trim();
+// Deliberately disabled (product decision, not a bug): unlike GA/Ads, Meta's pixel has no
+// integration with Google Consent Mode at all — the `gtag('consent', 'default', {...denied})`
+// below does nothing to stop it. With no consent banner in place yet to call Meta's own
+// fbq('consent', 'revoke'|'grant') API, the pixel was firing unconditionally for every
+// visitor. Flip this back to `settings.facebook_pixel_id?.trim()` once a real consent
+// mechanism exists.
+const fbPixelId: string | undefined = undefined;
+const adsenseClient = settings.adsense_client?.trim();
+// Google's own CMP ("Privacy & messaging", formerly Funding Choices) — not a third-party
+// vendor like CookieYes. Its message-loader script expects the publisher id without the
+// "ca-" prefix (adsense_client is stored as "ca-pub-XXXX"; Google's snippet wants "pub-XXXX").
+const adsensePublisherId = adsenseClient?.replace(/^ca-/, '');
+
+const footerText = settings.footer_text?.trim();
+const socialLinks = {
+	facebook: settings.social_facebook?.trim(),
+	twitter: settings.social_twitter?.trim(),
+	instagram: settings.social_instagram?.trim(),
+	linkedin: settings.social_linkedin?.trim(),
+	tiktok: settings.social_tiktok?.trim(),
+	whatsapp: settings.social_whatsapp?.trim(),
+};
+---
+
 <!doctype html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 	<head>
-		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<link rel="icon" href="/favicon.ico" />
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+		{/* Google Consent Mode v2 — must be the FIRST script in <head>, before gtag.js or any
+		   other tracking script, so nothing storage-related fires before this default takes
+		   effect. Set unconditionally: this is a safe default even when the message below
+		   hasn't rendered yet — GA/Ads run in a degraded, cookieless-ping mode instead of full
+		   tracking until the visitor actually grants consent via the banner. */}
+		<script is:inline>
+			window.dataLayer = window.dataLayer || [];
+			function gtag() { dataLayer.push(arguments); }
+			gtag('consent', 'default', {
+				ad_storage: 'denied',
+				ad_user_data: 'denied',
+				ad_personalization: 'denied',
+				analytics_storage: 'denied',
+				wait_for_update: 500,
+			});
+		</script>
+
+		{/* Google's own CMP — AdSense "Privacy & messaging" (formerly Funding Choices), not a
+		   third-party vendor. Only loads when AdSense is actually configured, since there's
+		   nothing to gate consent for otherwise. Shows the EEA/UK/Switzerland consent message
+		   Google requires for those regions (configured in the AdSense account itself — this
+		   snippet is the delivery mechanism, not the message content) and feeds the visitor's
+		   choice back into the Consent Mode signals set above via gtag('consent','update',...),
+		   which Google's own script does internally once a choice is made. Requires "Privacy &
+		   messaging" to actually be turned on and configured for this site in the AdSense
+		   account — this snippet alone is inert without that account-side setup. */}
+		{adsensePublisherId && (
+			<>
+				<script async src={`https://fundingchoicesmessages.google.com/i/${adsensePublisherId}?ers=1`}></script>
+				<script is:inline>
+					(function () {
+						function signalGooglefcPresent() {
+							if (!window.frames['googlefcPresent']) {
+								if (document.body) {
+									const iframe = document.createElement('iframe');
+									iframe.style = 'width: 0; height: 0; border: none; z-index: -1000; left: -1000px; top: -1000px;';
+									iframe.style.display = 'none';
+									iframe.name = 'googlefcPresent';
+									document.body.appendChild(iframe);
+								} else {
+									setTimeout(signalGooglefcPresent, 0);
+								}
+							}
+						}
+						signalGooglefcPresent();
+					})();
+				</script>
+			</>
+		)}
+
+		{siteFavicon ? <link rel="icon" href={siteFavicon} /> : <link rel="icon" type="image/svg+xml" href="/favicon.svg" />}
+		<meta name="theme-color" content="#1D4ED8" />
 		<meta name="generator" content={Astro.generator} />
-		<title>Astro Basics</title>
+		<SeoHead title={effectiveTitle} description={effectiveDescription} canonical={canonical} image={effectiveImage} noindex={noindex} jsonLd={jsonLd} siteName={siteName} hreflangSafe={hreflangSafe} />
+
+		{/* Admin-configured brand colors (Dashboard → الإعدادات → الشعار والألوان). Placed after
+		   global.css so these :root overrides win the cascade; a full 11-step shade ramp is
+		   derived from each hex (see lib/colorRamp.ts) so hover/dark-mode shades stay coherent
+		   instead of only the one exact input shade changing. No-op when unset. */}
+		{colorOverrideCSS && <style is:inline set:html={colorOverrideCSS} />}
+
+		{/* Theme Initialization Script (Prevents FOUC) */}
+		<script is:inline>
+			const theme = (() => {
+				if (typeof localStorage !== 'undefined' && localStorage.getItem('theme')) {
+					return localStorage.getItem('theme');
+				}
+				if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+					return 'dark';
+				}
+				return 'light';
+			})();
+
+			if (theme === 'light') {
+				document.documentElement.classList.remove('dark');
+			} else {
+				document.documentElement.classList.add('dark');
+			}
+			// Do NOT write back to localStorage here: this branch also runs for visitors who
+			// never chose a theme (matchMedia fallback), and persisting that snapshot would
+			// permanently stick them to it even after their OS preference changes. Only an
+			// explicit toggle click (see Header.astro's .theme-toggle handler) should persist.
+		</script>
+
+		{gaId && (
+			<>
+				<script async src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`}></script>
+				<script define:vars={{ gaId }}>
+					window.dataLayer = window.dataLayer || [];
+					function gtag() { dataLayer.push(arguments); }
+					gtag('js', new Date());
+					gtag('config', gaId);
+				</script>
+			</>
+		)}
+
+		{fbPixelId && (
+			<>
+				<script define:vars={{ fbPixelId }}>
+					!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+					n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;
+					n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;
+					t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,
+					document,'script','https://connect.facebook.net/en_US/fbevents.js');
+					fbq('init', fbPixelId);
+					fbq('track', 'PageView');
+				</script>
+				<noscript>
+					<img height="1" width="1" style="display:none" src={`https://www.facebook.com/tr?id=${fbPixelId}&ev=PageView&noscript=1`} alt="" />
+				</noscript>
+			</>
+		)}
+
+		{/* AdSense base loader only (Dashboard → adsense_client). This enables Auto ads if the
+		   AdSense account has that turned on; it does not place any manual <ins class="adsbygoogle">
+		   ad units — deciding where ads should appear on each page is a layout/UX/policy-density
+		   decision for the site owner, not something to guess at here. google_ads_* (per-position
+		   ad slot IDs) remain unused pending that decision. */}
+		{adsenseClient && enableAds && (
+			<script
+				async
+				src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${adsenseClient}`}
+				crossorigin="anonymous"
+			></script>
+		)}
 	</head>
-	<body>
-		<slot />
+	<body class="flex min-h-screen flex-col font-sans antialiased transition-colors duration-300">
+		<a href="#main-content" class="skip-link">تجاوز إلى المحتوى</a>
+		<Header siteName={siteName} siteLogo={siteLogo} />
+		<main id="main-content" class="flex-grow">
+			<slot />
+		</main>
+		<Footer siteName={siteName} siteLogo={siteLogo} footerText={footerText} socialLinks={socialLinks} />
 	</body>
 </html>
-
-<style>
-	html,
-	body {
-		margin: 0;
-		width: 100%;
-		height: 100%;
-	}
-</style>

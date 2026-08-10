@@ -1,0 +1,16 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import '../../../styles/lesson-pages.css';
+import ClassesDirectoryPage from '../../../components/ClassesDirectoryPage.astro';
+import { apiFetchList, applyListStatus } from '../../../lib/api';
+
+const countryCode = Astro.locals.countryCode!;
+const countryId = Astro.locals.countryId;
+const classesResult = await apiFetchList<any>('/school-classes', { countryId });
+const { ok, items: classes, message } = classesResult;
+applyListStatus(Astro, classesResult);
+---
+
+<Layout title="الصفوف الدراسية" description="اختر صفك الدراسي للوصول إلى المواد والفصول والخطط والملفات التعليمية المناسبة لمرحلتك." hreflangSafe>
+	<ClassesDirectoryPage classes={classes} countryCode={countryCode} ok={ok} message={message} />
+</Layout>

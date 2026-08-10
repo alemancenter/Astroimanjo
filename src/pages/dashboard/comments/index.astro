@@ -1,0 +1,210 @@
+---
+import DashboardLayout from '../../../layouts/DashboardLayout.astro';
+import DashboardAlert from '../../../components/ui/DashboardAlert.astro';
+import Pagination from '../../../components/ui/Pagination.astro';
+import { requireDashboard } from '../../../lib/auth';
+import { apiFetch } from '../../../lib/api';
+import { COUNTRIES, getCountryById } from '../../../lib/countries';
+
+const ARTICLE_TYPE = 'App\\Models\\Article';
+const POST_TYPE = 'App\\Models\\Post';
+const validStatuses = new Set(['pending', 'approved', 'rejected', 'all']);
+const validKinds = new Set(['all', 'articles', 'posts']);
+
+const guard = await requireDashboard(Astro, 'manage comments');
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+
+const currentCountry = getCountryById(Astro.locals.countryId);
+const countryCode = currentCountry.code;
+const requestedStatus = Astro.url.searchParams.get('status') || 'pending';
+const status = validStatuses.has(requestedStatus) ? requestedStatus : 'pending';
+const requestedKind = Astro.url.searchParams.get('type') || 'all';
+const kind = validKinds.has(requestedKind) ? requestedKind : 'all';
+const search = (Astro.url.searchParams.get('q') || '').trim();
+const requestedPage = Number.parseInt(Astro.url.searchParams.get('page') || '1', 10);
+const page = Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+const commentableType = kind === 'articles' ? ARTICLE_TYPE : kind === 'posts' ? POST_TYPE : undefined;
+
+const result = await apiFetch<any[]>(`/dashboard/comments/${countryCode}`, {
+	countryId: Astro.locals.countryId,
+	cookieHeader: `token=${Astro.cookies.get('token')?.value}`,
+	params: {
+		status: status === 'all' ? undefined : status,
+		commentable_type: commentableType,
+		q: search,
+		page,
+		per_page: 20,
+	},
+});
+const comments = Array.isArray(result.data) ? result.data : [];
+const meta = result.meta;
+const total = meta?.total ?? comments.length;
+const currentUrl = `${Astro.url.pathname}${Astro.url.search}`;
+
+function statusLabel(value: string): string {
+	return value === 'approved' ? 'مقبول' : value === 'rejected' ? 'مرفوض' : 'قيد المراجعة';
+}
+
+function contentInfo(comment: any) {
+	const isArticle = String(comment.commentable_type || '').includes('Article');
+	return {
+		label: isArticle ? 'مقال' : 'منشور',
+		href: isArticle
+			? `/${countryCode}/lesson/articles/${comment.commentable_id}`
+			: `/${countryCode}/posts/${comment.commentable_id}`,
+	};
+}
+---
+
+<DashboardLayout title="مراجعة التعليقات" user={user}>
+	<DashboardAlert />
+
+	<div class="comments-page">
+		<header class="comments-page-header">
+			<div>
+				<span class="comments-eyebrow">إدارة المحتوى</span>
+				<h1>التعليقات</h1>
+				<p>راجع تعليقات الزوار ووافق عليها قبل ظهورها في المقالات والمنشورات.</p>
+			</div>
+			<div class="comments-header-actions">
+				<label class="comments-country-control">
+					<span aria-hidden="true">{currentCountry.flag}</span>
+					<select id="comments-country-select" data-current={Astro.locals.countryId} aria-label="تبديل قاعدة البيانات">
+						{COUNTRIES.map((country) => <option value={country.id} selected={country.id === Astro.locals.countryId}>{country.name}</option>)}
+					</select>
+				</label>
+				<span class="comments-pending-note"><i></i>{status === 'pending' ? `${total.toLocaleString('ar-EG')} بانتظار المراجعة` : 'مراجعة التعليقات'}</span>
+			</div>
+		</header>
+
+		<section class="comments-filter-card" aria-label="البحث والتصفية">
+			<form method="get" class="comments-filter-form">
+				<label class="comments-search-field">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7" /><path stroke-linecap="round" stroke-width="1.8" d="m16.5 16.5 4 4" /></svg>
+					<input type="search" name="q" value={search} placeholder="ابحث داخل نص التعليق..." aria-label="البحث داخل التعليقات" />
+				</label>
+				<label class="comments-select-field"><span>نوع المحتوى</span><select name="type"><option value="all" selected={kind === 'all'}>المقالات والمنشورات</option><option value="articles" selected={kind === 'articles'}>المقالات فقط</option><option value="posts" selected={kind === 'posts'}>المنشورات فقط</option></select></label>
+				<label class="comments-select-field"><span>الحالة</span><select name="status"><option value="pending" selected={status === 'pending'}>قيد المراجعة</option><option value="approved" selected={status === 'approved'}>مقبولة</option><option value="rejected" selected={status === 'rejected'}>مرفوضة</option><option value="all" selected={status === 'all'}>جميع الحالات</option></select></label>
+				<button type="submit" class="comments-filter-button">تطبيق</button>
+				{(search || kind !== 'all' || status !== 'pending') && <a href="/dashboard/comments" class="comments-clear-button">مسح التصفية</a>}
+			</form>
+			<div class="comments-result-count"><strong>{total.toLocaleString('ar-EG')}</strong><span>تعليق</span></div>
+		</section>
+
+		{!result.ok ? (
+			<section class="comments-error"><strong>تعذّر تحميل التعليقات</strong><p>{result.message}</p><a href={Astro.url.pathname}>إعادة المحاولة</a></section>
+		) : (
+			<>
+				<section class="comments-table-card comments-desktop">
+					<div class="comments-table-heading">
+						<div><h2>{status === 'pending' ? 'تعليقات تحتاج إلى قرار' : status === 'approved' ? 'التعليقات المقبولة' : status === 'rejected' ? 'التعليقات المرفوضة' : 'جميع التعليقات'}</h2><p>الموافقة تنشر التعليق، والرفض يخفيه دون حذفه نهائيًا.</p></div>
+						<form id="bulk-comments-form" method="post" action={`/api/dashboard/comments/${countryCode}/bulk-delete`} data-confirm-bulk>
+							<input type="hidden" name="redirect_to" value={currentUrl} />
+							<button id="comments-bulk-delete" type="submit" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 7h16m-10 4v6m4-6v6m-7-10 .8 13h8.4L17 7m-7-3h4l1 3H9l1-3Z" /></svg><span>حذف المحدد</span></button>
+						</form>
+					</div>
+					<div class="comments-table-scroll">
+						<table>
+							<thead><tr><th class="comments-check-cell"><input id="comments-select-all" type="checkbox" aria-label="تحديد جميع تعليقات الصفحة" /></th><th>المستخدم</th><th>التعليق</th><th>المحتوى</th><th>الحالة</th><th>التاريخ</th><th><span class="sr-only">الإجراءات</span></th></tr></thead>
+							<tbody>
+								{comments.map((comment: any) => {
+									const content = contentInfo(comment);
+									const name = comment.user?.name || 'مستخدم';
+									const database = comment.database || countryCode;
+									return (
+										<tr>
+											<td class="comments-check-cell"><input class="comments-row-check" type="checkbox" name="ids" value={comment.id} form="bulk-comments-form" aria-label={`تحديد تعليق ${name}`} /></td>
+											<td><div class="comments-user"><span>{name.trim().charAt(0) || '؟'}</span><div><strong>{name}</strong><small>{comment.user?.email || `المستخدم #${comment.user_id || '—'}`}</small></div></div></td>
+											<td><div class="comments-body"><p>{comment.body}</p><small>رقم التعليق: {comment.id}</small></div></td>
+											<td><a href={content.href} target="_blank" rel="noreferrer" class="comments-content-link"><span>{content.label}</span><strong>#{comment.commentable_id}</strong><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M14 5h5v5m0-5-8 8M19 14v5H5V5h5" /></svg></a></td>
+											<td><span class={`comments-status is-${comment.status || 'pending'}`}><i></i>{statusLabel(comment.status)}</span></td>
+											<td><time datetime={comment.created_at}><strong>{comment.created_at ? new Date(comment.created_at).toLocaleDateString('ar-EG', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}</strong><small>{comment.created_at ? new Date(comment.created_at).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) : ''}</small></time></td>
+											<td><div class="comments-actions">
+												{comment.status !== 'approved' && <form method="post" action={`/api/dashboard/comments/${database}/${comment.id}/approve`}><input type="hidden" name="redirect_to" value={currentUrl} /><button type="submit" class="comments-action is-approve" aria-label={`قبول تعليق ${name}`} title="قبول ونشر"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m5 12 4 4L19 6" /></svg></button></form>}
+												{comment.status !== 'rejected' && <form method="post" action={`/api/dashboard/comments/${database}/${comment.id}/reject`}><input type="hidden" name="redirect_to" value={currentUrl} /><button type="submit" class="comments-action is-reject" aria-label={`رفض تعليق ${name}`} title="رفض وإخفاء"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-width="2" d="m7 7 10 10M17 7 7 17" /></svg></button></form>}
+												<form method="post" action={`/api/dashboard/comments/${database}/${comment.id}/delete`} data-confirm-delete><input type="hidden" name="redirect_to" value={currentUrl} /><button type="submit" class="comments-action is-delete" aria-label={`حذف تعليق ${name}`} title="حذف نهائي"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 7h16m-10 4v6m4-6v6m-7-10 .8 13h8.4L17 7m-7-3h4l1 3H9l1-3Z" /></svg></button></form>
+											</div></td>
+										</tr>
+									);
+								})}
+							</tbody>
+						</table>
+					</div>
+					{comments.length === 0 && <div class="comments-empty"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M5 5h14v11H9l-4 4V5Z" /></svg></span><h3>لا توجد تعليقات مطابقة</h3><p>لا توجد نتائج ضمن الحالة وخيارات التصفية الحالية.</p></div>}
+				</section>
+
+				<div class="comments-mobile">
+					{comments.map((comment: any) => {
+						const content = contentInfo(comment);
+						const name = comment.user?.name || 'مستخدم';
+						const database = comment.database || countryCode;
+						return (
+							<article class="comments-mobile-card">
+								<div class="comments-mobile-head"><span class="comments-mobile-avatar">{name.trim().charAt(0) || '؟'}</span><div><h2>{name}</h2><p>{comment.created_at ? new Date(comment.created_at).toLocaleString('ar-EG', { dateStyle: 'medium', timeStyle: 'short' }) : '—'}</p></div><span class={`comments-status is-${comment.status || 'pending'}`}><i></i>{statusLabel(comment.status)}</span></div>
+								<p class="comments-mobile-body">{comment.body}</p>
+								<a href={content.href} target="_blank" rel="noreferrer" class="comments-mobile-content"><span>{content.label} #{comment.commentable_id}</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M14 5h5v5m0-5-8 8M19 14v5H5V5h5" /></svg></a>
+								<div class="comments-mobile-actions">
+									{comment.status !== 'approved' && <form method="post" action={`/api/dashboard/comments/${database}/${comment.id}/approve`}><input type="hidden" name="redirect_to" value={currentUrl} /><button type="submit" class="is-approve">قبول ونشر</button></form>}
+									{comment.status !== 'rejected' && <form method="post" action={`/api/dashboard/comments/${database}/${comment.id}/reject`}><input type="hidden" name="redirect_to" value={currentUrl} /><button type="submit" class="is-reject">رفض</button></form>}
+									<form method="post" action={`/api/dashboard/comments/${database}/${comment.id}/delete`} data-confirm-delete><input type="hidden" name="redirect_to" value={currentUrl} /><button type="submit" class="is-delete">حذف</button></form>
+								</div>
+							</article>
+						);
+					})}
+					{comments.length === 0 && <div class="comments-empty"><h3>لا توجد تعليقات مطابقة</h3><p>لا توجد نتائج ضمن الحالة وخيارات التصفية الحالية.</p></div>}
+				</div>
+
+				{meta && <Pagination currentPage={meta.current_page} lastPage={meta.last_page} url={Astro.url} />}
+			</>
+		)}
+	</div>
+
+	<script>
+		const checks = Array.from(document.querySelectorAll<HTMLInputElement>('.comments-row-check'));
+		const selectAll = document.getElementById('comments-select-all') as HTMLInputElement | null;
+		const bulkButton = document.getElementById('comments-bulk-delete') as HTMLButtonElement | null;
+		const bulkLabel = bulkButton?.querySelector('span');
+		const updateSelection = () => {
+			const selected = checks.filter((checkbox) => checkbox.checked).length;
+			if (bulkButton) bulkButton.disabled = selected === 0;
+			if (bulkLabel) bulkLabel.textContent = selected ? `حذف المحدد (${selected})` : 'حذف المحدد';
+			if (selectAll) {
+				selectAll.checked = checks.length > 0 && selected === checks.length;
+				selectAll.indeterminate = selected > 0 && selected < checks.length;
+			}
+		};
+		selectAll?.addEventListener('change', () => { checks.forEach((checkbox) => { checkbox.checked = selectAll.checked; }); updateSelection(); });
+		checks.forEach((checkbox) => checkbox.addEventListener('change', updateSelection));
+
+		document.querySelectorAll<HTMLFormElement>('[data-confirm-delete]').forEach((form) => {
+			form.addEventListener('submit', (event) => {
+				if (!window.confirm('سيتم حذف التعليق نهائيًا. هل تريد المتابعة؟')) event.preventDefault();
+			});
+		});
+		document.querySelector<HTMLFormElement>('[data-confirm-bulk]')?.addEventListener('submit', (event) => {
+			const count = checks.filter((checkbox) => checkbox.checked).length;
+			if (!count || !window.confirm(`سيتم حذف ${count} تعليق نهائيًا. هل تريد المتابعة؟`)) event.preventDefault();
+		});
+
+		const countrySelect = document.getElementById('comments-country-select') as HTMLSelectElement | null;
+		countrySelect?.addEventListener('change', () => {
+			if (countrySelect.value === countrySelect.dataset.current) return;
+			const url = new URL(window.location.href);
+			url.searchParams.set('country', countrySelect.value);
+			url.searchParams.delete('page');
+			window.location.href = url.toString();
+		});
+	</script>
+
+	<style>
+		.comments-page{--cm-ink:#102a43;--cm-muted:#718096;--cm-line:#dfe6ee;max-width:1360px;margin-inline:auto;padding-bottom:2rem}.comments-page-header{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;margin-bottom:1rem}.comments-eyebrow{display:block;margin-bottom:.25rem;color:#1a4d8f;font-size:.65rem;font-weight:850}.comments-page-header h1{margin:0;color:#061a3a;font-size:clamp(1.35rem,1.1rem + .65vw,1.85rem);font-weight:900;line-height:1.3}.comments-page-header p{margin:.28rem 0 0;color:var(--cm-muted);font-size:.75rem}.comments-header-actions{display:flex;align-items:center;gap:.55rem}.comments-country-control{display:flex;min-height:2.6rem;align-items:center;gap:.4rem;border:1px solid var(--cm-line);border-radius:.6rem;background:#fff;padding:.35rem .55rem}.comments-country-control>span{font-size:1rem}.comments-country-control select{border:0;background:transparent;color:var(--cm-ink);font-family:inherit;font-size:.66rem;font-weight:750;outline:0}.comments-pending-note{display:inline-flex;min-height:2.6rem;align-items:center;gap:.35rem;border:1px solid #ead6b8;border-radius:.6rem;background:#fff;padding:.45rem .7rem;color:#9a641c;font-size:.62rem;font-weight:800}.comments-pending-note i{width:.35rem;height:.35rem;border-radius:50%;background:#e8a244}
+		.comments-filter-card{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:1rem;border:1px solid var(--cm-line);border-radius:.8rem;background:#fff;padding:.7rem;box-shadow:0 1px 2px rgb(15 23 42/.06)}.comments-filter-form{display:flex;min-width:0;flex:1;flex-wrap:wrap;align-items:center;gap:.55rem}.comments-search-field{position:relative;display:block;min-width:14rem;flex:1}.comments-search-field svg{position:absolute;top:50%;right:.7rem;width:.9rem;height:.9rem;color:#8796a8;transform:translateY(-50%)}.comments-search-field input,.comments-select-field select{width:100%;min-height:2.35rem;border:1px solid #d9e2ec;border-radius:.5rem;background:#fff;color:var(--cm-ink);font-family:inherit;font-size:.69rem}.comments-search-field input{padding:.45rem 2rem .45rem .65rem}.comments-search-field input:focus,.comments-select-field select:focus{border-color:#81a7da;outline:0;box-shadow:0 0 0 3px rgb(26 77 143/.07)}.comments-select-field{display:flex;align-items:center;gap:.35rem}.comments-select-field>span{color:var(--cm-muted);font-size:.61rem;font-weight:750}.comments-select-field select{width:10rem;padding:.4rem .5rem}.comments-filter-button,.comments-clear-button{display:inline-flex;min-height:2.35rem;align-items:center;justify-content:center;border-radius:.5rem;padding:.4rem .75rem;font-size:.65rem;font-weight:800}.comments-filter-button{border:1px solid #315f9f;background:#fff;color:#1a4d8f}.comments-filter-button:hover{background:#f7f9fc}.comments-clear-button{color:#64748b}.comments-clear-button:hover{color:#1a4d8f}.comments-result-count{display:flex;align-items:baseline;gap:.3rem;border-right:1px solid #e7ecf2;padding-inline:1rem .25rem;color:var(--cm-muted);font-size:.64rem;white-space:nowrap}.comments-result-count strong{color:var(--cm-ink);font-size:.88rem}
+		.comments-table-card{overflow:hidden;border:1px solid var(--cm-line);border-radius:.85rem;background:#fff;box-shadow:0 1px 2px rgb(15 23 42/.06)}.comments-table-heading{display:flex;align-items:center;justify-content:space-between;gap:1rem;border-bottom:1px solid #edf1f5;padding:.85rem 1rem}.comments-table-heading h2{margin:0;color:var(--cm-ink);font-size:.84rem;font-weight:850}.comments-table-heading p{margin:.16rem 0 0;color:var(--cm-muted);font-size:.6rem}.comments-table-heading button{display:inline-flex;min-height:2rem;align-items:center;gap:.35rem;border:1px solid #fecaca;border-radius:.45rem;background:#fff;padding:.35rem .6rem;color:#dc2626;font-size:.59rem;font-weight:800}.comments-table-heading button:disabled{cursor:not-allowed;border-color:#e5e9ee;color:#a4afbc;opacity:.65}.comments-table-heading button:not(:disabled):hover{background:#fff7f7}.comments-table-heading button svg{width:.8rem;height:.8rem}.comments-table-scroll{overflow-x:auto}.comments-table-card table{width:100%;border-collapse:collapse}.comments-table-card th{padding:.68rem .7rem;background:#f8fafc;color:#718096;font-size:.59rem;font-weight:800;text-align:right;white-space:nowrap}.comments-table-card td{padding:.7rem;border-top:1px solid #edf1f5;color:#64748b;font-size:.66rem;vertical-align:middle}.comments-table-card tbody tr{transition:background-color .14s}.comments-table-card tbody tr:hover{background:#fafcff}.comments-check-cell{width:2.5rem;text-align:center!important}.comments-check-cell input{width:.9rem;height:.9rem;accent-color:#1a4d8f}
+		.comments-user{display:flex;min-width:9rem;align-items:center;gap:.52rem}.comments-user>span,.comments-mobile-avatar{display:grid;width:2.1rem;height:2.1rem;flex:none;place-items:center;border-radius:50%;background:#eaf2fb;color:#1a4d8f;font-size:.68rem;font-weight:900}.comments-user>div{display:grid;min-width:0}.comments-user strong{overflow:hidden;max-width:9rem;color:var(--cm-ink);font-size:.67rem;text-overflow:ellipsis;white-space:nowrap}.comments-user small{overflow:hidden;max-width:9rem;color:#96a2b0;font-size:.51rem;text-overflow:ellipsis;white-space:nowrap}.comments-body{max-width:29rem}.comments-body p{display:-webkit-box;overflow:hidden;margin:0;color:#344b63;font-size:.67rem;line-height:1.65;-webkit-box-orient:vertical;-webkit-line-clamp:2}.comments-body small{display:block;margin-top:.14rem;color:#a0aab7;font-size:.5rem}.comments-content-link{display:inline-flex;align-items:center;gap:.25rem;border:1px solid #e2e8ef;border-radius:.45rem;background:#fafbfd;padding:.28rem .42rem;color:#52667e}.comments-content-link:hover{border-color:#a9bdd5;color:#1a4d8f}.comments-content-link span{font-size:.54rem}.comments-content-link strong{font-size:.61rem}.comments-content-link svg{width:.67rem;height:.67rem}.comments-status{display:inline-flex;align-items:center;gap:.28rem;border-radius:999px;padding:.23rem .45rem;font-size:.56rem;font-weight:800;white-space:nowrap}.comments-status i{width:.29rem;height:.29rem;border-radius:50%;background:currentColor}.comments-status.is-approved{background:#ecfdf5;color:#08785d}.comments-status.is-rejected{background:#fff1f2;color:#c5303e}.comments-status.is-pending{background:#fff7e8;color:#ad680d}.comments-table-card time{display:grid;min-width:5rem}.comments-table-card time strong{color:#52667e;font-size:.58rem;font-weight:700}.comments-table-card time small{color:#9aa6b4;font-size:.5rem}.comments-actions{display:flex;align-items:center;justify-content:flex-end;gap:.25rem}.comments-action{display:inline-grid;width:1.75rem;height:1.75rem;place-items:center;border:1px solid #dfe6ee;border-radius:.42rem;background:#fff;color:#52667e}.comments-action svg{width:.8rem;height:.8rem}.comments-action.is-approve{color:#0f8464}.comments-action.is-approve:hover{border-color:#9bd5c4;background:#f2fbf8}.comments-action.is-reject{color:#d07b13}.comments-action.is-reject:hover{border-color:#f1cc96;background:#fffaf2}.comments-action.is-delete{color:#dc3545}.comments-action.is-delete:hover{border-color:#fecaca;background:#fff7f7}
+		.comments-empty,.comments-error{display:flex;min-height:15rem;align-items:center;justify-content:center;flex-direction:column;padding:2rem;text-align:center}.comments-empty>span{display:grid;width:3rem;height:3rem;place-items:center;border-radius:.75rem;background:#f1f5f9;color:#718096}.comments-empty svg{width:1.35rem;height:1.35rem}.comments-empty h3,.comments-error strong{margin:.7rem 0 0;color:var(--cm-ink);font-size:.8rem}.comments-empty p,.comments-error p{margin:.25rem 0 0;color:var(--cm-muted);font-size:.64rem}.comments-error{border:1px solid #fecaca;border-radius:.8rem;background:#fff}.comments-error a{margin-top:.65rem;color:#1a4d8f;font-size:.65rem;font-weight:800}.comments-mobile{display:none}.comments-mobile-card{border:1px solid var(--cm-line);border-radius:.75rem;background:#fff;padding:.85rem;box-shadow:0 1px 2px rgb(15 23 42/.06)}.comments-mobile-head{display:flex;align-items:flex-start;gap:.55rem}.comments-mobile-head>div{min-width:0;flex:1}.comments-mobile-head h2{margin:0;color:var(--cm-ink);font-size:.71rem}.comments-mobile-head p{margin:.1rem 0 0;color:var(--cm-muted);font-size:.54rem}.comments-mobile-body{margin:.7rem 0 0;border-right:2px solid #b7cce5;background:#f8fafc;padding:.65rem .7rem;color:#344b63;font-size:.66rem;line-height:1.75}.comments-mobile-content{display:flex;align-items:center;justify-content:space-between;margin-top:.55rem;color:#1a4d8f;font-size:.59rem;font-weight:750}.comments-mobile-content svg{width:.75rem;height:.75rem}.comments-mobile-actions{display:flex;gap:.38rem;margin-top:.7rem;border-top:1px solid #edf1f5;padding-top:.65rem}.comments-mobile-actions button{display:inline-flex;min-height:2rem;align-items:center;justify-content:center;border:1px solid #dce4ed;border-radius:.43rem;background:#fff;padding:.33rem .58rem;color:#42526a;font-size:.59rem;font-weight:750}.comments-mobile-actions .is-approve{color:#0f8464}.comments-mobile-actions .is-reject{color:#c8750e}.comments-mobile-actions .is-delete{color:#dc2626}
+		:global(.dark) .comments-page{--cm-ink:#f8fafc;--cm-muted:#94a3b8;--cm-line:#334155}:global(.dark) .comments-page-header h1{color:#fff}:global(.dark) .comments-country-control,:global(.dark) .comments-pending-note,:global(.dark) .comments-filter-card,:global(.dark) .comments-table-card,:global(.dark) .comments-mobile-card,:global(.dark) .comments-search-field input,:global(.dark) .comments-select-field select,:global(.dark) .comments-action,:global(.dark) .comments-mobile-actions button,:global(.dark) .comments-error{border-color:#334155;background:#0f2547;color:#cbd5e1}:global(.dark) .comments-table-card th{background:#0b1e38}:global(.dark) .comments-table-heading,:global(.dark) .comments-table-card td,:global(.dark) .comments-mobile-actions{border-color:#263b56}:global(.dark) .comments-table-card tbody tr:hover{background:#122b4c}:global(.dark) .comments-body p,:global(.dark) .comments-mobile-body{color:#d4dde8}:global(.dark) .comments-mobile-body{background:#142943}:global(.dark) .comments-content-link{border-color:#35475c;background:#132943}
+		@media(max-width:767px){.comments-page-header{align-items:stretch;flex-direction:column}.comments-header-actions{display:grid;grid-template-columns:1fr 1fr}.comments-country-control,.comments-pending-note{justify-content:center}.comments-filter-card{align-items:stretch;flex-direction:column}.comments-filter-form{align-items:stretch;flex-direction:column}.comments-search-field,.comments-select-field,.comments-select-field select{width:100%}.comments-select-field{align-items:stretch;flex-direction:column}.comments-result-count{border:0;border-top:1px solid #edf1f5;padding:.65rem .15rem 0}.comments-desktop{display:none}.comments-mobile{display:grid;gap:.7rem}}
+		@media(max-width:440px){.comments-mobile-head .comments-status{font-size:.5rem}}
+	</style>
+</DashboardLayout>

@@ -1,0 +1,8 @@
+---
+// Legacy bare path — the canonical listing lives at /{countryCode}/categories
+// (country is resolved from the cookie/query fallback since this URL has no country segment).
+import { getCountryById } from '../../lib/countries';
+
+const countryCode = getCountryById(Astro.locals.countryId).code;
+return Astro.redirect(`/${countryCode}/categories`, 307);
+---

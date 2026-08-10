@@ -1,0 +1,81 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import '../../../styles/content-pages.css';
+import Breadcrumbs from '../../../components/ui/Breadcrumbs.astro';
+import PostCard from '../../../components/ui/PostCard.astro';
+import Pagination from '../../../components/ui/Pagination.astro';
+import EmptyState from '../../../components/ui/EmptyState.astro';
+import ErrorState from '../../../components/ui/ErrorState.astro';
+import { apiFetch, apiFetchList, applyListStatus } from '../../../lib/api';
+
+const countryCode = Astro.locals.countryCode!;
+const countryId = Astro.locals.countryId;
+const params = Astro.url.searchParams;
+const q = params.get('search') || '';
+const categoryId = params.get('category_id') || '';
+const page = Math.max(1, Number(params.get('page')) || 1);
+// See /{countryCode}/articles for the same reasoning: filter/search permutations shouldn't
+// be indexed as their own result, only the unfiltered (optionally paginated) listing should.
+const hasFilters = !!(q || categoryId);
+
+const [{ items: categories }, postsResult] = await Promise.all([
+	apiFetchList<any>('/categories', { countryId }),
+	apiFetch<any[]>('/posts', {
+		countryId,
+		params: { search: q || undefined, category_id: categoryId || undefined, page, per_page: 12 },
+	}),
+]);
+const posts = Array.isArray(postsResult.data) ? postsResult.data : [];
+const meta = postsResult.meta;
+applyListStatus(Astro, postsResult);
+---
+
+<Layout title="المنشورات" description="ابحث وتصفح جميع منشورات ومقالات الموقع." hreflangSafe noindex={hasFilters}>
+	<Breadcrumbs items={[{ label: 'المنشورات' }]} />
+
+	<div class="page-shell">
+		<header class="page-heading"><span class="page-eyebrow">مكتبة المحتوى</span><h1 class="page-title">المنشورات</h1><p class="page-description">ابحث بالكلمة أو صفّ النتائج حسب القسم للوصول إلى المنشور المناسب بسرعة.</p></header>
+
+		<form method="get" class="surface-card mb-10 flex flex-wrap gap-3 p-4 sm:p-5" aria-label="البحث وتصفية المنشورات">
+			<input
+				type="text"
+				name="search"
+				value={q}
+				placeholder="ابحث عن منشور..."
+				class="form-control min-w-[220px] flex-1"
+			/>
+
+			<select
+				name="category_id"
+				onchange="this.form.submit()"
+				class="form-control w-auto min-w-40"
+			>
+				<option value="">كل الأقسام</option>
+				{categories.map((cat: any) => (
+					<option value={cat.id} selected={String(cat.id) === categoryId}>
+						{cat.name}
+					</option>
+				))}
+			</select>
+
+			<button type="submit" class="btn-primary">بحث</button>
+		</form>
+
+		{
+			!postsResult.ok ? (
+				<ErrorState message={postsResult.message} />
+			) : posts.length > 0 ? (
+				<>
+					<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+						{posts.map((post: any, i: number) => (
+							<PostCard post={post} href={`/${countryCode}/posts/${post.id}`} index={i} />
+						))}
+					</div>
+					{meta && <Pagination currentPage={meta.current_page} lastPage={meta.last_page} url={Astro.url} />}
+				</>
+			) : (
+				<EmptyState message="لم يتم العثور على نتائج مطابقة." />
+			)
+		}
+	</div>
+</Layout>

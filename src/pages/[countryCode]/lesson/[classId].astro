@@ -1,0 +1,22 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import '../../../styles/lesson-pages.css';
+import ClassDetail from '../../../components/ClassDetail.astro';
+import { apiFetch, applyNotFoundStatus } from '../../../lib/api';
+
+const { classId } = Astro.params;
+const countryCode = Astro.locals.countryCode!;
+const countryId = Astro.locals.countryId;
+const result = await apiFetch<any>(`/school-classes/${classId}`, { countryId });
+const cls = result.data;
+if (!result.ok || !cls) applyNotFoundStatus(Astro, result);
+---
+
+<Layout title={cls ? cls.grade_name : 'الصف الدراسي'} description={cls ? `تصفح مواد ${cls.grade_name} الدراسية وملفاتها التعليمية.` : undefined}>
+	<ClassDetail
+		countryCode={countryCode}
+		schoolClass={cls}
+		resultOk={result.ok}
+		resultMessage={result.message}
+	/>
+</Layout>

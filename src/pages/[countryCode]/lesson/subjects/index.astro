@@ -1,0 +1,6 @@
+---
+// Bare /{countryCode}/lesson/subjects has no page either — a subject only exists in the
+// context of a specific id (/lesson/subjects/{id}). Same fallback as lesson/index.astro.
+const { countryCode } = Astro.params;
+return Astro.redirect(`/${countryCode}/classes`, 307);
+---
