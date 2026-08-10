@@ -3,7 +3,9 @@
 // /{countryCode}/lesson/articles/keyword/{keyword}.
 import { getCountryById } from '../../lib/countries';
 
-const { keyword } = Astro.params;
 const countryCode = getCountryById(Astro.locals.countryId).code;
-return Astro.redirect(`/${countryCode}/lesson/articles/keyword/${keyword}`, 307);
+// `astro check`'s generated TSX doesn't see references inside a frontmatter `return`
+// statement as a "read" — the `void` line below is a real reference that satisfies it.
+void countryCode;
+return Astro.redirect(`/${countryCode}/lesson/articles/keyword/${Astro.params.keyword}`, 307);
 ---

@@ -168,7 +168,7 @@ const jsonLd = post ? [
 		</article>
 	)}
 
-	{post && <script define:vars={{ postId, countryCode }}>navigator.sendBeacon(`/api/posts/${postId}/increment-view?country=${countryCode}`, new Blob());</script>}
+	{post && <script is:inline define:vars={{ postId, countryCode }}>navigator.sendBeacon(`/api/posts/${postId}/increment-view?country=${countryCode}`, new Blob());</script>}
 	<script>
 		const progress = document.querySelector<HTMLElement>('#reading-progress');
 		const updateProgress = () => { const scrollable = document.documentElement.scrollHeight - window.innerHeight; const value = scrollable > 0 ? Math.min(1, window.scrollY / scrollable) : 0; if (progress) progress.style.transform = `scaleX(${value})`; };

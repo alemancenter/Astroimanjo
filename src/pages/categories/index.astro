@@ -4,5 +4,8 @@
 import { getCountryById } from '../../lib/countries';
 
 const countryCode = getCountryById(Astro.locals.countryId).code;
+// `astro check`'s generated TSX doesn't see references inside a frontmatter `return`
+// statement as a "read" — the `void` line below is a real reference that satisfies it.
+void countryCode;
 return Astro.redirect(`/${countryCode}/categories`, 307);
 ---

@@ -1,7 +1,9 @@
 ---
 import { getCountryById } from '../../lib/countries';
 
-const fileId = Astro.params.fileId;
 const countryCode = getCountryById(Astro.locals.countryId).code;
-return Astro.redirect(`/${countryCode}/download/${fileId}`, 307);
+// `astro check`'s generated TSX doesn't see references inside a frontmatter `return`
+// statement as a "read" — the `void` line below is a real reference that satisfies it.
+void countryCode;
+return Astro.redirect(`/${countryCode}/download/${Astro.params.fileId}`, 307);
 ---

@@ -110,7 +110,7 @@ const socialLinks = {
 		   account — this snippet alone is inert without that account-side setup. */}
 		{adsensePublisherId && (
 			<>
-				<script async src={`https://fundingchoicesmessages.google.com/i/${adsensePublisherId}?ers=1`}></script>
+				<script is:inline async src={`https://fundingchoicesmessages.google.com/i/${adsensePublisherId}?ers=1`}></script>
 				<script is:inline>
 					(function () {
 						function signalGooglefcPresent() {
@@ -168,8 +168,8 @@ const socialLinks = {
 
 		{gaId && (
 			<>
-				<script async src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`}></script>
-				<script define:vars={{ gaId }}>
+				<script is:inline async src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`}></script>
+				<script is:inline define:vars={{ gaId }}>
 					window.dataLayer = window.dataLayer || [];
 					function gtag() { dataLayer.push(arguments); }
 					gtag('js', new Date());
@@ -180,7 +180,7 @@ const socialLinks = {
 
 		{fbPixelId && (
 			<>
-				<script define:vars={{ fbPixelId }}>
+				<script is:inline define:vars={{ fbPixelId }}>
 					!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
 					n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;
 					n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;
@@ -202,6 +202,7 @@ const socialLinks = {
 		   ad slot IDs) remain unused pending that decision. */}
 		{adsenseClient && enableAds && (
 			<script
+				is:inline
 				async
 				src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${adsenseClient}`}
 				crossorigin="anonymous"

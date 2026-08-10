@@ -96,4 +96,4 @@ const xDefaultHref = currentCountryCode && hreflangSafe
    admin-authored text (e.g. article.title) — a title containing "</script>" would close this
    tag early and inject arbitrary HTML into every visitor's page. Replacing "<" with its
    unicode escape neutralizes that without changing the parsed JSON value. */}
-{jsonLdEntries.map((entry) => <script type="application/ld+json" set:html={JSON.stringify(entry).replace(/</g, '\\u003c')} />)}
+{jsonLdEntries.map((entry) => <script is:inline type="application/ld+json" set:html={JSON.stringify(entry).replace(/</g, '\\u003c')} />)}

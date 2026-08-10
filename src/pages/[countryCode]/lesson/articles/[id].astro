@@ -268,7 +268,7 @@ const jsonLd = article
 	}
 
 	{article && (
-		<script define:vars={{ articleId: article.id, countryCode }}>
+		<script is:inline define:vars={{ articleId: article.id, countryCode }}>
 			navigator.sendBeacon(`/api/articles/${articleId}/increment-view?country=${countryCode}`, new Blob());
 		</script>
 	)}

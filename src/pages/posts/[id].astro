@@ -2,7 +2,9 @@
 // Legacy bare path — the canonical post page lives at /{countryCode}/posts/{id}.
 import { getCountryById } from '../../lib/countries';
 
-const { id } = Astro.params;
 const countryCode = getCountryById(Astro.locals.countryId).code;
-return Astro.redirect(`/${countryCode}/posts/${id}`, 307);
+// `astro check`'s generated TSX doesn't see references inside a frontmatter `return`
+// statement as a "read" — the `void` line below is a real reference that satisfies it.
+void countryCode;
+return Astro.redirect(`/${countryCode}/posts/${Astro.params.id}`, 307);
 ---
