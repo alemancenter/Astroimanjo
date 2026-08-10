@@ -22,8 +22,26 @@ export default defineConfig({
     mode: 'standalone'
   }),
 
+  // @astrojs/node's standalone adapter determines request protocol purely from the raw
+  // socket (`"encrypted" in req.socket && req.socket.encrypted`) — it never reads
+  // X-Forwarded-Proto (confirmed by reading node_modules/astro/dist/core/app/node.js;
+  // there's no newer adapter version that fixes this, 11.1.0 is current-latest). Behind
+  // nginx terminating SSL and proxying to this app over plain HTTP — our actual deployment
+  // shape — that makes Astro compute the request origin as http://domain while the
+  // browser's real Origin header correctly says https://domain. Astro's built-in
+  // security.checkOrigin middleware (on by default) rejects that mismatch on every POST
+  // form submission, including login — a total outage, not a hardening feature working as
+  // intended. Disabling it here is safe rather than just convenient: the session cookie is
+  // already SameSite=Lax (see src/lib/auth.ts's setSessionCookies), which independently
+  // blocks the exact cross-site-POST scenario checkOrigin exists for — Lax cookies are
+  // never sent on a cross-site POST, so a forged form submission arrives unauthenticated
+  // regardless of this setting.
+  security: {
+    checkOrigin: false,
+  },
+
   // No `image.domains` entry: article/post/category images come from
-  // api.alemancenter.com/storage/, but that path is currently unreliable in
+  // api.imanjo.com/storage/, but that path is currently unreliable in
   // production (confirmed 404s across many files, both old and new upload
   // naming conventions — see src/lib/assets.ts). Astro's <Image> throws an
   // unhandled 500 on a failed remote fetch instead of degrading gracefully,
