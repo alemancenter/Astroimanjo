@@ -51,7 +51,11 @@ const showHomeAd2 = hasHomeContent && validAdsenseClient && (hasValidAdConfig(se
    settings (Layout.astro), then to a generic default if those aren't configured either. This
    is the one page where a site-wide "meta title/description" setting is conventionally meant
    to apply. */}
-<Layout enableAds={showHomeAd1 || showHomeAd2}>
+{/* Only hand off /home's embedded settings when that call actually succeeded — on failure,
+   let Layout fall back to its own independent /front/settings fetch instead of forcing it to
+   reuse an empty object, so branding/footer/ads config can still recover even though the rest
+   of the homepage is showing degraded/empty content. */}
+<Layout enableAds={showHomeAd1 || showHomeAd2} settings={home.ok ? settings : undefined}>
 	<Hero countryCode={countryCode} />
 	<AudiencePaths countryCode={countryCode} />
 

@@ -7,6 +7,14 @@ import SeoHead from '../components/ui/SeoHead.astro';
 import { apiFetch } from '../lib/api';
 import { assetUrl } from '../lib/assets';
 import { generateShadeRamp } from '../lib/colorRamp';
+// The site's body text is entirely Arabic — this is the one @font-face subset actually needed
+// for first paint. Without a preload hint the browser only discovers it after fetching AND
+// parsing the CSS that declares it (the @font-face rule lives in a separate, non-critical
+// stylesheet chunk), turning a fetch that could start immediately into one chained behind a
+// full CSS round-trip. `?url` resolves to the same hashed build output the CSS's own
+// url(...) reference points at, so this preload is guaranteed to match what's actually used
+// (a mismatched URL would just be wasted bandwidth, since preload requires an exact match).
+import alexandriaArabicFontUrl from '@fontsource-variable/alexandria/files/alexandria-arabic-wght-normal.woff2?url';
 
 interface Props {
 	/** Omit to fall back to the site-wide meta_title setting (used by the homepage). */
@@ -31,10 +39,18 @@ interface Props {
 	 * pass true on pages that actually carry ad placements and have been reviewed for it.
 	 */
 	enableAds?: boolean;
+	/**
+	 * Optional pre-fetched settings (identical shape to /front/settings — several backend
+	 * endpoints, like /home, already embed the same SettingService.GetPublic() result to avoid
+	 * a second round-trip on their own response). When provided, Layout skips its own fetch
+	 * entirely instead of re-requesting data the page already has. Most pages omit this and
+	 * Layout fetches normally.
+	 */
+	settings?: Record<string, string>;
 }
 
-const { title, description, canonical, image, noindex, jsonLd, hreflangSafe, enableAds = false } = Astro.props;
-const settings = (await apiFetch<Record<string, string>>('/front/settings', { countryId: Astro.locals.countryId })).data ?? {};
+const { title, description, canonical, image, noindex, jsonLd, hreflangSafe, enableAds = false, settings: prefetchedSettings } = Astro.props;
+const settings = prefetchedSettings ?? (await apiFetch<Record<string, string>>('/front/settings', { countryId: Astro.locals.countryId })).data ?? {};
 const siteName = settings.site_name?.trim() || 'موقع الإيمان التعليمي';
 const siteLogo = assetUrl(settings.site_logo?.trim(), 96);
 const siteFavicon = assetUrl(settings.site_favicon?.trim(), 64);
@@ -81,6 +97,7 @@ const socialLinks = {
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<link rel="preload" as="font" type="font/woff2" href={alexandriaArabicFontUrl} crossorigin="anonymous" />
 
 		{/* Google Consent Mode v2 — must be the FIRST script in <head>, before gtag.js or any
 		   other tracking script, so nothing storage-related fires before this default takes
