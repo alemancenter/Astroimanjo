@@ -1,0 +1,24 @@
+---
+// Server Island: "الاشتراكات" (teacher subscriptions) panel — one of the 9 previously-blocking
+// calls (/dashboard/teacher-subscriptions/dashboard).
+import DashboardNavIcon from './DashboardNavIcon.astro';
+import { apiFetch } from '../../lib/api';
+import { formatNumber } from '../../lib/dashboard-format';
+
+interface Props {
+	canTeacher: boolean;
+}
+
+const { canTeacher } = Astro.props;
+const cookieHeader = `token=${Astro.cookies.get('token')?.value}`;
+const result = canTeacher
+	? await apiFetch<any>('/dashboard/teacher-subscriptions/dashboard', { countryId: Astro.locals.countryId, cookieHeader })
+	: { ok: false, data: null };
+const teacherStats = result.data?.stats || {};
+---
+
+<section class="panel teacher-summary">
+	<header class="panel-heading"><div><span>مساحة المعلمين</span><h2>الاشتراكات</h2><p>حالة الطلبات والعضويات المدفوعة.</p></div><i><DashboardNavIcon name="subscription" class="size-5" /></i></header>
+	{canTeacher ? <div class="teacher-metrics"><div class="main"><span>اشتراكات نشطة</span><strong>{formatNumber(teacherStats.subscriptions_active)}</strong><small>من {formatNumber(teacherStats.teachers_total)} معلم</small></div><div><article><span>طلبات معلقة</span><strong>{formatNumber(teacherStats.orders_pending)}</strong></article><article><span>أجهزة نشطة</span><strong>{formatNumber(teacherStats.devices_active)}</strong></article><article><span>تنزيلات مميزة</span><strong>{formatNumber(teacherStats.premium_downloads)}</strong></article><article><span>توليد بالذكاء</span><strong>{formatNumber(teacherStats.ai_generations)}</strong></article></div></div> : <div class="locked-block"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg><span>بيانات الاشتراكات تحتاج الصلاحية المناسبة.</span></div>}
+	<a class="panel-link" href="/dashboard/teacher-subscriptions"><span>إدارة الاشتراكات</span><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6" /></svg></a>
+</section>

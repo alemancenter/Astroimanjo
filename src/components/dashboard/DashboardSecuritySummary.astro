@@ -1,0 +1,28 @@
+---
+// Server Island: "ملخص الأمان" panel — one of the 9 previously-blocking calls
+// (/dashboard/security/overview + /dashboard/security/stats).
+import { apiFetch } from '../../lib/api';
+import { formatNumber, numberValue } from '../../lib/dashboard-format';
+
+interface Props {
+	canSecurity: boolean;
+}
+
+const { canSecurity } = Astro.props;
+const cookieHeader = `token=${Astro.cookies.get('token')?.value}`;
+const countryId = Astro.locals.countryId;
+const unavailable = Promise.resolve({ ok: false, data: null });
+
+const [overviewResult, statsResult] = await Promise.all([
+	canSecurity ? apiFetch<any>('/dashboard/security/overview', { countryId, cookieHeader }) : unavailable,
+	canSecurity ? apiFetch<any>('/dashboard/security/stats', { countryId, cookieHeader }) : unavailable,
+]);
+const securityOverview = overviewResult.data || {};
+const securityStats = statsResult.data || {};
+---
+
+<section class="panel security-summary">
+	<header class="panel-heading"><div><span>آخر 24 ساعة</span><h2>ملخص الأمان</h2><p>الأحداث الحرجة والعناوين المحظورة.</p></div><i class:list={['security-state', numberValue(securityStats.critical_logs) === 0 && 'safe']}><svg viewBox="0 0 24 24"><path d="M12 3 4 6v5c0 5 3.4 8.2 8 10 4.6-1.8 8-5 8-10V6Z" /><path d={numberValue(securityStats.critical_logs) === 0 ? 'm9 12 2 2 4-5' : 'M12 8v5m0 3h.01'} /></svg></i></header>
+	{canSecurity ? <><div class="security-metrics"><div><span>أحداث اليوم</span><strong>{formatNumber(securityOverview.last_24h_events)}</strong></div><div><span>حرجة</span><strong class="danger">{formatNumber(securityStats.critical_logs)}</strong></div><div><span>محظورة</span><strong>{formatNumber(securityStats.blocked_ips)}</strong></div></div><div class="security-note"><i></i><span>{numberValue(securityStats.critical_logs) > 0 ? 'توجد سجلات حرجة تحتاج إلى المراجعة الآن.' : 'لا توجد تنبيهات حرجة مفتوحة في القراءة الحالية.'}</span></div></> : <div class="locked-block"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg><span>بيانات الأمان تحتاج صلاحية إدارة الأمن.</span></div>}
+	<a class="panel-link" href="/dashboard/security"><span>فتح مركز الأمان</span><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6" /></svg></a>
+</section>

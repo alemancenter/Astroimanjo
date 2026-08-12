@@ -1,0 +1,30 @@
+---
+// Server Island: the "الزوار الآن" panel — one of the 9 previously-blocking calls
+// (/dashboard/visitor-analytics). `onlineUsers` comes from the always-fetched /dashboard
+// summary and is passed in rather than refetched, since the main page already has it.
+import { apiFetch } from '../../lib/api';
+import { formatNumber, numberValue } from '../../lib/dashboard-format';
+
+interface Props {
+	canMonitor: boolean;
+	onlineUsers: any[];
+}
+
+const { canMonitor, onlineUsers } = Astro.props;
+const cookieHeader = `token=${Astro.cookies.get('token')?.value}`;
+const result = canMonitor
+	? await apiFetch<any>('/dashboard/visitor-analytics', { countryId: Astro.locals.countryId, cookieHeader, params: { days: 7 } })
+	: { ok: false, data: null };
+const visitor = result.data || {};
+const visitorStats = visitor.visitor_stats || {};
+const visitorChart: any[] = Array.isArray(visitor.chart_data) ? visitor.chart_data.slice(-7) : [];
+const visitorMax = Math.max(1, ...visitorChart.map((item) => numberValue(item.pageViews, item.views, item.visits)));
+---
+
+<aside class="panel live-panel">
+	<header class="panel-heading"><div><span>متابعة مباشرة</span><h2>الزوار الآن</h2><p>نشاط المستخدمين خلال الدقائق الأخيرة.</p></div><b class="live-badge"><i></i>مباشر</b></header>
+	<div class="live-total"><div class="live-ring"><span><strong>{canMonitor ? formatNumber(visitorStats.current) : '—'}</strong><small>متصل الآن</small></span></div><div class="live-breakdown"><div><span>الأعضاء</span><strong>{canMonitor ? formatNumber(visitorStats.current_members) : '—'}</strong></div><div><span>الزوار</span><strong>{canMonitor ? formatNumber(visitorStats.current_guests) : '—'}</strong></div><div><span>زيارات اليوم</span><strong>{canMonitor ? formatNumber(visitorStats.total_combined_today || visitorStats.total_today) : '—'}</strong></div></div></div>
+	<div class="visitor-bars" aria-label="زيارات الأيام الأخيرة">{visitorChart.length ? visitorChart.map((item) => { const views = numberValue(item.pageViews, item.views, item.visits); return <div title={`${formatNumber(views)} مشاهدة`}><b style={`height:${Math.max(7, (views / visitorMax) * 100)}%`}></b><span>{String(item.name || '').slice(0, 3) || '—'}</span></div>; }) : Array.from({ length: 7 }, () => <div><b style="height:7%"></b><span>—</span></div>)}</div>
+	{onlineUsers.length > 0 && <div class="online-users"><span>متصلون مؤخرًا</span><div>{onlineUsers.slice(0, 5).map((online: any) => <a href={`/dashboard/users?view=${online.id}`} title={online.name || 'مستخدم'}>{String(online.name || 'م').trim().slice(0, 1)}</a>)}{onlineUsers.length > 5 && <b>+{formatNumber(onlineUsers.length - 5)}</b>}</div></div>}
+	<a class="panel-link" href="/dashboard/users"><span>عرض المستخدمين</span><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6" /></svg></a>
+</aside>

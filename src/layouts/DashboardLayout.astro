@@ -3,10 +3,9 @@ import '@fontsource-variable/alexandria';
 import '../styles/global.css';
 import '../styles/dashboard.css';
 import SeoHead from '../components/ui/SeoHead.astro';
-import BrandMark from '../components/ui/BrandMark.astro';
 import CountrySwitcher from '../components/CountrySwitcher.astro';
 import DashboardNavIcon from '../components/dashboard/DashboardNavIcon.astro';
-import { apiFetch } from '../lib/api';
+import DashboardBrand from '../components/dashboard/DashboardBrand.astro';
 import { assetUrl } from '../lib/assets';
 import { hasPermission, isAdmin, type AuthUser } from '../lib/auth';
 import { DASHBOARD_NAV_ITEMS, type DashboardNavItem } from '../lib/dashboard-nav';
@@ -19,11 +18,6 @@ interface Props {
 
 const { title, user, description } = Astro.props;
 const pathname = Astro.url.pathname;
-const settingsResult = await apiFetch<Record<string, string>>('/front/settings', {
-	countryId: Astro.locals.countryId,
-});
-const siteName = settingsResult.data?.site_name?.trim() || 'موقع الإيمان التعليمي';
-const siteLogo = assetUrl(settingsResult.data?.site_logo?.trim(), 96);
 const hasNavPermission = (permission: DashboardNavItem['permission']) => !permission || (Array.isArray(permission)
 	? permission.some((name) => hasPermission(user, name))
 	: hasPermission(user, permission));
@@ -56,7 +50,11 @@ const avatarUrl = assetUrl(user.profile_photo_path, 96) || user.profile_photo_ur
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 		<meta name="theme-color" content="#061A3A" />
 		<meta name="generator" content={Astro.generator} />
-		<SeoHead title={`${title} - لوحة التحكم`} description={description} siteName={siteName} noindex />
+		{/* No settings fetch for siteName here — this area is noindex and never shared, so the
+		   real site name/OG accuracy this would normally justify a blocking backend round-trip
+		   for doesn't apply. The one place the real name is worth showing (the sidebar) fetches
+		   it independently as a deferred island below, off the critical render path. */}
+		<SeoHead title={`${title} - لوحة التحكم`} description={description} noindex />
 		<script is:inline>
 			const theme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
 			document.documentElement.classList.toggle('dark', theme === 'dark');
@@ -70,18 +68,7 @@ const avatarUrl = assetUrl(user.profile_photo_path, 96) || user.profile_photo_ur
 
 			<aside id="dashboard-sidebar" class="dashboard-sidebar fixed inset-y-0 right-0 z-50 flex w-[17rem] translate-x-full flex-col overflow-hidden border-l border-white/10 bg-[#061A3A] text-white shadow-xl shadow-graphite-950/20 transition-transform duration-300 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0">
 				<div class="relative flex min-h-24 items-center justify-between border-b border-white/10 px-5">
-					<a href="/dashboard" class="group flex min-w-0 items-center gap-3">
-						<span class="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/15 bg-white shadow-sm">
-							{siteLogo ? <img src={siteLogo} alt="" class="size-full object-contain p-1" /> : <BrandMark class="size-10" />}
-						</span>
-						<span class="min-w-0">
-							<strong class="block truncate text-sm font-extrabold text-white">{siteName}</strong>
-							<span class="mt-1 flex items-center gap-1.5 text-[11px] font-bold text-royal-200">
-								<span class="size-1.5 rounded-full bg-emerald-brand-400 shadow-[0_0_8px_#34d399]"></span>
-								منطقة الإدارة
-							</span>
-						</span>
-					</a>
+					<DashboardBrand server:defer />
 					<button id="dashboard-close" type="button" class="inline-flex size-10 items-center justify-center rounded-xl text-graphite-300 transition hover:bg-white/10 hover:text-white lg:hidden" aria-label="إغلاق القائمة">
 						<svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m6 6 12 12M18 6 6 18" /></svg>
 					</button>

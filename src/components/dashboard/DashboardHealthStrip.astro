@@ -1,0 +1,52 @@
+---
+// Server Island: bundles the 4 "صحة التشغيل" cards (response time, memory, Redis cache,
+// security alerts) — previously 4 of the 9 permission-gated calls dashboard/index.astro fired
+// in one blocking Promise.all. Fetched together here since they render in the same row and
+// none of them are needed for the rest of the page.
+import DashboardNavIcon from './DashboardNavIcon.astro';
+import { apiFetch } from '../../lib/api';
+import { formatBytes, formatNumber, numberValue } from '../../lib/dashboard-format';
+
+interface Props {
+	canMonitor: boolean;
+	canSecurity: boolean;
+}
+
+const { canMonitor, canSecurity } = Astro.props;
+const cookieHeader = `token=${Astro.cookies.get('token')?.value}`;
+const countryId = Astro.locals.countryId;
+const unavailable = Promise.resolve({ ok: false, data: null });
+
+const [liveResult, cacheResult, responseResult, securityOverviewResult, securityStatsResult] = await Promise.all([
+	canMonitor ? apiFetch<any>('/dashboard/performance/live', { countryId, cookieHeader }) : unavailable,
+	canMonitor ? apiFetch<any>('/dashboard/performance/cache', { countryId, cookieHeader }) : unavailable,
+	canMonitor ? apiFetch<any>('/dashboard/performance/response-time', { countryId, cookieHeader }) : unavailable,
+	canSecurity ? apiFetch<any>('/dashboard/security/overview', { countryId, cookieHeader }) : unavailable,
+	canSecurity ? apiFetch<any>('/dashboard/security/stats', { countryId, cookieHeader }) : unavailable,
+]);
+
+const live = liveResult.data || {};
+const cache = cacheResult.data || {};
+const response = responseResult.data || {};
+const securityOverview = securityOverviewResult.data || {};
+const securityStats = securityStatsResult.data || {};
+
+const memoryPercent = Math.round(numberValue(live.memory?.usage_percentage, live.memory?.percentage));
+const cacheRatio = Math.round(numberValue(cache.hit_ratio));
+const avgResponse = numberValue(response.average_ms);
+
+const healthCards = [
+	{ label: 'زمن الاستجابة', value: canMonitor && responseResult.ok ? `${formatNumber(avgResponse)} ms` : 'غير متاح', note: avgResponse <= 150 ? 'استجابة ممتازة' : avgResponse <= 500 ? 'استجابة مقبولة' : 'تحتاج إلى متابعة', pct: Math.min(100, (avgResponse / 1000) * 100), tone: avgResponse > 500 ? 'red' : avgResponse > 150 ? 'orange' : 'green', icon: 'dashboard', href: '/dashboard/redis' },
+	{ label: 'ذاكرة التطبيق', value: canMonitor && liveResult.ok ? `${formatNumber(memoryPercent)}%` : 'غير متاح', note: canMonitor && liveResult.ok ? `${formatBytes(live.memory?.used)} مستخدم` : 'صلاحية المراقبة مطلوبة', pct: memoryPercent, tone: memoryPercent > 85 ? 'red' : memoryPercent > 65 ? 'orange' : 'blue', icon: 'files', href: '/dashboard/security' },
+	{ label: 'كفاءة Redis', value: canMonitor && cacheResult.ok ? `${formatNumber(cacheRatio)}%` : 'غير متاح', note: canMonitor && cacheResult.ok ? `${cache.cache_size || '0 B'} حجم الكاش` : 'صلاحية المراقبة مطلوبة', pct: cacheRatio, tone: cacheRatio >= 70 ? 'green' : cacheRatio > 0 ? 'orange' : 'dark', icon: 'database', href: '/dashboard/redis' },
+	{ label: 'تنبيهات الأمن', value: canSecurity && securityOverviewResult.ok ? formatNumber(securityOverview.last_24h_events) : 'غير متاح', note: canSecurity ? `${formatNumber(securityStats.blocked_ips)} عنوان محظور` : 'صلاحية الأمن مطلوبة', pct: Math.min(100, numberValue(securityOverview.last_24h_events)), tone: numberValue(securityStats.critical_logs) > 0 ? 'red' : 'green', icon: 'security', href: '/dashboard/security' },
+];
+---
+
+<section class="health-strip" aria-label="صحة التشغيل">
+	{healthCards.map((item) => <a href={item.href} class={`health-card is-${item.tone}`}>
+		<i><DashboardNavIcon name={item.icon} class="size-4" /></i>
+		<div><span>{item.label}</span><strong>{item.value}</strong><small>{item.note}</small></div>
+		<aside><b style={`height:${Math.max(4, Math.min(100, item.pct))}%`}></b></aside>
+	</a>)}
+</section>

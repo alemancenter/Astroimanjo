@@ -1,0 +1,29 @@
+---
+// Server Island: the sidebar's logo/site-name block is the only reason DashboardLayout used to
+// fetch /front/settings at all — a fetch every one of the 22 dashboard pages paid for
+// sequentially, AFTER the page's own auth check and data fetches had already resolved (three
+// stacked round-trips before anything could render). Deferring just this cosmetic block lets
+// the rest of the dashboard render immediately; this piece streams in a moment later.
+import BrandMark from '../ui/BrandMark.astro';
+import { apiFetch } from '../../lib/api';
+import { assetUrl } from '../../lib/assets';
+
+const settingsResult = await apiFetch<Record<string, string>>('/front/settings', {
+	countryId: Astro.locals.countryId,
+});
+const siteName = settingsResult.data?.site_name?.trim() || 'موقع الإيمان التعليمي';
+const siteLogo = assetUrl(settingsResult.data?.site_logo?.trim(), 96);
+---
+
+<a href="/dashboard" class="group flex min-w-0 items-center gap-3">
+	<span class="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/15 bg-white shadow-sm">
+		{siteLogo ? <img src={siteLogo} alt="" class="size-full object-contain p-1" /> : <BrandMark class="size-10" />}
+	</span>
+	<span class="min-w-0">
+		<strong class="block truncate text-sm font-extrabold text-white">{siteName}</strong>
+		<span class="mt-1 flex items-center gap-1.5 text-[11px] font-bold text-royal-200">
+			<span class="size-1.5 rounded-full bg-emerald-brand-400 shadow-[0_0_8px_#34d399]"></span>
+			منطقة الإدارة
+		</span>
+	</span>
+</a>

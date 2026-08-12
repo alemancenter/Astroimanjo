@@ -1,0 +1,44 @@
+---
+// Server Island: the two user-related KPI cards ("المستخدمون" و"النشطون الآن") — both partly
+// or fully sourced from /dashboard/visitor-analytics (its response bundles visitor_stats AND
+// user_stats together), one of the 9 permission-gated calls that used to block the whole
+// dashboard home behind a single Promise.all. Bundled into one island (rather than two) so
+// they share a single visitor-analytics fetch instead of duplicating it.
+import DashboardNavIcon from './DashboardNavIcon.astro';
+import { apiFetch } from '../../lib/api';
+import { formatNumber, formatPercent, numberValue } from '../../lib/dashboard-format';
+
+interface Props {
+	canMonitor: boolean;
+	/** From the always-fetched /dashboard summary — used as a fallback/base value. */
+	totalUsers: unknown;
+	onlineUsersFallback: unknown;
+	usersTrend: unknown;
+}
+
+const { canMonitor, totalUsers, onlineUsersFallback, usersTrend } = Astro.props;
+const cookieHeader = `token=${Astro.cookies.get('token')?.value}`;
+const result = canMonitor
+	? await apiFetch<any>('/dashboard/visitor-analytics', { countryId: Astro.locals.countryId, cookieHeader, params: { days: 7 } })
+	: { ok: false, data: null };
+const visitorStats = result.data?.visitor_stats || {};
+const userStats = result.data?.user_stats || {};
+
+const trendValue = (trend: any) => numberValue(trend?.percentage, trend);
+const trendDown = (trend: any) => trend?.trend === 'down' || trendValue(trend) < 0;
+
+const activeTrend = { percentage: visitorStats.change, trend: numberValue(visitorStats.change) < 0 ? 'down' : 'up' };
+const activeValue = numberValue(visitorStats.current, onlineUsersFallback);
+---
+
+<a href="/dashboard/users" class="kpi-card is-orange">
+	<header><span>المستخدمون</span><i><DashboardNavIcon name="users" class="size-5" /></i></header>
+	<div class="kpi-value"><strong>{formatNumber(numberValue(totalUsers, userStats.total))}</strong>{trendValue(usersTrend) !== 0 && <b class:list={{ down: trendDown(usersTrend) }}>{trendDown(usersTrend) ? '↓' : '↑'} {formatPercent(trendValue(usersTrend))}</b>}</div>
+	<footer><span>{formatNumber(userStats.new_today)} تسجيل جديد اليوم</span><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6" /></svg></footer>
+</a>
+
+<a href="/dashboard/users" class="kpi-card is-green">
+	<header><span>النشطون الآن</span><i><DashboardNavIcon name="dashboard" class="size-5" /></i></header>
+	<div class="kpi-value"><strong>{formatNumber(activeValue)}</strong>{trendValue(activeTrend) !== 0 && <b class:list={{ down: trendDown(activeTrend) }}>{trendDown(activeTrend) ? '↓' : '↑'} {formatPercent(trendValue(activeTrend))}</b>}</div>
+	<footer><span>{formatNumber(visitorStats.current_members)} عضو · {formatNumber(visitorStats.current_guests)} زائر</span><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6" /></svg></footer>
+</a>
