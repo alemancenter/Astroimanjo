@@ -14,6 +14,13 @@ export default defineConfig({
   // than hardcoding it a second time.
   site: process.env.PUBLIC_SITE_URL || 'https://imanjo.com',
   output: 'server',
+
+  // IMANJO_PERFORMANCE_INLINE_CSS_V1
+  // Keep project CSS in the initial HTML to remove stylesheet requests
+  // from the critical rendering path.
+  build: {
+    inlineStylesheets: 'always',
+  },
   vite: {
     plugins: [tailwindcss()]
   },
