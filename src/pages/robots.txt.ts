@@ -9,7 +9,14 @@ export const prerender = false;
 export const GET: APIRoute = async ({ locals }) => {
 	const settings = (await apiFetch<Record<string, string>>('/front/settings', { countryId: locals.countryId })).data ?? {};
 	const custom = settings.robots_txt?.trim();
-	const sitemapUrl = settings.sitemap_url?.trim();
+	const publicSiteUrl = (
+		import.meta.env.PUBLIC_SITE_URL ||
+		'https://imanjo.com'
+	).replace(/\/+$/, '');
+
+	const sitemapUrl =
+		settings.sitemap_url?.trim() ||
+		`${publicSiteUrl}/sitemap.xml`;
 
 	const body = custom || ['User-agent: *', 'Allow: /'].join('\n');
 	const withSitemap = sitemapUrl && !body.includes('Sitemap:') ? `${body}\n\nSitemap: ${sitemapUrl}` : body;
