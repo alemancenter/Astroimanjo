@@ -39,11 +39,12 @@ async function checkMaintenanceMode(context: APIContext): Promise<Response | nul
 }
 
 export const onRequest = defineMiddleware(async (context, next) => {
-	// clientAddress throws on prerendered routes (no real per-visitor request exists there) —
-	// same guard shape as the cookie read below. request.headers is always safe to read.
+	// clientAddress throws outright on prerendered routes, and Astro.request.headers logs a
+	// build-time warning there too (no real per-visitor request exists during static
+	// generation) — same guard shape as the cookie read below.
 	const clientIp = context.isPrerendered ? '' : context.clientAddress;
-	const userAgent = context.request.headers.get('user-agent') ?? '';
-	const referer = context.request.headers.get('referer') ?? '';
+	const userAgent = context.isPrerendered ? '' : (context.request.headers.get('user-agent') ?? '');
+	const referer = context.isPrerendered ? '' : (context.request.headers.get('referer') ?? '');
 	return runWithRequestContext({ clientIp, userAgent, referer }, () => handleRequest(context, next));
 });
 

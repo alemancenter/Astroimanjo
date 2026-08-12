@@ -102,7 +102,7 @@ const formatDate = (value?: string) => value
 						{matchedFiles.length > 0 && (
 							<div class="mt-4 space-y-2">
 								{matchedFiles.map((file: any) => (
-									<a href={`/${countryCode}/download/${file.id}`} class="flex items-center gap-3 rounded-xl border border-graphite-200 bg-graphite-50/80 p-3 text-sm transition hover:border-royal-300 hover:bg-royal-50 dark:border-graphite-700 dark:bg-graphite-800/60 dark:hover:border-royal-700 dark:hover:bg-royal-950/50">
+									<a href={`/${countryCode}/lesson/articles/${article.id}`} class="flex items-center gap-3 rounded-xl border border-graphite-200 bg-graphite-50/80 p-3 text-sm transition hover:border-royal-300 hover:bg-royal-50 dark:border-graphite-700 dark:bg-graphite-800/60 dark:hover:border-royal-700 dark:hover:bg-royal-950/50">
 										<span class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white text-royal-600 shadow-sm dark:bg-graphite-900 dark:text-royal-300"><SubjectCategoryIcon category={category.key} class="size-4" /></span>
 										<span class="min-w-0 flex-1 truncate font-bold text-graphite-800 dark:text-graphite-100">{file.file_name || `ملف ${file.id}`}</span>
 										<span class="shrink-0 text-xs font-black text-royal-600 dark:text-royal-300">تفاصيل التنزيل</span>
