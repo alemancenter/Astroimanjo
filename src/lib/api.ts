@@ -1,4 +1,5 @@
 import { DEFAULT_COUNTRY_ID } from './countries';
+import { getClientIp, getClientReferer, getClientUserAgent } from './request-context';
 
 // Fail fast in production instead of silently running with the wrong backend or an empty
 // secret. Before this, a missing PUBLIC_API_URL in a misconfigured staging/test deploy would
@@ -134,6 +135,29 @@ interface ApiFetchOptions {
 	timeoutMs?: number;
 }
 
+/**
+ * Base headers shared by apiFetch/apiRawFetch. Forwards the real visitor's IP, User-Agent, and
+ * Referer (see request-context.ts) so the Go backend sees the actual client on every
+ * server-to-server call instead of this Node process's own — Node's fetch() never forwards
+ * headers from an unrelated incoming request automatically. Without this, visitor geolocation,
+ * deduplication, browser/OS/device/bot classification, and traffic-source attribution all
+ * silently saw either nothing or this process's own values, regardless of who actually visited.
+ */
+function buildBaseHeaders(countryId: string, cookieHeader?: string): Record<string, string> {
+	const headers: Record<string, string> = {
+		'X-Country-Id': countryId,
+		'X-Frontend-Key': API_KEY,
+	};
+	const clientIp = getClientIp();
+	if (clientIp) headers['X-Forwarded-For'] = clientIp;
+	const userAgent = getClientUserAgent();
+	if (userAgent) headers['User-Agent'] = userAgent;
+	const referer = getClientReferer();
+	if (referer) headers['Referer'] = referer;
+	if (cookieHeader) headers['Cookie'] = cookieHeader;
+	return headers;
+}
+
 function buildUrl(path: string, params?: ApiFetchOptions['params']): string {
 	const url = new URL(path.startsWith('http') ? path : `${INTERNAL_API_URL}${path}`);
 	if (params) {
@@ -155,11 +179,7 @@ function buildUrl(path: string, params?: ApiFetchOptions['params']): string {
 export async function apiFetch<T = unknown>(path: string, options: ApiFetchOptions = {}): Promise<ApiResult<T>> {
 	const { countryId = DEFAULT_COUNTRY_ID, params, method = 'GET', body, cookieHeader, timeoutMs = DEFAULT_TIMEOUT_MS } = options;
 
-	const headers: Record<string, string> = {
-		'X-Country-Id': countryId,
-		'X-Frontend-Key': API_KEY,
-	};
-	if (cookieHeader) headers['Cookie'] = cookieHeader;
+	const headers = buildBaseHeaders(countryId, cookieHeader);
 	if (body !== undefined) headers['Content-Type'] = 'application/json';
 
 	try {
@@ -236,11 +256,9 @@ export async function apiRawFetch(
 	const { countryId = DEFAULT_COUNTRY_ID, params, method = 'GET', body, cookieHeader, headers: extraHeaders, timeoutMs = DEFAULT_TIMEOUT_MS } = options;
 
 	const headers: Record<string, string> = {
-		'X-Country-Id': countryId,
-		'X-Frontend-Key': API_KEY,
+		...buildBaseHeaders(countryId, cookieHeader),
 		...extraHeaders,
 	};
-	if (cookieHeader) headers['Cookie'] = cookieHeader;
 
 	return fetch(buildUrl(path, params), {
 		method,

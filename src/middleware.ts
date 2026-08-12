@@ -1,8 +1,9 @@
 import { defineMiddleware } from 'astro:middleware';
-import type { APIContext } from 'astro';
+import type { APIContext, MiddlewareNext } from 'astro';
 import { DEFAULT_COUNTRY_ID, getCountryByCode, isValidCountryId, isValidCountryCode } from './lib/countries';
 import { apiFetch } from './lib/api';
 import { getCurrentUser, isAdmin } from './lib/auth';
+import { runWithRequestContext } from './lib/request-context';
 
 const COUNTRY_COOKIE = 'country_id';
 const COUNTRY_COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // 1 year
@@ -38,6 +39,15 @@ async function checkMaintenanceMode(context: APIContext): Promise<Response | nul
 }
 
 export const onRequest = defineMiddleware(async (context, next) => {
+	// clientAddress throws on prerendered routes (no real per-visitor request exists there) —
+	// same guard shape as the cookie read below. request.headers is always safe to read.
+	const clientIp = context.isPrerendered ? '' : context.clientAddress;
+	const userAgent = context.request.headers.get('user-agent') ?? '';
+	const referer = context.request.headers.get('referer') ?? '';
+	return runWithRequestContext({ clientIp, userAgent, referer }, () => handleRequest(context, next));
+});
+
+async function handleRequest(context: APIContext, next: MiddlewareNext) {
 	// Country-scoped routes (/{countryCode}/lesson/**, /{countryCode}/posts/**) encode the
 	// country in the path itself — that's the public, SEO-facing URL shape, so it's the
 	// source of truth here and never falls back to the cookie/query mechanism below.
@@ -85,4 +95,4 @@ export const onRequest = defineMiddleware(async (context, next) => {
 	}
 
 	return next();
-});
+}

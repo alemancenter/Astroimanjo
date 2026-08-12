@@ -38,6 +38,24 @@ export default defineConfig({
   // regardless of this setting.
   security: {
     checkOrigin: false,
+    // Without this, Astro never trusts X-Forwarded-For/X-Forwarded-Host at all (Astro's own
+    // validateHost() short-circuits to "untrusted" whenever allowedDomains is empty — confirmed
+    // by reading node_modules/astro/dist/core/app/validate-headers.js) and silently falls back
+    // to the raw socket's address instead — nginx's own connecting IP, since it proxies to this
+    // app internally (see nginx.conf's `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for`,
+    // which was already correctly forwarding the real visitor IP the whole time). The practical
+    // effect: Astro.clientAddress was always "127.0.0.1" server-side, so every apiFetch() call
+    // to the Go backend carried no real client IP — breaking visitor geolocation (GeoIP
+    // correctly refuses to resolve a loopback address) and collapsing every guest visitor into
+    // one deduplicated "active visitor" row (they all shared the same IP-based dedup key).
+    //
+    // No `protocol` on this pattern, deliberately: matchPattern() (@astrojs/internal-helpers)
+    // treats an omitted protocol as "match any", and it must — the same createRequestFromNodeRequest
+    // that reads allowedDomains derives its `protocol` value purely from raw socket encryption
+    // (see the checkOrigin comment above), which is always "http" here since nginx terminates
+    // TLS and proxies to this app in plaintext. A `protocol: 'https'` constraint would silently
+    // never match in this deployment and re-introduce the exact bug this exists to fix.
+    allowedDomains: [{ hostname: 'imanjo.com' }],
   },
 
   // No `image.domains` entry: article/post/category images come from
