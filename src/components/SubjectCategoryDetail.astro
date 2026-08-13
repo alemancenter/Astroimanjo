@@ -42,8 +42,17 @@ const formatDate = (value?: string) => value
 // original publish date — showing only that old publish date here reads as "this is stale"
 // even when the attached file is current. Same >24h threshold as the article detail page, to
 // avoid flagging routine same-day edits as a real "update".
-const wasArticleUpdated = (article: any) =>
-	Boolean(article.published_at && article.updated_at && new Date(article.updated_at).getTime() - new Date(article.published_at || article.created_at).getTime() > 24 * 60 * 60 * 1000);
+//
+// published_at is a nullable pointer on the backend (omitted from the JSON entirely when
+// unset — see models/article.go) — articles that were never explicitly "published" only ever
+// have created_at. Gating on `article.published_at` truthiness directly (as an earlier version
+// of this did) meant every such article silently never showed the update badge, no matter how
+// much later updated_at was than created_at. Falling back the same way the article detail page
+// already does (publishedAt = published_at || created_at) before comparing fixes that.
+const wasArticleUpdated = (article: any) => {
+	const baseDate = article.published_at || article.created_at;
+	return Boolean(baseDate && article.updated_at && new Date(article.updated_at).getTime() - new Date(baseDate).getTime() > 24 * 60 * 60 * 1000);
+};
 ---
 
 <section class="border-b border-graphite-200 bg-white dark:border-graphite-800 dark:bg-graphite-950">
