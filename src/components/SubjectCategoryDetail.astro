@@ -38,6 +38,12 @@ const subjectPath = `/${countryCode}/lesson/subjects/${subject.id}`;
 const formatDate = (value?: string) => value
 	? new Date(value).toLocaleDateString('ar-JO', { year: 'numeric', month: 'long', day: 'numeric' })
 	: 'غير محدد';
+// A file can be revised (e.g. a corrected worksheet re-uploaded) long after the article's
+// original publish date — showing only that old publish date here reads as "this is stale"
+// even when the attached file is current. Same >24h threshold as the article detail page, to
+// avoid flagging routine same-day edits as a real "update".
+const wasArticleUpdated = (article: any) =>
+	Boolean(article.published_at && article.updated_at && new Date(article.updated_at).getTime() - new Date(article.published_at || article.created_at).getTime() > 24 * 60 * 60 * 1000);
 ---
 
 <section class="border-b border-graphite-200 bg-white dark:border-graphite-800 dark:bg-graphite-950">
@@ -84,18 +90,24 @@ const formatDate = (value?: string) => value
 		<div class="grid grid-cols-1 gap-5 lg:grid-cols-2">
 			{articles.map((article: any) => {
 				const matchedFiles = filterFilesByCategory(article.files, category);
+				const updated = wasArticleUpdated(article);
 				return (
 					<article class="rounded-2xl border border-graphite-200 bg-white p-5 shadow-soft transition duration-200 hover:-translate-y-0.5 hover:border-royal-300 hover:shadow-lifted dark:border-graphite-700 dark:bg-graphite-900 dark:hover:border-royal-700">
 						<div class="mb-3 flex flex-wrap items-center gap-2">
 							<span class="badge-primary">{subject.subject_name}</span>
 							<span class="badge border border-graphite-200 bg-white text-graphite-600 dark:border-graphite-700 dark:bg-graphite-900 dark:text-graphite-300">{article.semester?.semester_name || semester.semester_name}</span>
+							{updated && <span class="badge border border-emerald-brand-200 bg-emerald-brand-50 text-emerald-brand-700 dark:border-emerald-brand-800 dark:bg-emerald-brand-950 dark:text-emerald-brand-200"><svg class="me-1 inline size-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m5 13 4 4L19 7" /></svg>محدَّثة</span>}
 						</div>
 						<a href={`/${countryCode}/lesson/articles/${article.id}`} class="group block">
 							<h3 class="line-clamp-2 text-lg font-black leading-8 text-graphite-950 transition group-hover:text-royal-600 dark:text-white dark:group-hover:text-royal-300">{article.title}</h3>
 						</a>
 						{article.meta_description && <p class="mt-2 line-clamp-2 text-sm leading-7 text-graphite-500 dark:text-graphite-400">{article.meta_description}</p>}
 						<div class="mt-4 flex flex-wrap items-center gap-4 border-t border-graphite-200 pt-3 text-xs text-graphite-500 dark:border-graphite-700 dark:text-graphite-400">
-							<span class="inline-flex items-center gap-1.5"><svg class="size-3.5 text-royal-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3M5 11h14M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" /></svg>{formatDate(article.published_at || article.created_at)}</span>
+							{updated ? (
+								<span class="inline-flex items-center gap-1.5 font-bold text-emerald-brand-700 dark:text-emerald-brand-300"><svg class="size-3.5 text-emerald-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h5M20 20v-5h-5M5.5 9a7 7 0 0 1 12.3-2.7M18.5 15a7 7 0 0 1-12.3 2.7" /></svg>آخر تحديث: {formatDate(article.updated_at)}</span>
+							) : (
+								<span class="inline-flex items-center gap-1.5"><svg class="size-3.5 text-royal-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3M5 11h14M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" /></svg>{formatDate(article.published_at || article.created_at)}</span>
+							)}
 							<span class="inline-flex items-center gap-1.5"><svg class="size-3.5 text-royal-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5" stroke-width="2"/></svg>{Number(article.visit_count || 0).toLocaleString('ar-JO')} مشاهدة</span>
 						</div>
 

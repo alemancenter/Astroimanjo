@@ -121,10 +121,22 @@ const jsonLd = article
 
 					<div class="container-shell relative grid max-w-7xl gap-8 py-9 sm:py-12 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-end lg:py-14">
 						<div class="max-w-4xl">
-							<span class="mb-4 inline-flex items-center gap-2 rounded-full border border-royal-100 bg-royal-50 px-3 py-1.5 text-xs font-extrabold text-royal-700 dark:border-royal-900 dark:bg-royal-950 dark:text-royal-200">
-								<svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 4h10l4 4v12H5zM15 4v4h4M8 12h8m-8 4h6" /></svg>
-								مورد من المكتبة التعليمية
-							</span>
+							<div class="mb-4 flex flex-wrap items-center gap-2">
+								<span class="inline-flex items-center gap-2 rounded-full border border-royal-100 bg-royal-50 px-3 py-1.5 text-xs font-extrabold text-royal-700 dark:border-royal-900 dark:bg-royal-950 dark:text-royal-200">
+									<svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 4h10l4 4v12H5zM15 4v4h4M8 12h8m-8 4h6" /></svg>
+									مورد من المكتبة التعليمية
+								</span>
+								{/* The publish-date stat card below can be months old even when the content was just
+								   revised — without this, a visitor sees only that old date and assumes the page is
+								   stale. This badge surfaces the real recency signal (last edit, not first publish)
+								   as the very first thing on the page, before the title. */}
+								{wasUpdated && (
+									<span class="inline-flex items-center gap-2 rounded-full border border-emerald-brand-200 bg-emerald-brand-50 px-3 py-1.5 text-xs font-extrabold text-emerald-brand-700 dark:border-emerald-brand-800 dark:bg-emerald-brand-950 dark:text-emerald-brand-200">
+										<svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m5 13 4 4L19 7" /></svg>
+										محدَّثة بتاريخ {formatDate(updatedAt)}
+									</span>
+								)}
+							</div>
 							<div class="mb-4 flex flex-wrap gap-2">
 								{schoolClass?.grade_name && <span class="badge bg-emerald-brand-50 text-emerald-brand-800 dark:bg-emerald-brand-950 dark:text-emerald-brand-200">{schoolClass.grade_name}</span>}
 								{article.subject?.subject_name && <span class="badge-primary">{article.subject.subject_name}</span>}
@@ -143,7 +155,7 @@ const jsonLd = article
 							<div class="rounded-xl bg-royal-50 p-3.5 dark:bg-royal-950"><strong class="block text-xl font-black text-royal-700 dark:text-royal-200">{viewCount.toLocaleString('ar-JO')}</strong><span class="mt-1 block text-[10px] font-bold text-graphite-500 dark:text-graphite-400">مشاهدة</span></div>
 							<div class="rounded-xl bg-emerald-brand-50 p-3.5 dark:bg-emerald-brand-950"><strong class="block text-xl font-black text-emerald-brand-700 dark:text-emerald-brand-200">{readingMinutes.toLocaleString('ar-JO')}</strong><span class="mt-1 block text-[10px] font-bold text-graphite-500 dark:text-graphite-400">دقيقة قراءة</span></div>
 							<div class="rounded-xl bg-sunset-50 p-3.5 dark:bg-sunset-900/25"><strong class="block text-xl font-black text-sunset-700 dark:text-sunset-300">{files.length.toLocaleString('ar-JO')}</strong><span class="mt-1 block text-[10px] font-bold text-graphite-500 dark:text-graphite-400">ملف مرفق</span></div>
-							<div class="rounded-xl bg-graphite-100 p-3.5 dark:bg-graphite-800"><strong class="block text-xs font-black leading-6 text-graphite-800 dark:text-white">{formatDate(publishedAt)}</strong><span class="mt-1 block text-[10px] font-bold text-graphite-500 dark:text-graphite-400">تاريخ النشر</span></div>
+							<div class:list={['rounded-xl p-3.5', wasUpdated ? 'bg-emerald-brand-50 dark:bg-emerald-brand-950' : 'bg-graphite-100 dark:bg-graphite-800']}><strong class:list={['block text-xs font-black leading-6', wasUpdated ? 'text-emerald-brand-700 dark:text-emerald-brand-200' : 'text-graphite-800 dark:text-white']}>{formatDate(wasUpdated ? updatedAt : publishedAt)}</strong><span class="mt-1 block text-[10px] font-bold text-graphite-500 dark:text-graphite-400">{wasUpdated ? 'آخر تحديث' : 'تاريخ النشر'}</span></div>
 						</section>
 					</div>
 				</header>
