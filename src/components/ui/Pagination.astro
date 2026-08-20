@@ -1,7 +1,18 @@
 ---
 interface Props { currentPage: number; lastPage: number; url: URL; }
 const { currentPage, lastPage, url } = Astro.props;
-function pageHref(page: number): string { const u = new URL(url); u.searchParams.set('page', String(page)); return `${u.pathname}?${u.searchParams.toString()}`; }
+function pageHref(page: number): string {
+  const u = new URL(url);
+
+  if (page <= 1) {
+    u.searchParams.delete('page');
+  } else {
+    u.searchParams.set('page', String(page));
+  }
+
+  const query = u.searchParams.toString();
+  return query ? `${u.pathname}?${query}` : u.pathname;
+}
 const pages: (number | '...')[] = [];
 if (lastPage <= 7) { for (let i = 1; i <= lastPage; i++) pages.push(i); } else { pages.push(1); if (currentPage > 3) pages.push('...'); for (let i = Math.max(2, currentPage - 1); i <= Math.min(lastPage - 1, currentPage + 1); i++) pages.push(i); if (currentPage < lastPage - 2) pages.push('...'); pages.push(lastPage); }
 ---

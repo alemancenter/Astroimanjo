@@ -23,7 +23,7 @@ const currentCountry = getCountryById(countryId);
 const cookieHeader = `token=${Astro.cookies.get('token')?.value}`;
 
 const [visitorResult, contentResult, summaryResult, liveResult, cacheResult, responseResult, rawResult] = await Promise.all([
-	apiFetch<any>('/dashboard/visitor-analytics', { countryId, cookieHeader, params: { days } }),
+	apiFetch<any>('/dashboard/visitor-analytics', { countryId, cookieHeader, params: { days }, timeoutMs: 30_000 }),
 	apiFetch<any>('/dashboard/content-analytics', { countryId, cookieHeader }),
 	apiFetch<any>('/dashboard', { countryId, cookieHeader }),
 	apiFetch<any>('/dashboard/performance/live', { countryId, cookieHeader }),

@@ -11,9 +11,11 @@ interface RequestContext {
 	 * string, so losing it made all of them silently show "unknown" regardless of who the real
 	 * visitor was. */
 	userAgent: string;
-	/** The real visitor's Referer header, for the same reason as userAgent — traffic-source
-	 * attribution reads this from the Go backend's side. */
+	/** The real visitor's Referer header, for traffic-source attribution. */
 	referer: string;
+	/** The actual public Astro route currently being rendered. This is forwarded as X-Page so
+	 * backend analytics records the page the visitor sees rather than an internal /api/* call. */
+	page: string;
 }
 
 const storage = new AsyncLocalStorage<RequestContext>();
@@ -44,4 +46,9 @@ export function getClientUserAgent(): string | undefined {
 /** The current request's real visitor Referer, or undefined outside a request. */
 export function getClientReferer(): string | undefined {
 	return storage.getStore()?.referer || undefined;
+}
+
+/** The current public frontend pathname, or undefined outside a real request. */
+export function getClientPage(): string | undefined {
+	return storage.getStore()?.page || undefined;
 }

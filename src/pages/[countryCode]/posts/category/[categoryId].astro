@@ -21,6 +21,13 @@ const { items: categories, ok: categoriesOk, message: categoriesMessage } = cate
 const category = categories.find((c: any) => c.slug === categoryId || String(c.id) === categoryId);
 if (!category) applyNotFoundStatus(Astro, categoriesResult);
 
+if (category && String(category.id) === categoryId && category.slug) {
+        const target = new URL(`/${countryCode}/posts/category/${category.slug}`, Astro.url.origin);
+        target.search = Astro.url.search;
+        if (target.searchParams.get('page') === '1') target.searchParams.delete('page');
+        return Astro.redirect(`${target.pathname}${target.search}`, 301);
+}
+
 const postsResult = category
 	? await apiFetch<any[]>('/posts', { countryId, params: { category_id: category.id, page, per_page: 12 } })
 	: null;

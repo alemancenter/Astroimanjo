@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { apiFetch } from './api';
 
 export interface Permission {
@@ -62,7 +63,184 @@ interface AuthContext {
 // sub-requests one page load produces.
 const USER_CACHE_TTL_MS = 5000;
 const USER_CACHE_MAX_ENTRIES = 500;
-const userCache = new Map<string, { value: Promise<AuthUser | null>; expiresAt: number }>();
+
+interface RefreshedSession {
+	token: string;
+	refreshToken: string | null;
+}
+
+interface UserResolution {
+	user: AuthUser | null;
+	session?: RefreshedSession;
+	clearSession?: boolean;
+}
+
+type RefreshResolution =
+	| { kind: 'success'; session: RefreshedSession }
+	| { kind: 'invalid' }
+	| { kind: 'transient' };
+
+// /auth/user dedupe remains useful because one page can render several
+// independent Astro server requests for the same visitor. Unlike the old
+// implementation, the cached promise returns data only — it never writes to
+// the first request's cookie jar.
+const userCache = new Map<
+	string,
+	{ value: Promise<UserResolution>; expiresAt: number }
+>();
+
+// Single-flight refresh is intentionally process-local. imanjo-frontend.service
+// runs one standalone Node process, so all concurrent SSR requests in this
+// frontend instance share this map.
+const refreshFlights = new Map<string, Promise<RefreshResolution>>();
+
+async function refreshSessionSingleFlight(
+	countryId: string,
+	refreshToken: string,
+): Promise<RefreshResolution> {
+	// The refresh credential itself is globally single-use at the backend.
+	// Do not partition its single-flight by country: two concurrent requests
+	// carrying the same refresh token must always join the same rotation.
+	// Hashing also avoids retaining the raw credential as a Map key.
+	const key = createHash('sha256')
+		.update(refreshToken)
+		.digest('hex');
+
+	const existing = refreshFlights.get(key);
+	if (existing) return existing;
+
+	let flight: Promise<RefreshResolution>;
+
+	flight = (async () => {
+		const refreshed = await apiFetch<{
+			token: string;
+			refresh_token: string;
+		}>('/auth/refresh', {
+			method: 'POST',
+			countryId,
+			cookieHeader: `refresh_token=${refreshToken}`,
+		});
+
+		if (
+			refreshed.ok &&
+			refreshed.data?.token
+		) {
+			return {
+				kind: 'success' as const,
+				session: {
+					token: refreshed.data.token,
+					refreshToken:
+						refreshed.data.refresh_token ?? null,
+				},
+			};
+		}
+
+		// The backend uses 401 for an invalid, expired, consumed, or replayed
+		// refresh credential. Those credentials must be discarded locally.
+		if (refreshed.status === 401) {
+			return { kind: 'invalid' as const };
+		}
+
+		// Network failures (status 0) and 5xx errors are transient. Do not erase
+		// a potentially valid session because the backend was temporarily
+		// unreachable.
+		return { kind: 'transient' as const };
+	})().finally(() => {
+		if (refreshFlights.get(key) === flight) {
+			refreshFlights.delete(key);
+		}
+	});
+
+	refreshFlights.set(key, flight);
+	return flight;
+}
+
+function applyUserResolution(
+	context: AuthContext,
+	resolution: UserResolution,
+): void {
+	// Every waiter applies the successful token pair to its OWN Astro response.
+	// This is the key difference from the old shared Promise implementation.
+	if (resolution.session && context.cookies.set) {
+		setSessionCookies(
+			context.cookies as CookieJar,
+			resolution.session.token,
+			resolution.session.refreshToken,
+		);
+	}
+
+	if (resolution.clearSession && context.cookies.delete) {
+		clearSessionCookies(context.cookies as CookieJar);
+	}
+}
+
+async function resolveCurrentUser(
+	token: string,
+	refreshToken: string | undefined,
+	countryId: string,
+	canPersistCookies: boolean,
+): Promise<UserResolution> {
+	const result = await apiFetch<AuthUser>('/auth/user', {
+		countryId,
+		cookieHeader: `token=${token}`,
+	});
+
+	if (result.ok) {
+		return { user: result.data };
+	}
+
+	// Do not turn network/5xx/backend failures into refresh attempts.
+	if (result.status !== 401) {
+		return { user: null };
+	}
+
+	if (!refreshToken || !canPersistCookies) {
+		return { user: null };
+	}
+
+	const refreshed = await refreshSessionSingleFlight(
+		countryId,
+		refreshToken,
+	);
+
+	if (refreshed.kind === 'invalid') {
+		return {
+			user: null,
+			clearSession: true,
+		};
+	}
+
+	if (refreshed.kind === 'transient') {
+		return { user: null };
+	}
+
+	const retry = await apiFetch<AuthUser>('/auth/user', {
+		countryId,
+		cookieHeader: `token=${refreshed.session.token}`,
+	});
+
+	if (retry.ok) {
+		return {
+			user: retry.data,
+			session: refreshed.session,
+		};
+	}
+
+	// A newly issued access token that is immediately rejected as unauthorized
+	// should not remain in the browser. For transient retry failures, preserve
+	// the newly rotated credentials so the next request can retry normally.
+	if (retry.status === 401) {
+		return {
+			user: null,
+			clearSession: true,
+		};
+	}
+
+	return {
+		user: null,
+		session: refreshed.session,
+	};
+}
 
 /**
  * Reads the session cookie set by the backend on login (`token`) and resolves
@@ -70,60 +248,64 @@ const userCache = new Map<string, { value: Promise<AuthUser | null>; expiresAt: 
  * or an expired/invalid session — callers should treat null as "logged out",
  * never throw.
  */
-export async function getCurrentUser(context: AuthContext): Promise<AuthUser | null> {
+export async function getCurrentUser(
+	context: AuthContext,
+): Promise<AuthUser | null> {
 	const token = context.cookies.get('token')?.value;
 	if (!token) return null;
 
-	// /auth/user's response (roles, permissions, account state) varies by X-Country-Id — the
-	// same token can legitimately resolve differently per country database. Keying the cache
-	// by token alone let a request in one country serve a just-cached response meant for
-	// another, for up to the 5s TTL.
+	const refreshToken =
+		context.cookies.get('refresh_token')?.value;
+
 	const countryId = context.locals?.countryId ?? '';
-	const cacheKey = `${countryId}:${token}`;
+	const canPersistCookies = Boolean(context.cookies.set);
+
+	// Include refresh-token/cookie-write state in the key so a resolution that
+	// performed refresh cannot accidentally be reused by a context with a
+	// different session family or one that cannot persist new credentials.
+	const cacheKey =
+		`${countryId}:${token}:${refreshToken ?? ''}:` +
+		`${canPersistCookies ? 'write' : 'read'}`;
 
 	const now = Date.now();
 	const cached = userCache.get(cacheKey);
+
 	if (cached && cached.expiresAt > now) {
-		return cached.value;
+		const resolution = await cached.value;
+		applyUserResolution(context, resolution);
+		return resolution.user;
 	}
 
-	const value = apiFetch<AuthUser>('/auth/user', {
-		countryId: context.locals?.countryId,
-		cookieHeader: `token=${token}`,
-	}).then(async (result) => {
-		if (result.ok) return result.data;
+	const value = resolveCurrentUser(
+		token,
+		refreshToken,
+		countryId,
+		canPersistCookies,
+	);
 
-		// `token` is a 24h JWT, `refresh_token` a 7-day one (back/.env: JWT_EXPIRE_HOURS=24,
-		// JWT_REFRESH_HOURS=168) — but nothing ever exchanged the latter for a new `token`, so
-		// a visitor was silently logged out ~24h into a session the refresh cookie still
-		// covers for another 6 days. Only worth attempting when we can actually persist the
-		// new cookies (cookies.set present — always true for real Astro/API route contexts).
-		const refreshToken = context.cookies.get('refresh_token')?.value;
-		if (!refreshToken || !context.cookies.set) return null;
-
-		const refreshed = await apiFetch<{ token: string; refresh_token: string }>('/auth/refresh', {
-			method: 'POST',
-			countryId: context.locals?.countryId,
-			cookieHeader: `refresh_token=${refreshToken}`,
-		});
-		if (!refreshed.ok || !refreshed.data?.token) return null;
-
-		setSessionCookies(context.cookies as CookieJar, refreshed.data.token, refreshed.data.refresh_token ?? null);
-
-		const retry = await apiFetch<AuthUser>('/auth/user', {
-			countryId: context.locals?.countryId,
-			cookieHeader: `token=${refreshed.data.token}`,
-		});
-		return retry.ok ? retry.data : null;
+	userCache.set(cacheKey, {
+		value,
+		expiresAt: now + USER_CACHE_TTL_MS,
 	});
 
-	userCache.set(cacheKey, { value, expiresAt: now + USER_CACHE_TTL_MS });
 	if (userCache.size > USER_CACHE_MAX_ENTRIES) {
 		for (const [key, entry] of userCache) {
-			if (entry.expiresAt <= now) userCache.delete(key);
+			if (entry.expiresAt <= now) {
+				userCache.delete(key);
+			}
+		}
+
+		while (userCache.size > USER_CACHE_MAX_ENTRIES) {
+			const oldestKey = userCache.keys().next().value;
+			if (oldestKey === undefined) break;
+			userCache.delete(oldestKey);
 		}
 	}
-	return value;
+
+	const resolution = await value;
+	applyUserResolution(context, resolution);
+
+	return resolution.user;
 }
 
 export function isAdmin(user: AuthUser | null): boolean {

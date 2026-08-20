@@ -56,7 +56,7 @@ const canonicalUrl = new URL(Astro.url.pathname, Astro.site?.origin || Astro.url
 	title={file ? `تنزيل ${file.file_name}` : 'تنزيل الملف'}
 	description={file ? `صفحة تنزيل الملف ${file.file_name} المرتبط بـ ${parentTitle}.` : undefined}
 	canonical={canonicalUrl}
-	noindex={true}
+	noindex={!fileResult.ok || !file}
 >
 	{!fileResult.ok || !file ? (
 		<div class="container-shell max-w-4xl py-14">

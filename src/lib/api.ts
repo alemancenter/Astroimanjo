@@ -1,5 +1,5 @@
 import { DEFAULT_COUNTRY_ID } from './countries';
-import { getClientIp, getClientReferer, getClientUserAgent } from './request-context';
+import { getClientIp, getClientPage, getClientReferer, getClientUserAgent } from './request-context';
 
 // Fail fast in production instead of silently running with the wrong backend or an empty
 // secret. Before this, a missing PUBLIC_API_URL in a misconfigured staging/test deploy would
@@ -154,6 +154,8 @@ function buildBaseHeaders(countryId: string, cookieHeader?: string): Record<stri
 	if (userAgent) headers['User-Agent'] = userAgent;
 	const referer = getClientReferer();
 	if (referer) headers['Referer'] = referer;
+	const page = getClientPage();
+	if (page) headers['X-Page'] = page;
 	if (cookieHeader) headers['Cookie'] = cookieHeader;
 	return headers;
 }

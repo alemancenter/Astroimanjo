@@ -13,6 +13,7 @@ const ALLOWED_FILES = new Set([
   'sitemap_articles_jo.xml',
   'sitemap_post_jo.xml',
   'sitemap_static_jo.xml',
+  'sitemap_download_jo.xml',
 ]);
 
 export const GET: APIRoute = async ({ params }) => {

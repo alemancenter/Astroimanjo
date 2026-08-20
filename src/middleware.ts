@@ -45,13 +45,29 @@ export const onRequest = defineMiddleware(async (context, next) => {
 	const clientIp = context.isPrerendered ? '' : context.clientAddress;
 	const userAgent = context.isPrerendered ? '' : (context.request.headers.get('user-agent') ?? '');
 	const referer = context.isPrerendered ? '' : (context.request.headers.get('referer') ?? '');
-	return runWithRequestContext({ clientIp, userAgent, referer }, () => handleRequest(context, next));
+	const page = context.isPrerendered ? '' : context.url.pathname;
+	return runWithRequestContext({ clientIp, userAgent, referer, page }, () => handleRequest(context, next));
 });
 
 async function handleRequest(context: APIContext, next: MiddlewareNext) {
+        if (!context.isPrerendered && !context.url.pathname.startsWith('/dashboard') && !context.url.pathname.startsWith('/api')) {
+                const pageParam = context.url.searchParams.get('page');
+                if (pageParam === '1' && !/^\/[a-z]{2}\/posts\/category\/\d+\/?$/.test(context.url.pathname)) {
+                        const target = new URL(context.url);
+                        target.searchParams.delete('page');
+                        return context.redirect(`${target.pathname}${target.search}`, 308);
+                }
+        }
+
 	// Country-scoped routes (/{countryCode}/lesson/**, /{countryCode}/posts/**) encode the
 	// country in the path itself — that's the public, SEO-facing URL shape, so it's the
 	// source of truth here and never falls back to the cookie/query mechanism below.
+        if (!context.isPrerendered && /^\/[a-z]{2}\/lesson\/subjects\/\d+\/?$/.test(context.url.pathname) && context.url.searchParams.has('id')) {
+                const target = new URL(context.url);
+                target.searchParams.delete('id');
+                return context.redirect(`${target.pathname}${target.search}`, 308);
+        }
+
 	const pathCountryCode = context.params.countryCode;
 	if (pathCountryCode) {
 		if (!isValidCountryCode(pathCountryCode)) {
