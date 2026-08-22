@@ -39,7 +39,7 @@ const {
 // indexable=false can add noindex. A timeout or backend failure intentionally leaves indexing
 // unchanged so a transient infrastructure problem can never de-index the content inventory.
 let qualityNoindex = false;
-if (!explicitNoindex && Astro.response.status < 400) {
+if (!explicitNoindex && (Astro.response.status ?? 200) < 400) {
 	const pathname = Astro.url.pathname;
 	const articleMatch = pathname.match(/^\/([^/]+)\/lesson\/articles\/(\d+)\/?$/);
 	const postMatch = pathname.match(/^\/([^/]+)\/posts\/(\d+)\/?$/);
