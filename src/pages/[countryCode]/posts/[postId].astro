@@ -116,9 +116,9 @@ const jsonLd = post ? [
 			{adsEligible && <div class="container-shell max-w-7xl pt-7 sm:pt-9"><AdSensePlacement client={adsenseClient} desktopConfig={settings.google_ads_desktop_news} mobileConfig={settings.google_ads_mobile_news} placement="post-top" /></div>}
 
 			<div class="container-shell max-w-7xl py-8 sm:py-10 lg:py-12">
-				<div class="grid grid-cols-1 gap-7 lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-8 xl:gap-10">
-					<main class="min-w-0">
-						<section id="post-content-start" class="scroll-mt-28 overflow-hidden rounded-2xl border border-graphite-200 bg-white shadow-soft dark:border-graphite-700 dark:bg-graphite-900" aria-labelledby="post-content-heading">
+				<div class="grid grid-cols-1 gap-0 lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-8 xl:gap-10">
+					<main class="contents lg:block lg:min-w-0">
+						<section id="post-content-start" class="order-1 scroll-mt-28 overflow-hidden rounded-2xl border border-graphite-200 bg-white shadow-soft dark:border-graphite-700 dark:bg-graphite-900" aria-labelledby="post-content-heading">
 							<header class="flex items-center justify-between gap-4 border-b border-graphite-200 bg-gradient-to-l from-royal-50 via-white to-emerald-brand-50 px-5 py-4 dark:border-graphite-700 dark:from-royal-950/50 dark:via-graphite-900 dark:to-emerald-brand-950/30 sm:px-7">
 								<div class="flex items-center gap-3"><span class="flex size-9 items-center justify-center rounded-xl bg-royal-600 text-white"><svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M5 4h10l4 4v12H5zM8 12h8m-8 4h6" /></svg></span><div><span class="block text-[10px] font-extrabold text-royal-600 dark:text-royal-300">تفاصيل المنشور</span><h2 id="post-content-heading" class="text-sm font-black text-graphite-950 sm:text-base dark:text-white">المحتوى</h2></div></div>
 								<span class="hidden rounded-full bg-white px-3 py-1.5 text-[11px] font-extrabold text-graphite-500 shadow-sm sm:block dark:bg-graphite-800 dark:text-graphite-300">{wordCount.toLocaleString('ar-JO')} كلمة</span>
@@ -126,41 +126,48 @@ const jsonLd = post ? [
 							<div class="article-content prose-edu overflow-x-auto px-5 py-6 sm:px-8 sm:py-8 lg:px-10 lg:py-10" set:html={post.content} />
 						</section>
 
-						{files.length > 0 && <div class="mt-7 lg:hidden"><ArticleAttachments files={files} countryCode={countryCode} headingId="post-attachments-mobile-heading" /></div>}
+						<div class="order-3">
+							{keywords.length > 0 && <section class="mt-7 rounded-2xl border border-graphite-200 bg-white p-5 shadow-soft dark:border-graphite-700 dark:bg-graphite-900" aria-label="الكلمات المفتاحية"><div class="flex flex-wrap items-center gap-2"><svg class="ml-1 size-4 text-graphite-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m20 13-7 7-10-10V3h7l10 10Z"/><circle cx="7.5" cy="7.5" r="1" fill="currentColor"/></svg>{keywords.map((keyword: any) => <a href={`/${countryCode}/posts/keyword/${encodeURIComponent(keyword.keyword)}`} class="rounded-full border border-graphite-200 bg-graphite-50 px-3 py-1.5 text-xs font-bold text-graphite-600 transition hover:border-royal-300 hover:bg-royal-50 hover:text-royal-700 dark:border-graphite-700 dark:bg-graphite-800 dark:text-graphite-300">#{keyword.keyword}</a>)}</div></section>}
 
-						{keywords.length > 0 && <section class="mt-7 rounded-2xl border border-graphite-200 bg-white p-5 shadow-soft dark:border-graphite-700 dark:bg-graphite-900" aria-label="الكلمات المفتاحية"><div class="flex flex-wrap items-center gap-2"><svg class="ml-1 size-4 text-graphite-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m20 13-7 7-10-10V3h7l10 10Z"/><circle cx="7.5" cy="7.5" r="1" fill="currentColor"/></svg>{keywords.map((keyword: any) => <a href={`/${countryCode}/posts/keyword/${encodeURIComponent(keyword.keyword)}`} class="rounded-full border border-graphite-200 bg-graphite-50 px-3 py-1.5 text-xs font-bold text-graphite-600 transition hover:border-royal-300 hover:bg-royal-50 hover:text-royal-700 dark:border-graphite-700 dark:bg-graphite-800 dark:text-graphite-300">#{keyword.keyword}</a>)}</div></section>}
+							{adsEligible && <div class="my-14 sm:my-16"><AdSensePlacement client={adsenseClient} desktopConfig={settings.google_ads_in_article_post} mobileConfig={settings.google_ads_in_article_post} placement="post-in-content" /></div>}
 
-						{adsEligible && <div class="my-14 sm:my-16"><AdSensePlacement client={adsenseClient} desktopConfig={settings.google_ads_in_article_post} mobileConfig={settings.google_ads_in_article_post} placement="post-in-content" /></div>}
-
-						<ArticleComments
-							contentId={post.id}
-							commentableType="App\\Models\\Post"
-							inputId="post-comment"
-							countryCode={countryCode}
-							countryId={countryId}
-							currentUrl={currentUrl}
-							formError={formError}
-							commentSent={commentSent}
-							server:defer
-						>
-							<div slot="fallback" id="comments" class="surface-card mt-10 scroll-mt-28 animate-pulse p-5 sm:p-7" aria-label="جارٍ تحميل التعليقات">
-								<div class="mb-6 h-6 w-32 rounded bg-graphite-100 dark:bg-graphite-800" />
-								<div class="h-28 rounded-xl bg-graphite-50 dark:bg-graphite-800/50" />
-							</div>
-						</ArticleComments>
+							<ArticleComments
+								contentId={post.id}
+								commentableType="App\\Models\\Post"
+								inputId="post-comment"
+								countryCode={countryCode}
+								countryId={countryId}
+								currentUrl={currentUrl}
+								formError={formError}
+								commentSent={commentSent}
+								server:defer
+							>
+								<div slot="fallback" id="comments" class="surface-card mt-10 scroll-mt-28 animate-pulse p-5 sm:p-7" aria-label="جارٍ تحميل التعليقات">
+									<div class="mb-6 h-6 w-32 rounded bg-graphite-100 dark:bg-graphite-800" />
+									<div class="h-28 rounded-xl bg-graphite-50 dark:bg-graphite-800/50" />
+								</div>
+							</ArticleComments>
+						</div>
 					</main>
 
-					<aside class="space-y-5 lg:sticky lg:top-28 lg:self-start">
-						{files.length > 0 && <div class="hidden lg:block"><ArticleAttachments files={files} countryCode={countryCode} headingId="post-attachments-desktop-heading" /></div>}
-						<section class="surface-card overflow-hidden"><header class="flex items-center gap-2 border-b border-graphite-200 bg-graphite-50 px-5 py-4 dark:border-graphite-700 dark:bg-graphite-800/60"><svg class="size-4 text-royal-600 dark:text-royal-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5h16v14H4zM8 9h8m-8 4h8" /></svg><h2 class="text-sm font-extrabold text-graphite-950 dark:text-white">معلومات المنشور</h2></header><dl class="divide-y divide-graphite-100 px-5 text-sm dark:divide-graphite-800">
-							{post.category?.name && <div class="flex items-start justify-between gap-4 py-3"><dt class="text-graphite-500 dark:text-graphite-400">القسم</dt><dd class="text-left font-extrabold text-graphite-900 dark:text-white">{post.category.name}</dd></div>}
-							<div class="flex items-start justify-between gap-4 py-3"><dt class="text-graphite-500 dark:text-graphite-400">تاريخ النشر</dt><dd class="text-left font-extrabold text-graphite-900 dark:text-white">{formatDate(publishedAt)}</dd></div>
-							{wasUpdated && <div class="flex items-start justify-between gap-4 py-3"><dt class="text-graphite-500 dark:text-graphite-400">آخر تحديث</dt><dd class="text-left font-extrabold text-graphite-900 dark:text-white">{formatDate(updatedAt)}</dd></div>}
-							<div class="flex justify-between gap-4 py-3"><dt class="text-graphite-500 dark:text-graphite-400">المشاهدات</dt><dd class="font-extrabold text-graphite-900 dark:text-white">{viewCount.toLocaleString('ar-JO')}</dd></div>
-							<div class="flex justify-between gap-4 py-3"><dt class="text-graphite-500 dark:text-graphite-400">وقت القراءة</dt><dd class="font-extrabold text-graphite-900 dark:text-white">{readingMinutes.toLocaleString('ar-JO')} دقيقة</dd></div>
-						</dl></section>
-						<button type="button" data-copy-post class="surface-card flex w-full items-center justify-center gap-2 px-4 py-3.5 text-sm font-extrabold text-graphite-700 transition hover:border-royal-300 hover:bg-royal-50 hover:text-royal-700 dark:text-graphite-200 dark:hover:border-royal-700 dark:hover:bg-royal-950"><svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 13a5 5 0 0 0 7.07.07l2-2a5 5 0 0 0-7.07-7.07l-1.15 1.15M14 11a5 5 0 0 0-7.07-.07l-2 2A5 5 0 0 0 12 20l1.15-1.15" /></svg><span data-copy-label>نسخ رابط المنشور</span></button>
-					</aside>
+					<div class="contents lg:block lg:sticky lg:top-28 lg:self-start lg:space-y-5">
+						{files.length > 0 && (
+							<div class="order-2 mt-7 lg:mt-0">
+								<ArticleAttachments files={files} countryCode={countryCode} headingId="post-attachments-heading" />
+							</div>
+						)}
+
+						<aside class="order-4 mt-7 space-y-5 lg:mt-0">
+							<section class="surface-card overflow-hidden"><header class="flex items-center gap-2 border-b border-graphite-200 bg-graphite-50 px-5 py-4 dark:border-graphite-700 dark:bg-graphite-800/60"><svg class="size-4 text-royal-600 dark:text-royal-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5h16v14H4zM8 9h8m-8 4h8" /></svg><h2 class="text-sm font-extrabold text-graphite-950 dark:text-white">معلومات المنشور</h2></header><dl class="divide-y divide-graphite-100 px-5 text-sm dark:divide-graphite-800">
+								{post.category?.name && <div class="flex items-start justify-between gap-4 py-3"><dt class="text-graphite-500 dark:text-graphite-400">القسم</dt><dd class="text-left font-extrabold text-graphite-900 dark:text-white">{post.category.name}</dd></div>}
+								<div class="flex items-start justify-between gap-4 py-3"><dt class="text-graphite-500 dark:text-graphite-400">تاريخ النشر</dt><dd class="text-left font-extrabold text-graphite-900 dark:text-white">{formatDate(publishedAt)}</dd></div>
+								{wasUpdated && <div class="flex items-start justify-between gap-4 py-3"><dt class="text-graphite-500 dark:text-graphite-400">آخر تحديث</dt><dd class="text-left font-extrabold text-graphite-900 dark:text-white">{formatDate(updatedAt)}</dd></div>}
+								<div class="flex justify-between gap-4 py-3"><dt class="text-graphite-500 dark:text-graphite-400">المشاهدات</dt><dd class="font-extrabold text-graphite-900 dark:text-white">{viewCount.toLocaleString('ar-JO')}</dd></div>
+								<div class="flex justify-between gap-4 py-3"><dt class="text-graphite-500 dark:text-graphite-400">وقت القراءة</dt><dd class="font-extrabold text-graphite-900 dark:text-white">{readingMinutes.toLocaleString('ar-JO')} دقيقة</dd></div>
+							</dl></section>
+							<button type="button" data-copy-post class="surface-card flex w-full items-center justify-center gap-2 px-4 py-3.5 text-sm font-extrabold text-graphite-700 transition hover:border-royal-300 hover:bg-royal-50 hover:text-royal-700 dark:text-graphite-200 dark:hover:border-royal-700 dark:hover:bg-royal-950"><svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 13a5 5 0 0 0 7.07.07l2-2a5 5 0 0 0-7.07-7.07l-1.15 1.15M14 11a5 5 0 0 0-7.07-.07l-2 2A5 5 0 0 0 12 20l1.15-1.15" /></svg><span data-copy-label>نسخ رابط المنشور</span></button>
+						</aside>
+					</div>
 				</div>
 
 				{adsEligible && <div class="mt-14 sm:mt-16"><AdSensePlacement client={adsenseClient} desktopConfig={settings.google_ads_desktop_news_2} mobileConfig={settings.google_ads_mobile_news_2} placement="post-bottom" /></div>}
