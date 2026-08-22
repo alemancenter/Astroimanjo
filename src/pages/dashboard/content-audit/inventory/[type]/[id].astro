@@ -1,0 +1,43 @@
+---
+import DashboardLayout from '../../../../../layouts/DashboardLayout.astro';
+import { isAdmin, requireDashboard } from '../../../../../lib/auth';
+import { apiFetch } from '../../../../../lib/api';
+import { getCountryById } from '../../../../../lib/countries';
+
+const guard = await requireDashboard(Astro);
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+if (!isAdmin(user)) return Astro.redirect(`/dashboard?error=${encodeURIComponent('هذه الصفحة متاحة فقط للسوبر أدمن والأدمن.')}`);
+
+const type = String(Astro.params.type || '').toLowerCase();
+const id = String(Astro.params.id || '');
+if (!['article', 'post'].includes(type) || !/^\d+$/.test(id)) return Astro.redirect('/dashboard/content-audit/inventory');
+
+const token = Astro.cookies.get('token')?.value;
+const currentCountry = getCountryById(Astro.locals.countryId);
+const auth = { countryId: Astro.locals.countryId, cookieHeader: `token=${token}` };
+const [inventoryResult, historyResult] = await Promise.all([
+	apiFetch<any>('/dashboard/content-audit/inventory', { ...auth, params: { country: currentCountry.code, type, scope: 'all', q: id, page: 1, per_page: 50 } }),
+	apiFetch<any[]>(`/dashboard/content-audit/inventory/${type}/${id}/history`, { ...auth, params: { country: currentCountry.code } }),
+]);
+const item = (Array.isArray(inventoryResult.data?.items) ? inventoryResult.data.items : []).find((entry: any) => String(entry.id) === id && entry.type === type);
+const history: any[] = Array.isArray(historyResult.data) ? historyResult.data : [];
+const nf = new Intl.NumberFormat('ar-EG');
+const df = new Intl.DateTimeFormat('ar-EG', { dateStyle: 'medium', timeStyle: 'short' });
+const labels: Record<string,string> = { unclassified: 'غير مصنف', keep: 'KEEP — إبقاء', improve: 'IMPROVE — تحسين', noindex: 'NOINDEX — منع الأرشفة', merge_301: 'MERGE / 301 — دمج' };
+const back = '/dashboard/content-audit/inventory';
+---
+
+<DashboardLayout title="سجل معالجة المحتوى" user={user}>
+	<div class="mx-auto max-w-5xl space-y-6">
+		<header class="rounded-3xl border border-graphite-200 bg-white p-6 dark:border-graphite-800 dark:bg-graphite-900">
+			<div class="flex flex-wrap items-start justify-between gap-4"><div><span class="text-xs font-extrabold text-royal-600">Phase 3 / سجل القرارات</span><h1 class="mt-2 text-2xl font-black text-graphite-950 dark:text-white">{item?.title || `${type} #${id}`}</h1><p class="mt-2 text-sm text-graphite-500">{type === 'article' ? 'مقال' : 'منشور'} #{id} · {currentCountry.name}</p></div><a href={back} class="rounded-xl border border-graphite-200 px-4 py-2.5 text-sm font-extrabold dark:border-graphite-700">العودة إلى المخزون</a></div>
+			{item && <div class="mt-5 grid gap-3 sm:grid-cols-3 lg:grid-cols-6"><span class="rounded-xl bg-graphite-50 p-3 text-xs dark:bg-graphite-800">الأولوية <b class="block text-lg">{nf.format(Number(item.priority_score || 0))}</b></span><span class="rounded-xl bg-graphite-50 p-3 text-xs dark:bg-graphite-800">زيارات <b class="block text-lg">{nf.format(Number(item.visits || 0))}</b></span><span class="rounded-xl bg-graphite-50 p-3 text-xs dark:bg-graphite-800">كلمات <b class="block text-lg">{nf.format(Number(item.word_count || 0))}</b></span><span class="rounded-xl bg-graphite-50 p-3 text-xs dark:bg-graphite-800">Index <b class="block text-lg">{item.should_index ? 'نعم' : 'لا'}</b></span><span class="rounded-xl bg-graphite-50 p-3 text-xs dark:bg-graphite-800">Ads <b class="block text-lg">{item.ads_eligible ? 'نعم' : 'لا'}</b></span><span class="rounded-xl bg-graphite-50 p-3 text-xs dark:bg-graphite-800">القرار الحالي <b class="block text-sm">{labels[item.editorial?.decision || 'unclassified']}</b></span></div>}
+		</header>
+
+		{!historyResult.ok ? <section class="rounded-3xl border border-red-200 bg-red-50 p-8 text-center text-red-800 dark:border-red-900 dark:bg-red-950/30">تعذّر تحميل سجل القرارات.</section> : history.length === 0 ? <section class="rounded-3xl border border-graphite-200 bg-white p-8 text-center dark:border-graphite-800 dark:bg-graphite-900"><h2 class="font-black">لا يوجد قرار تحريري محفوظ بعد</h2><p class="mt-2 text-sm text-graphite-500">ارجع إلى المخزون وصنّف العنصر أولًا.</p></section> : <section class="rounded-3xl border border-graphite-200 bg-white dark:border-graphite-800 dark:bg-graphite-900">
+			<header class="border-b border-graphite-100 p-5 dark:border-graphite-800"><h2 class="text-lg font-black">سجل التصنيفات</h2><p class="mt-1 text-xs text-graphite-500">سجل append-only؛ القرار الأحدث هو الفعّال ولا يتم حذف القرارات السابقة.</p></header>
+			<div class="divide-y divide-graphite-100 dark:divide-graphite-800">{history.map((entry: any, index: number) => <article class="p-5"><div class="flex flex-wrap items-center justify-between gap-3"><div class="flex flex-wrap items-center gap-2"><strong class="text-sm font-black">{labels[entry.decision] || entry.decision}</strong>{index === 0 && <span class="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-extrabold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">القرار الحالي</span>}</div><time class="text-xs text-graphite-400">{entry.created_at ? df.format(new Date(entry.created_at)) : '—'}</time></div><div class="mt-2 text-xs text-graphite-500">Reviewer ID: {entry.created_by_user_id || '—'}</div>{entry.target_content_id && <div class="mt-2 rounded-xl bg-violet-50 p-3 text-xs font-bold text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">هدف الدمج المخطط: {entry.target_content_type} #{entry.target_content_id} — لم يتم تنفيذ Redirect تلقائيًا.</div>}{entry.notes && <p class="mt-3 whitespace-pre-wrap rounded-xl bg-graphite-50 p-3 text-sm leading-7 text-graphite-700 dark:bg-graphite-800 dark:text-graphite-200">{entry.notes}</p>}</article>)}</div>
+		</section>}
+	</div>
+</DashboardLayout>

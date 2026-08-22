@@ -1,0 +1,128 @@
+---
+import DashboardLayout from '../../../../layouts/DashboardLayout.astro';
+import { isAdmin, requireDashboard } from '../../../../lib/auth';
+import { apiFetch } from '../../../../lib/api';
+import { getCountryById } from '../../../../lib/countries';
+
+const guard = await requireDashboard(Astro);
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+if (!isAdmin(user)) {
+	return Astro.redirect(`/dashboard?error=${encodeURIComponent('هذه الصفحة متاحة فقط للسوبر أدمن والأدمن.')}`);
+}
+
+const token = Astro.cookies.get('token')?.value;
+const currentCountry = getCountryById(Astro.locals.countryId);
+const requestedType = String(Astro.url.searchParams.get('type') || 'all').toLowerCase();
+const contentType = ['all', 'article', 'post'].includes(requestedType) ? requestedType : 'all';
+const requestedDecision = String(Astro.url.searchParams.get('decision') || 'all').toLowerCase();
+const decision = ['all', 'unclassified', 'keep', 'improve', 'noindex', 'merge_301'].includes(requestedDecision) ? requestedDecision : 'all';
+const requestedSignal = String(Astro.url.searchParams.get('signal') || 'all').toLowerCase();
+const signal = ['all', 'corruption', 'exact', 'near', 'template', 'noindex', 'unaudited', 'needs_fix', 'short_file'].includes(requestedSignal) ? requestedSignal : 'all';
+const scope = Astro.url.searchParams.get('scope') === 'all' ? 'all' : 'priority';
+const search = String(Astro.url.searchParams.get('q') || '').trim();
+const page = Math.max(1, Number(Astro.url.searchParams.get('page') || 1));
+const auth = { countryId: Astro.locals.countryId, cookieHeader: `token=${token}` };
+const result = await apiFetch<any>('/dashboard/content-audit/inventory', {
+	...auth,
+	params: { country: currentCountry.code, type: contentType, decision, signal, scope, q: search, page, per_page: 25 },
+});
+
+const data = result.data ?? {};
+const items: any[] = Array.isArray(data.items) ? data.items : [];
+const summary = data.summary ?? {};
+const meta = data.meta ?? {};
+const totalPages = Math.max(0, Number(meta.total_pages || 0));
+const success = Astro.url.searchParams.get('success');
+const seoEffect = Astro.url.searchParams.get('seo_effect');
+const error = Astro.url.searchParams.get('error');
+const cleanUrl = new URL(Astro.url);
+cleanUrl.searchParams.delete('success'); cleanUrl.searchParams.delete('seo_effect'); cleanUrl.searchParams.delete('error');
+const redirectTo = `${cleanUrl.pathname}${cleanUrl.search}`;
+const nf = new Intl.NumberFormat('ar-EG');
+const pct = (value: number) => `${Math.round(Number(value || 0) * 100)}%`;
+const typeLabel = (value: string) => value === 'article' ? 'مقال' : 'منشور';
+const decisionLabels: Record<string, string> = { unclassified: 'غير مصنف', keep: 'KEEP — إبقاء', improve: 'IMPROVE — تحسين', noindex: 'NOINDEX — منع الأرشفة', merge_301: 'MERGE / 301 — دمج' };
+const signalLabels: Record<string, string> = { corruption: 'فساد المصدر', exact: 'تطابق كامل', near: 'شبه تكرار', template: 'تشابه قالبي' };
+const pageHref = (target: number) => { const u = new URL(Astro.url); u.searchParams.set('page', String(target)); u.searchParams.delete('success'); u.searchParams.delete('seo_effect'); u.searchParams.delete('error'); return `${u.pathname}?${u.searchParams.toString()}`; };
+---
+
+<DashboardLayout title="مخزون معالجة المحتوى" user={user} description="قائمة Phase 3 لتصنيف ومعالجة المحتوى حسب الجودة والفساد والتكرار مع قرارات تحريرية قابلة للتتبع.">
+	<div class="mx-auto max-w-[1600px] space-y-6">
+		{error && <div class="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">{error}</div>}
+		{success === 'classified' && <div class="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-200"><strong>تم حفظ التصنيف التحريري.</strong> {seoEffect === 'noindex' ? 'تم تفعيل NOINDEX فورًا عبر بوابة الجودة. أعد توليد Sitemap لإزالة الرابط من الخريطة الحالية.' : 'لا يوجد تغيير SEO تلقائي لهذا القرار.'} <a href="/dashboard/sitemap" class="font-black underline">فتح خريطة الموقع</a></div>}
+
+		<header class="overflow-hidden rounded-3xl border border-graphite-200 bg-white shadow-sm dark:border-graphite-800 dark:bg-graphite-900">
+			<div class="grid gap-6 p-6 lg:grid-cols-[1fr_auto] lg:items-center lg:p-8">
+				<div>
+					<div class="mb-3 flex flex-wrap gap-2"><span class="rounded-full bg-royal-50 px-3 py-1.5 text-xs font-extrabold text-royal-700 dark:bg-royal-950/50 dark:text-royal-300">Phase 3 — Content Inventory</span><span class="rounded-full bg-graphite-100 px-3 py-1.5 text-xs font-extrabold text-graphite-600 dark:bg-graphite-800 dark:text-graphite-300">Admin + Super Admin فقط</span></div>
+					<h1 class="text-2xl font-black text-graphite-950 sm:text-3xl dark:text-white">مخزون معالجة المحتوى</h1>
+					<p class="mt-3 max-w-4xl text-sm leading-7 text-graphite-600 dark:text-graphite-300">يجمع Quality Gate وفساد المصدر والتكرار والتشابه في قائمة واحدة. الوضع الافتراضي يعرض أعلى 150 أولوية وفق مقياس ImanJo داخلي للمراجعة فقط، وليس شرطًا أو معيارًا رسميًا من Google.</p>
+				</div>
+				<div class="flex flex-wrap gap-2 lg:justify-end"><a href="/dashboard/content-audit" class="rounded-xl border border-graphite-200 px-4 py-3 text-sm font-extrabold dark:border-graphite-700">مركز التدقيق</a><a href="/dashboard/content-audit/similarity" class="rounded-xl border border-graphite-200 px-4 py-3 text-sm font-extrabold dark:border-graphite-700">كشف التكرار</a><a href="/dashboard/content-audit/corruption" class="rounded-xl border border-graphite-200 px-4 py-3 text-sm font-extrabold dark:border-graphite-700">فساد المحتوى</a></div>
+			</div>
+		</header>
+
+		<section class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
+			{[
+				['إجمالي المحتوى', summary.total_content, 'text-graphite-950 dark:text-white'],
+				['قائمة الأولوية', summary.priority_queue, 'text-royal-600'],
+				['غير مصنف', summary.unclassified, 'text-orange-600'],
+				['KEEP', summary.keep, 'text-emerald-600'],
+				['IMPROVE', summary.improve, 'text-amber-600'],
+				['NOINDEX', summary.noindex, 'text-red-600'],
+				['MERGE / 301', summary.merge_301, 'text-violet-600'],
+				['فساد / Exact', Number(summary.corrupted || 0) + Number(summary.exact_duplicate || 0), 'text-red-700'],
+			].map(([label, value, color]) => <article class="rounded-2xl border border-graphite-200 bg-white p-4 dark:border-graphite-800 dark:bg-graphite-900"><span class="text-[11px] font-bold text-graphite-500">{label}</span><strong class:list={['mt-2 block text-2xl font-black', color]}>{nf.format(Number(value || 0))}</strong></article>)}
+		</section>
+
+		<section class="rounded-2xl border border-graphite-200 bg-white p-4 shadow-sm dark:border-graphite-800 dark:bg-graphite-900">
+			<form method="get" class="grid gap-3 md:grid-cols-2 xl:grid-cols-[150px_170px_180px_180px_1fr_auto_auto] xl:items-end">
+				<label><span class="mb-1.5 block text-xs font-extrabold">النطاق</span><select name="scope" class="h-11 w-full rounded-xl border border-graphite-200 bg-white px-3 text-sm dark:border-graphite-700 dark:bg-graphite-950"><option value="priority" selected={scope === 'priority'}>أعلى 150</option><option value="all" selected={scope === 'all'}>كل المحتوى</option></select></label>
+				<label><span class="mb-1.5 block text-xs font-extrabold">النوع</span><select name="type" class="h-11 w-full rounded-xl border border-graphite-200 bg-white px-3 text-sm dark:border-graphite-700 dark:bg-graphite-950"><option value="all" selected={contentType === 'all'}>الكل</option><option value="article" selected={contentType === 'article'}>المقالات</option><option value="post" selected={contentType === 'post'}>المنشورات</option></select></label>
+				<label><span class="mb-1.5 block text-xs font-extrabold">التصنيف</span><select name="decision" class="h-11 w-full rounded-xl border border-graphite-200 bg-white px-3 text-sm dark:border-graphite-700 dark:bg-graphite-950"><option value="all" selected={decision === 'all'}>كل التصنيفات</option>{Object.entries(decisionLabels).map(([value,label]) => <option value={value} selected={decision === value}>{label}</option>)}</select></label>
+				<label><span class="mb-1.5 block text-xs font-extrabold">الإشارة</span><select name="signal" class="h-11 w-full rounded-xl border border-graphite-200 bg-white px-3 text-sm dark:border-graphite-700 dark:bg-graphite-950"><option value="all" selected={signal === 'all'}>كل الإشارات</option><option value="corruption" selected={signal === 'corruption'}>فساد المصدر</option><option value="exact" selected={signal === 'exact'}>Exact Duplicate</option><option value="near" selected={signal === 'near'}>Near Duplicate</option><option value="template" selected={signal === 'template'}>Template</option><option value="noindex" selected={signal === 'noindex'}>غير مفهرس</option><option value="unaudited" selected={signal === 'unaudited'}>غير مدقق</option><option value="needs_fix" selected={signal === 'needs_fix'}>needs_fix</option><option value="short_file" selected={signal === 'short_file'}>ملف + محتوى قصير</option></select></label>
+				<label><span class="mb-1.5 block text-xs font-extrabold">بحث</span><input name="q" value={search} placeholder="عنوان أو ID" class="h-11 w-full rounded-xl border border-graphite-200 bg-white px-3 text-sm dark:border-graphite-700 dark:bg-graphite-950" /></label>
+				<button class="h-11 rounded-xl bg-graphite-900 px-5 text-sm font-extrabold text-white dark:bg-white dark:text-graphite-950">تطبيق</button><a href="/dashboard/content-audit/inventory" class="inline-flex h-11 items-center justify-center rounded-xl border border-graphite-200 px-4 text-sm font-extrabold dark:border-graphite-700">مسح</a>
+			</form>
+		</section>
+
+		{!result.ok ? <section class="rounded-3xl border border-red-200 bg-red-50 p-10 text-center text-red-800 dark:border-red-900 dark:bg-red-950/30"><h2 class="font-black">تعذّر بناء مخزون المحتوى</h2><p class="mt-2 text-sm">{result.message || 'تحقق من Backend ثم أعد المحاولة.'}</p></section> : items.length === 0 ? <section class="rounded-3xl border border-emerald-200 bg-emerald-50 p-10 text-center text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30"><h2 class="font-black">لا توجد عناصر ضمن الفلاتر الحالية</h2></section> : <section class="space-y-4">
+			{items.map((item: any) => {
+				const currentDecision = item.editorial?.decision || 'unclassified';
+				return <article class="rounded-3xl border border-graphite-200 bg-white p-5 shadow-sm dark:border-graphite-800 dark:bg-graphite-900 lg:p-6">
+					<div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_430px]">
+						<div class="min-w-0">
+							<div class="flex flex-wrap items-center gap-2 text-xs font-bold"><span class="rounded-full bg-graphite-100 px-2.5 py-1 dark:bg-graphite-800">{typeLabel(item.type)} #{item.id}</span><span class:list={['rounded-full px-2.5 py-1', item.published ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-graphite-100 text-graphite-500 dark:bg-graphite-800']}>{item.published ? 'منشور' : 'مسودة'}</span><span class="rounded-full bg-royal-50 px-2.5 py-1 text-royal-700 dark:bg-royal-950/40 dark:text-royal-300">أولوية {nf.format(Number(item.priority_score || 0))}</span>{item.corrupted && <span class="rounded-full bg-red-50 px-2.5 py-1 text-red-700 dark:bg-red-950/40 dark:text-red-300">فساد المصدر</span>}{item.similarity?.kind && <span class="rounded-full bg-violet-50 px-2.5 py-1 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">{signalLabels[item.similarity.kind] || item.similarity.kind} {pct(item.similarity.similarity)}</span>}</div>
+							<h2 class="mt-3 text-lg font-black leading-8 text-graphite-950 dark:text-white">{item.title}</h2>
+							<div class="mt-4 grid gap-2 text-xs sm:grid-cols-3 lg:grid-cols-6"><span>زيارات: <b>{nf.format(Number(item.visits || 0))}</b></span><span>كلمات: <b>{nf.format(Number(item.word_count || 0))}</b></span><span>ملفات: <b>{nf.format(Number(item.files_count || 0))}</b></span><span>Index: <b>{item.should_index ? 'نعم' : 'لا'}</b></span><span>Ads: <b>{item.ads_eligible ? 'نعم' : 'لا'}</b></span><span>Audit: <b>{item.audited ? item.audit_decision : 'unaudited'}</b></span></div>
+							{item.priority_reasons?.length > 0 && <div class="mt-4 flex flex-wrap gap-2">{item.priority_reasons.map((reason: string) => <span class="rounded-lg bg-graphite-50 px-2.5 py-1.5 text-xs text-graphite-600 dark:bg-graphite-800 dark:text-graphite-300">{reason}</span>)}</div>}
+							<div class="mt-4 flex flex-wrap gap-2"><a href={item.public_url} target="_blank" rel="noopener" class="rounded-xl border border-graphite-200 px-3 py-2 text-xs font-extrabold dark:border-graphite-700">عرض الصفحة</a><a href={item.edit_url} class="rounded-xl border border-graphite-200 px-3 py-2 text-xs font-extrabold dark:border-graphite-700">فتح المحرر</a><a href={`/dashboard/content-audit/inventory/${item.type}/${item.id}`} class="rounded-xl border border-graphite-200 px-3 py-2 text-xs font-extrabold dark:border-graphite-700">سجل القرارات</a>{item.similarity?.cluster_id && <a href={`/dashboard/content-audit/similarity?q=${encodeURIComponent(String(item.id))}`} class="rounded-xl border border-violet-200 px-3 py-2 text-xs font-extrabold text-violet-700 dark:border-violet-800 dark:text-violet-300">مراجعة Cluster</a>}</div>
+						</div>
+						<form method="post" action="/api/dashboard/content-audit/inventory/classify" class="rounded-2xl border border-graphite-200 bg-graphite-50 p-4 dark:border-graphite-700 dark:bg-graphite-950/60" data-inventory-form>
+							<input type="hidden" name="type" value={item.type}/><input type="hidden" name="id" value={item.id}/><input type="hidden" name="country" value={currentCountry.code}/><input type="hidden" name="redirect_to" value={redirectTo}/>
+							<div class="flex items-center justify-between gap-3"><div><span class="text-[11px] font-bold text-graphite-500">التصنيف الحالي</span><strong class="block text-sm font-black">{decisionLabels[currentDecision] || currentDecision}</strong></div><span class="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold dark:bg-graphite-900">مقترح: {decisionLabels[item.suggested_decision] || item.suggested_decision}</span></div>
+							<label class="mt-4 block"><span class="mb-1.5 block text-xs font-extrabold">القرار التحريري</span><select name="decision" class="h-11 w-full rounded-xl border border-graphite-200 bg-white px-3 text-sm font-bold dark:border-graphite-700 dark:bg-graphite-900" data-decision-select>{Object.entries(decisionLabels).map(([value,label]) => <option value={value} selected={currentDecision === value}>{label}</option>)}</select></label>
+							<div class="mt-3 grid hidden gap-3 sm:grid-cols-2" data-merge-fields><label><span class="mb-1 block text-xs font-bold">نوع صفحة الهدف</span><select name="target_content_type" class="h-10 w-full rounded-xl border border-graphite-200 bg-white px-3 text-sm dark:border-graphite-700 dark:bg-graphite-900"><option value="article">مقال</option><option value="post">منشور</option></select></label><label><span class="mb-1 block text-xs font-bold">ID الهدف</span><input name="target_content_id" inputmode="numeric" class="h-10 w-full rounded-xl border border-graphite-200 bg-white px-3 text-sm dark:border-graphite-700 dark:bg-graphite-900" placeholder="مثال: 310" /></label></div>
+							<label class="mt-3 block"><span class="mb-1.5 block text-xs font-extrabold">ملاحظات المراجع</span><textarea name="notes" rows="3" class="w-full rounded-xl border border-graphite-200 bg-white p-3 text-sm dark:border-graphite-700 dark:bg-graphite-900" placeholder="سبب القرار أو خطة التحسين...">{item.editorial?.notes || ''}</textarea></label>
+							<p class="mt-3 text-[11px] leading-5 text-graphite-500">NOINDEX يُطبق فورًا على SEO والإعلانات ويحتاج إعادة توليد Sitemap. MERGE/301 يحفظ الخطة فقط ولا ينفّذ Redirect تلقائيًا.</p>
+							<button class="mt-3 h-11 w-full rounded-xl bg-royal-600 text-sm font-extrabold text-white hover:bg-royal-700">حفظ التصنيف</button>
+						</form>
+					</div>
+				</article>;
+			})}
+		</section>}
+
+		{totalPages > 1 && <nav class="flex items-center justify-center gap-2"><a href={pageHref(Math.max(1, page - 1))} class:list={['rounded-xl border px-4 py-2 text-sm font-bold', page <= 1 && 'pointer-events-none opacity-40']}>السابق</a><span class="text-sm font-bold">{nf.format(page)} / {nf.format(totalPages)}</span><a href={pageHref(Math.min(totalPages, page + 1))} class:list={['rounded-xl border px-4 py-2 text-sm font-bold', page >= totalPages && 'pointer-events-none opacity-40']}>التالي</a></nav>}
+	</div>
+
+	<script is:inline>
+		document.querySelectorAll('[data-inventory-form]').forEach((form) => {
+			const select = form.querySelector('[data-decision-select]');
+			const fields = form.querySelector('[data-merge-fields]');
+			if (!select || !fields) return;
+			const sync = () => fields.classList.toggle('hidden', select.value !== 'merge_301');
+			select.addEventListener('change', sync); sync();
+		});
+	</script>
+</DashboardLayout>
