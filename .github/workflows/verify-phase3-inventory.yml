@@ -1,0 +1,28 @@
+name: Verify Phase 3 Inventory Dashboard
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check-and-build:
+    runs-on: ubuntu-latest
+    env:
+      PUBLIC_API_URL: https://api.imanjo.com/api
+      INTERNAL_API_URL: https://api.imanjo.com/api
+      FRONTEND_API_KEY: ci-placeholder-key
+      PUBLIC_SITE_URL: https://imanjo.com
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.12.0'
+          cache: npm
+      - run: npm ci
+      - name: Astro check
+        run: npx astro check
+      - name: Production build
+        run: npm run build
