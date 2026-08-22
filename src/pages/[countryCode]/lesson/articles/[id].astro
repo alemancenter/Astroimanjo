@@ -19,7 +19,7 @@ const commentSent = params.get('comment_sent') === '1';
 const [articleResult, settingsResult, adStatusResult] = await Promise.all([
 	apiFetch<any>(`/articles/${id}`, { countryId }),
 	apiFetch<Record<string, string>>('/front/settings', { countryId }),
-	apiFetch<{ eligible: boolean; adsense_risk: string }>(`/articles/${id}/ad-status`, { countryId, params: { country: countryCode } }),
+	apiFetch<{ eligible: boolean; ads_eligible?: boolean; adsense_risk: string }>(`/articles/${id}/ad-status`, { countryId, params: { country: countryCode } }),
 ]);
 const article = articleResult.data;
 if (!articleResult.ok || !article) applyNotFoundStatus(Astro, articleResult);
@@ -45,10 +45,10 @@ const wordCount = plainContent ? plainContent.split(/\s+/).filter(Boolean).lengt
 const readingMinutes = Math.max(1, Math.ceil(wordCount / 200));
 const settings = settingsResult.data ?? {};
 const adsenseClient = settings.adsense_client?.trim() || '';
-// Avoid monetizing thin/failed content even when no audit decision exists. The
-// public audit endpoint is the authority; this local word threshold is a final
-// quality guard against low-value article pages.
-const adsEligible = Boolean(article && adStatusResult.ok && adStatusResult.data?.eligible && wordCount >= 150 && adsenseClient);
+// The backend Content Quality Gate is the single authority for ad eligibility.
+// Word count stays presentation/diagnostic data only and never overrides the gate.
+const gateAdsEligible = adStatusResult.data?.ads_eligible ?? adStatusResult.data?.eligible ?? false;
+const adsEligible = Boolean(article && adStatusResult.ok && gateAdsEligible && adsenseClient);
 
 const publishedAt = article?.published_at || article?.created_at;
 const updatedAt = article?.updated_at;
