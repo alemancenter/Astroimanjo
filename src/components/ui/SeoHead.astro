@@ -1,5 +1,6 @@
 ---
 import { COUNTRIES, DEFAULT_COUNTRY_CODE } from '../../lib/countries';
+import { apiFetch } from '../../lib/api';
 
 interface Props {
 	title: string;
@@ -12,16 +13,51 @@ interface Props {
 	hreflangSafe?: boolean;
 }
 
+interface PublicQualityStatus {
+	indexable: boolean;
+	ads_eligible: boolean;
+	audited: boolean;
+	decision: string;
+	adsense_risk: string;
+	score: number;
+	reasons: string[];
+}
+
 const {
 	title,
 	description = 'منصة تعليمية متطورة تجمع الملفات الدراسية والمقالات لجميع الصفوف والمواد.',
 	canonical,
 	image,
-	noindex = false,
+	noindex: explicitNoindex = false,
 	jsonLd,
 	siteName = 'موقع الإيمان التعليمي',
 	hreflangSafe = false,
 } = Astro.props;
+
+// Content-detail pages are connected to the central backend Content Quality Gate here rather
+// than duplicating SEO logic in every article/post template. Only an explicit gate decision of
+// indexable=false can add noindex. A timeout or backend failure intentionally leaves indexing
+// unchanged so a transient infrastructure problem can never de-index the content inventory.
+let qualityNoindex = false;
+if (!explicitNoindex && Astro.response.status < 400) {
+	const pathname = Astro.url.pathname;
+	const articleMatch = pathname.match(/^\/([^/]+)\/lesson\/articles\/(\d+)\/?$/);
+	const postMatch = pathname.match(/^\/([^/]+)\/posts\/(\d+)\/?$/);
+	const match = articleMatch ?? postMatch;
+
+	if (match) {
+		const [, countryCode, contentId] = match;
+		const endpoint = articleMatch
+			? `/articles/${contentId}/ad-status`
+			: `/posts/${contentId}/ad-status`;
+		const qualityResult = await apiFetch<PublicQualityStatus>(endpoint, {
+			countryId: Astro.locals.countryId,
+			params: { country: countryCode },
+		});
+		qualityNoindex = Boolean(qualityResult.ok && qualityResult.data?.indexable === false);
+	}
+}
+const effectiveNoindex = explicitNoindex || qualityNoindex;
 
 const fullTitle = title.includes(siteName) ? title : `${title} | ${siteName}`;
 
@@ -77,7 +113,7 @@ const xDefaultHref = currentCountryCode && hreflangSafe
 {/* follow (not nofollow): these are search/filter permutations of real content — Google
    should still crawl the links to the actual articles/posts within, just not index this
    particular query-string URL as its own result. */}
-{noindex && <meta name="robots" content="noindex, follow" />}
+{effectiveNoindex && <meta name="robots" content="noindex, follow" />}
 
 <meta property="og:site_name" content={siteName} />
 <meta property="og:type" content="website" />
