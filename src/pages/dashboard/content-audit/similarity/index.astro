@@ -1,0 +1,159 @@
+---
+import DashboardLayout from '../../../../layouts/DashboardLayout.astro';
+import { isAdmin, requireDashboard } from '../../../../lib/auth';
+import { apiFetch } from '../../../../lib/api';
+import { getCountryById } from '../../../../lib/countries';
+
+const guard = await requireDashboard(Astro);
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+if (!isAdmin(user)) {
+	return Astro.redirect(`/dashboard?error=${encodeURIComponent('هذه الصفحة متاحة فقط للسوبر أدمن والأدمن.')}`);
+}
+
+const token = Astro.cookies.get('token')?.value;
+const currentCountry = getCountryById(Astro.locals.countryId);
+const requestedType = String(Astro.url.searchParams.get('type') || 'all').toLowerCase();
+const contentType = ['all', 'article', 'post'].includes(requestedType) ? requestedType : 'all';
+const requestedKind = String(Astro.url.searchParams.get('kind') || 'all').toLowerCase();
+const kind = ['all', 'exact', 'near', 'template'].includes(requestedKind) ? requestedKind : 'all';
+const search = String(Astro.url.searchParams.get('q') || '').trim();
+const page = Math.max(1, Number(Astro.url.searchParams.get('page') || 1));
+const auth = { countryId: Astro.locals.countryId, cookieHeader: `token=${token}` };
+
+const result = await apiFetch<any>('/dashboard/content-audit/similarity', {
+	...auth,
+	params: { country: currentCountry.code, type: contentType, kind, q: search, page, per_page: 20 },
+});
+
+const data = result.data ?? {};
+const clusters: any[] = Array.isArray(data.clusters) ? data.clusters : [];
+const summary = data.summary ?? {};
+const meta = data.meta ?? {};
+const thresholds = data.thresholds ?? {};
+const totalPages = Math.max(0, Number(meta.total_pages || 0));
+const nf = new Intl.NumberFormat('ar-EG');
+const df = new Intl.DateTimeFormat('ar-EG', { dateStyle: 'medium', timeStyle: 'short' });
+const formatDate = (value?: string | null) => value ? df.format(new Date(value)) : '—';
+const percent = (value: unknown) => `${Math.round(Number(value || 0) * 100)}%`;
+const typeLabel = (type: string) => type === 'article' ? 'مقال' : 'منشور';
+const kindLabel: Record<string, string> = {
+	exact: 'تطابق كامل',
+	near: 'شبه مكرر',
+	template: 'تشابه قالبي',
+};
+const kindDescription: Record<string, string> = {
+	exact: 'النص نفسه بعد التطبيع، حتى لو اختلف HTML أو العنوان.',
+	near: 'تشابه مرتفع جدًا في جوهر المحتوى مع تعديلات محدودة.',
+	template: 'هيكل ونص أساسي متكرر مع تبديل جزء من التفاصيل أو المادة.',
+};
+const kindClasses: Record<string, string> = {
+	exact: 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300',
+	near: 'border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-900/60 dark:bg-orange-950/40 dark:text-orange-300',
+	template: 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900/60 dark:bg-violet-950/40 dark:text-violet-300',
+};
+const pageHref = (target: number) => {
+	const u = new URL(Astro.url);
+	u.searchParams.set('page', String(target));
+	return `${u.pathname}?${u.searchParams.toString()}`;
+};
+const pairMember = (cluster: any, key: string) => (cluster.members || []).find((member: any) => member.key === key);
+---
+
+<DashboardLayout title="كشف التكرار والتشابه" user={user} description="مراجعة التكرار الكامل وشبه التكرار والقوالب المتشابهة قبل قرارات الدمج أو 301.">
+	<div class="mx-auto max-w-[1500px] space-y-6">
+		<header class="overflow-hidden rounded-3xl border border-graphite-200 bg-white shadow-sm dark:border-graphite-800 dark:bg-graphite-900">
+			<div class="grid gap-6 p-6 lg:grid-cols-[1fr_auto] lg:items-center lg:p-8">
+				<div>
+					<div class="mb-3 flex flex-wrap items-center gap-2">
+						<span class="inline-flex items-center gap-2 rounded-full bg-violet-50 px-3 py-1.5 text-xs font-extrabold text-violet-700 dark:bg-violet-950/50 dark:text-violet-300"><span class="size-2 rounded-full bg-violet-500"></span> Phase 2H · فحص حتمي بدون AI</span>
+						<span class="rounded-full bg-graphite-100 px-3 py-1.5 text-xs font-extrabold text-graphite-600 dark:bg-graphite-800 dark:text-graphite-300">مراجعة بشرية فقط</span>
+				</div>
+					<h1 class="text-2xl font-black text-graphite-950 sm:text-3xl dark:text-white">Duplicate / Near-Duplicate / Template Detector</h1>
+					<p class="mt-3 max-w-4xl text-sm leading-7 text-graphite-600 dark:text-graphite-300">يفحص النظام النص الحالي للمقالات والمنشورات، يطبّع العربية وHTML، ثم يقارن بصمات النص و5-word shingles. النتائج هنا <strong>لا تحذف ولا تعيد توجيه ولا تضيف noindex تلقائيًا</strong>. أي قرار MERGE أو 301 يبقى للمراجعة البشرية في Phase 3.</p>
+				</div>
+				<div class="flex flex-wrap gap-2 lg:justify-end">
+					<a href="/dashboard/content-audit" class="inline-flex min-h-11 items-center justify-center rounded-xl border border-graphite-200 bg-white px-4 text-sm font-extrabold text-graphite-700 transition hover:border-royal-300 hover:text-royal-700 dark:border-graphite-700 dark:bg-graphite-900 dark:text-graphite-200">مركز تدقيق المحتوى</a>
+					<a href="/dashboard/content-audit/corruption" class="inline-flex min-h-11 items-center justify-center rounded-xl border border-graphite-200 bg-white px-4 text-sm font-extrabold text-graphite-700 transition hover:border-red-300 hover:text-red-700 dark:border-graphite-700 dark:bg-graphite-900 dark:text-graphite-200">مراقبة الفساد</a>
+					<a href={`${Astro.url.pathname}${Astro.url.search}`} class="inline-flex min-h-11 items-center justify-center rounded-xl bg-royal-600 px-4 text-sm font-extrabold text-white transition hover:bg-royal-700">إعادة الفحص</a>
+				</div>
+			</div>
+		</header>
+
+		<section class="grid gap-3 sm:grid-cols-2 xl:grid-cols-6" aria-label="ملخص التشابه">
+			<article class="rounded-2xl border border-graphite-200 bg-white p-5 dark:border-graphite-800 dark:bg-graphite-900"><span class="text-xs font-bold text-graphite-500">المجموعات</span><strong class="mt-2 block text-3xl font-black text-graphite-950 dark:text-white">{nf.format(Number(summary.total_clusters || 0))}</strong><small class="mt-1 block text-xs text-graphite-400">Clusters للمراجعة</small></article>
+			<article class="rounded-2xl border border-red-200 bg-red-50 p-5 dark:border-red-900/50 dark:bg-red-950/30"><span class="text-xs font-bold text-red-600 dark:text-red-300">تطابق كامل</span><strong class="mt-2 block text-3xl font-black text-red-700 dark:text-red-300">{nf.format(Number(summary.exact_clusters || 0))}</strong><small class="mt-1 block text-xs text-red-500/80">أولوية الدمج الأعلى</small></article>
+			<article class="rounded-2xl border border-orange-200 bg-orange-50 p-5 dark:border-orange-900/50 dark:bg-orange-950/30"><span class="text-xs font-bold text-orange-600 dark:text-orange-300">شبه مكرر</span><strong class="mt-2 block text-3xl font-black text-orange-700 dark:text-orange-300">{nf.format(Number(summary.near_clusters || 0))}</strong><small class="mt-1 block text-xs text-orange-500/80">مقارنة الهدف والمرفقات</small></article>
+			<article class="rounded-2xl border border-violet-200 bg-violet-50 p-5 dark:border-violet-900/50 dark:bg-violet-950/30"><span class="text-xs font-bold text-violet-600 dark:text-violet-300">تشابه قالبي</span><strong class="mt-2 block text-3xl font-black text-violet-700 dark:text-violet-300">{nf.format(Number(summary.template_clusters || 0))}</strong><small class="mt-1 block text-xs text-violet-500/80">إعادة كتابة القيمة الفريدة</small></article>
+			<article class="rounded-2xl border border-graphite-200 bg-white p-5 dark:border-graphite-800 dark:bg-graphite-900"><span class="text-xs font-bold text-graphite-500">العناصر المتأثرة</span><strong class="mt-2 block text-3xl font-black text-royal-700 dark:text-royal-300">{nf.format(Number(summary.affected_items || 0))}</strong><small class="mt-1 block text-xs text-graphite-400">{nf.format(Number(summary.published_items || 0))} منشور للعامة</small></article>
+			<article class="rounded-2xl border border-graphite-200 bg-white p-5 dark:border-graphite-800 dark:bg-graphite-900"><span class="text-xs font-bold text-graphite-500">تم فحصه</span><strong class="mt-2 block text-3xl font-black text-emerald-700 dark:text-emerald-300">{nf.format(Number(summary.scanned_items || 0))}</strong><small class="mt-1 block text-xs text-graphite-400">استُبعد {nf.format(Number(summary.ignored_short_items || 0))} قصيرًا</small></article>
+		</section>
+
+		<section class="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm leading-7 text-blue-900 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200">
+			<strong class="block font-black">كيف يقرأ النظام النتائج؟</strong>
+			<div class="mt-2 grid gap-2 lg:grid-cols-3">
+				<div><b>Exact:</b> SHA-256 للنص المطبع متطابق 100%.</div>
+				<div><b>Near:</b> Jaccard ≥ {percent(thresholds.near_similarity)} مع containment مرتفع.</div>
+				<div><b>Template:</b> تشابه ≥ {percent(thresholds.template_similarity)} وcontainment ≥ {percent(thresholds.template_containment)} مع اختلاف العناوين.</div>
+			</div>
+			<p class="mt-2 text-xs opacity-80">الحد الأدنى للفحص {nf.format(Number(thresholds.minimum_words || 30))} كلمة، والحساب يستخدم shingles بحجم {nf.format(Number(thresholds.shingle_size || 5))} كلمات مع تخفيف المقاطع الشائعة جدًا لتقليل false positives.</p>
+		</section>
+
+		<section class="rounded-2xl border border-graphite-200 bg-white p-4 shadow-sm dark:border-graphite-800 dark:bg-graphite-900">
+			<form method="get" class="grid gap-3 xl:grid-cols-[190px_210px_1fr_auto_auto] xl:items-end">
+				<label class="block"><span class="mb-1.5 block text-xs font-extrabold text-graphite-600 dark:text-graphite-300">نوع المحتوى</span><select name="type" class="h-11 w-full rounded-xl border border-graphite-200 bg-white px-3 text-sm font-bold text-graphite-800 outline-none focus:border-royal-500 dark:border-graphite-700 dark:bg-graphite-950 dark:text-white"><option value="all" selected={contentType === 'all'}>الكل</option><option value="article" selected={contentType === 'article'}>المقالات</option><option value="post" selected={contentType === 'post'}>المنشورات</option></select></label>
+				<label class="block"><span class="mb-1.5 block text-xs font-extrabold text-graphite-600 dark:text-graphite-300">نوع التشابه</span><select name="kind" class="h-11 w-full rounded-xl border border-graphite-200 bg-white px-3 text-sm font-bold text-graphite-800 outline-none focus:border-royal-500 dark:border-graphite-700 dark:bg-graphite-950 dark:text-white"><option value="all" selected={kind === 'all'}>كل النتائج</option><option value="exact" selected={kind === 'exact'}>تطابق كامل</option><option value="near" selected={kind === 'near'}>شبه مكرر</option><option value="template" selected={kind === 'template'}>تشابه قالبي</option></select></label>
+				<label class="block"><span class="mb-1.5 block text-xs font-extrabold text-graphite-600 dark:text-graphite-300">بحث بالعنوان أو الرقم</span><input name="q" value={search} placeholder="مثال: 309 أو رتب المعلمين" class="h-11 w-full rounded-xl border border-graphite-200 bg-white px-3 text-sm text-graphite-800 outline-none placeholder:text-graphite-400 focus:border-royal-500 dark:border-graphite-700 dark:bg-graphite-950 dark:text-white" /></label>
+				<button type="submit" class="h-11 rounded-xl bg-graphite-900 px-5 text-sm font-extrabold text-white transition hover:bg-black dark:bg-white dark:text-graphite-950">تطبيق</button>
+				<a href="/dashboard/content-audit/similarity" class="inline-flex h-11 items-center justify-center rounded-xl border border-graphite-200 px-4 text-sm font-extrabold text-graphite-600 transition hover:bg-graphite-50 dark:border-graphite-700 dark:text-graphite-300 dark:hover:bg-graphite-800">مسح</a>
+			</form>
+		</section>
+
+		{!result.ok ? (
+			<section class="rounded-3xl border border-red-200 bg-red-50 p-10 text-center dark:border-red-900/60 dark:bg-red-950/30"><div class="mx-auto flex size-12 items-center justify-center rounded-2xl bg-red-100 text-xl font-black text-red-700 dark:bg-red-900/50 dark:text-red-300">!</div><h2 class="mt-4 text-lg font-black text-red-900 dark:text-red-100">تعذّر تشغيل فحص التشابه</h2><p class="mt-2 text-sm text-red-700 dark:text-red-300">{result.message || 'تحقق من اتصال Backend ثم أعد المحاولة.'}</p></section>
+		) : clusters.length === 0 ? (
+			<section class="rounded-3xl border border-emerald-200 bg-emerald-50 p-10 text-center dark:border-emerald-900/60 dark:bg-emerald-950/30"><div class="mx-auto flex size-12 items-center justify-center rounded-2xl bg-emerald-100 text-xl font-black text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">✓</div><h2 class="mt-4 text-lg font-black text-emerald-900 dark:text-emerald-100">لا توجد مجموعات مطابقة للفلاتر</h2><p class="mt-2 text-sm text-emerald-700 dark:text-emerald-300">لم يجد الكاشف deterministic تطابقًا أو شبه تكرار أو قالبًا متشابهًا ضمن النطاق الحالي.</p></section>
+		) : (
+			<section class="space-y-4">
+				{clusters.map((cluster: any) => (
+					<article class="overflow-hidden rounded-3xl border border-graphite-200 bg-white shadow-sm dark:border-graphite-800 dark:bg-graphite-900">
+						<header class="flex flex-wrap items-start justify-between gap-4 border-b border-graphite-100 p-5 dark:border-graphite-800 lg:p-6">
+							<div>
+								<div class="flex flex-wrap items-center gap-2"><span class:list={['rounded-full border px-3 py-1 text-xs font-black', kindClasses[cluster.kind] || kindClasses.template]}>{kindLabel[cluster.kind] || cluster.kind}</span>{cluster.cross_content_type && <span class="rounded-full bg-royal-50 px-3 py-1 text-xs font-extrabold text-royal-700 dark:bg-royal-950 dark:text-royal-300">بين مقال ومنشور</span>}<span class="rounded-full bg-graphite-100 px-3 py-1 text-xs font-bold text-graphite-500 dark:bg-graphite-800 dark:text-graphite-300">Cluster {cluster.id}</span></div>
+								<h2 class="mt-3 text-base font-black text-graphite-950 dark:text-white">{kindDescription[cluster.kind]}</h2>
+								<p class="mt-1 text-sm leading-6 text-graphite-500 dark:text-graphite-400">{cluster.recommendation}</p>
+							</div>
+							<div class="grid grid-cols-3 gap-2 text-center text-xs"><div class="rounded-xl bg-graphite-50 px-3 py-2 dark:bg-graphite-800"><span class="block text-graphite-400">أعلى تشابه</span><strong class="mt-1 block text-base text-graphite-900 dark:text-white">{percent(cluster.max_similarity)}</strong></div><div class="rounded-xl bg-graphite-50 px-3 py-2 dark:bg-graphite-800"><span class="block text-graphite-400">العناصر</span><strong class="mt-1 block text-base text-graphite-900 dark:text-white">{nf.format(cluster.members?.length || 0)}</strong></div><div class="rounded-xl bg-graphite-50 px-3 py-2 dark:bg-graphite-800"><span class="block text-graphite-400">المقارنات</span><strong class="mt-1 block text-base text-graphite-900 dark:text-white">{nf.format(cluster.pair_count || 0)}</strong></div></div>
+						</header>
+
+						<div class="grid gap-3 p-5 lg:grid-cols-2 lg:p-6">
+							{(cluster.members || []).map((member: any) => (
+								<section class="rounded-2xl border border-graphite-200 p-4 dark:border-graphite-700">
+									<div class="flex flex-wrap items-center gap-2 text-xs"><span class:list={['rounded-full px-2.5 py-1 font-extrabold', member.type === 'article' ? 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300']}>{typeLabel(member.type)}</span><span class:list={['rounded-full px-2.5 py-1 font-extrabold', member.published ? 'bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-300' : 'bg-graphite-100 text-graphite-500 dark:bg-graphite-800 dark:text-graphite-300']}>{member.published ? 'منشور' : 'مسودة/غير فعال'}</span><span class="font-mono text-graphite-400">#{member.id}</span></div>
+									<h3 class="mt-3 text-sm font-black leading-7 text-graphite-950 dark:text-white">{member.title}</h3>
+									<div class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-graphite-400"><span>{nf.format(member.word_count || 0)} كلمة</span><span>آخر تحديث {formatDate(member.updated_at)}</span></div>
+									<div class="mt-4 flex flex-wrap gap-2"><a href={member.public_url} target="_blank" class="inline-flex min-h-9 items-center rounded-lg border border-graphite-200 px-3 text-xs font-extrabold text-graphite-700 transition hover:border-royal-300 hover:text-royal-700 dark:border-graphite-700 dark:text-graphite-200">فتح الصفحة</a><a href={member.edit_url} class="inline-flex min-h-9 items-center rounded-lg bg-royal-600 px-3 text-xs font-extrabold text-white transition hover:bg-royal-700">تحرير</a></div>
+								</section>
+							))}
+						</div>
+
+						{Array.isArray(cluster.pairs) && cluster.pairs.length > 0 && (
+							<footer class="border-t border-graphite-100 bg-graphite-50/70 p-5 dark:border-graphite-800 dark:bg-graphite-950/40 lg:p-6">
+								<h3 class="text-xs font-black text-graphite-600 dark:text-graphite-300">أقوى المقارنات داخل المجموعة</h3>
+								<div class="mt-3 grid gap-2 lg:grid-cols-2">{cluster.pairs.slice(0, 6).map((pair: any) => { const left = pairMember(cluster, pair.left_key); const right = pairMember(cluster, pair.right_key); return <div class="flex items-center justify-between gap-3 rounded-xl border border-graphite-200 bg-white px-3 py-2.5 text-xs dark:border-graphite-700 dark:bg-graphite-900"><span class="min-w-0 truncate text-graphite-600 dark:text-graphite-300">#{left?.id || pair.left_key} ↔ #{right?.id || pair.right_key}</span><span class="shrink-0 font-black text-graphite-950 dark:text-white">{percent(pair.similarity)}</span></div>; })}</div>
+							</footer>
+						)}
+					</article>
+				))}
+			</section>
+		)}
+
+		{totalPages > 1 && (
+			<nav class="flex items-center justify-between rounded-2xl border border-graphite-200 bg-white p-3 dark:border-graphite-800 dark:bg-graphite-900" aria-label="صفحات النتائج">
+				<a href={pageHref(Math.max(1, page - 1))} class:list={['rounded-xl border border-graphite-200 px-4 py-2 text-sm font-extrabold dark:border-graphite-700', page <= 1 && 'pointer-events-none opacity-40']}>السابق</a>
+				<span class="text-sm font-bold text-graphite-500">صفحة <strong class="text-graphite-900 dark:text-white">{nf.format(page)}</strong> من {nf.format(totalPages)}</span>
+				<a href={pageHref(Math.min(totalPages, page + 1))} class:list={['rounded-xl border border-graphite-200 px-4 py-2 text-sm font-extrabold dark:border-graphite-700', page >= totalPages && 'pointer-events-none opacity-40']}>التالي</a>
+			</nav>
+		)}
+	</div>
+</DashboardLayout>
