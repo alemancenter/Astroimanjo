@@ -4,6 +4,8 @@ import { safeRedirectPath } from '../../../../../lib/safe-redirect';
 
 export const prerender = false;
 
+const CORRUPTION_ANALYZE_TIMEOUT_MS = 100_000;
+
 export const POST: APIRoute = async ({ request, cookies, locals, redirect }) => {
 	const token = cookies.get('token')?.value;
 	const fallback = '/dashboard/content-audit/corruption';
@@ -20,15 +22,25 @@ export const POST: APIRoute = async ({ request, cookies, locals, redirect }) => 
 		return redirect(`${redirectTo}${separator}error=${encodeURIComponent('بيانات عنصر الفساد غير صالحة')}`);
 	}
 
-	const res = await apiRawFetch(`/dashboard/content-audit/corruption/${type}/${id}/analyze`, {
-		method: 'POST',
-		countryId: locals.countryId,
-		cookieHeader: `token=${token}`,
-		params: { country },
-	});
-	const json: any = await res.json().catch(() => null);
-	if (!res.ok || !json?.success) {
-		return redirect(`${redirectTo}${separator}error=${encodeURIComponent(json?.message || 'تعذّر تشغيل تدقيق AI')}`);
+	try {
+		const res = await apiRawFetch(`/dashboard/content-audit/corruption/${type}/${id}/analyze`, {
+			method: 'POST',
+			countryId: locals.countryId,
+			cookieHeader: `token=${token}`,
+			params: { country },
+			timeoutMs: CORRUPTION_ANALYZE_TIMEOUT_MS,
+		});
+		const json: any = await res.json().catch(() => null);
+		if (!res.ok || !json?.success) {
+			return redirect(`${redirectTo}${separator}error=${encodeURIComponent(json?.message || 'تعذّر تشغيل تدقيق AI')}`);
+		}
+		return redirect(`${redirectTo}${separator}success=ai_started`);
+	} catch (error) {
+		const timedOut = error instanceof Error && error.name === 'TimeoutError';
+		const message = timedOut
+			? 'انتهت مهلة تحليل AI قبل اكتماله. لم يتم تطبيق أي تعديل تلقائي.'
+			: 'تعذّر الاتصال بخدمة تحليل AI. لم يتم تطبيق أي تعديل تلقائي.';
+		console.error(`[content-audit/corruption/analyze] ${type}#${id} failed${timedOut ? ' (timeout)' : ''}:`, error);
+		return redirect(`${redirectTo}${separator}error=${encodeURIComponent(message)}`);
 	}
-	return redirect(`${redirectTo}${separator}success=ai_started`);
 };
