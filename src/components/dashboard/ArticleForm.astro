@@ -1057,7 +1057,7 @@ function formatSize(bytes: number): string {
 		const setAIBusy = (busy: boolean) => {
 			if (aiButton) aiButton.disabled = busy;
 			aiIcon?.classList.toggle('animate-spin', busy);
-			if (aiLabel) aiLabel.textContent = busy ? 'جارِ التوليد...' : 'توليد بالذكاء الاصطناعي';
+			if (aiLabel) aiLabel.textContent = busy ? 'جارِ التوليد... (قد يستغرق دقائق)' : 'توليد بالذكاء الاصطناعي';
 		};
 
 		aiButton?.addEventListener('click', async () => {
@@ -1113,7 +1113,15 @@ function formatSize(bytes: number): string {
 				}
 
 				const jobId = genJson.job_id;
-				const poll = async (): Promise<void> => {
+				// File-grounded generation runs several sequential AI calls (fact extraction,
+				// then up to 3 writer/validator rounds chasing the 99% SEO bar), so this can
+				// legitimately take a couple of minutes. Hard cap at ~5m20s (just past the
+				// backend's own groundedGenerationTimeout of 5m) instead of polling forever.
+				const maxPollAttempts = 107;
+				const poll = async (attempt = 0): Promise<void> => {
+					if (attempt >= maxPollAttempts) {
+						throw new Error('استغرق التوليد وقتًا أطول من المتوقع. يرجى المحاولة مرة أخرى.');
+					}
 					const statusRes = await fetch(`/api/dashboard/ai/status/${jobId}`);
 					const statusJson = await statusRes.json();
 					if (statusJson?.status === 'done') {
@@ -1138,7 +1146,7 @@ function formatSize(bytes: number): string {
 						throw new Error(statusJson?.error || 'فشل توليد المحتوى');
 					}
 					await new Promise((resolve) => setTimeout(resolve, 3000));
-					return poll();
+					return poll(attempt + 1);
 				};
 				await poll();
 			} catch (err) {

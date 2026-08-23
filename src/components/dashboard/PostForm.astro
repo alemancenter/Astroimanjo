@@ -283,7 +283,7 @@ const files: any[] = Array.isArray(post?.files) ? post.files : [];
 		const setAiBusy = (busy: boolean) => {
 			if (aiButton) aiButton.disabled = busy;
 			aiIcon?.classList.toggle('is-spinning', busy);
-			if (aiLabel) aiLabel.textContent = busy ? 'جارِ التوليد...' : 'توليد بالذكاء الاصطناعي';
+			if (aiLabel) aiLabel.textContent = busy ? 'جارِ التوليد... (قد يستغرق دقائق)' : 'توليد بالذكاء الاصطناعي';
 		};
 
 		aiButton?.addEventListener('click', async () => {
@@ -314,7 +314,12 @@ const files: any[] = Array.isArray(post?.files) ? post.files : [];
 				const payload = await response.json();
 				if (!response.ok || !payload?.job_id) throw new Error(payload?.message || 'تعذّر بدء عملية التوليد');
 
-				for (let attempt = 0; attempt < 60; attempt++) {
+				// File-grounded generation runs several sequential AI calls (fact extraction,
+				// then up to 3 writer/validator rounds chasing the 99% SEO bar) — genuinely
+				// slower than plain title-only generation used to be. 160 x 2s = ~5m20s, just
+				// past the backend's own groundedGenerationTimeout (5m) so it reports failure
+				// first instead of the frontend giving up while the job is still running.
+				for (let attempt = 0; attempt < 160; attempt++) {
 					await new Promise((resolve) => setTimeout(resolve, 2000));
 					const statusResponse = await fetch(`/api/dashboard/ai/status/${payload.job_id}`);
 					const status = await statusResponse.json();
