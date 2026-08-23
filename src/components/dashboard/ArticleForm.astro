@@ -133,10 +133,17 @@ function formatSize(bytes: number): string {
 		</section>
 
 		<section class="article-side-card article-ai-source-section">
-			<div class="article-side-section-heading"><span class="article-side-section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 16V4m0 0L8 8m4-4 4 4M5 14v5h14v-5" /></svg></span><div><strong>ملف مصدر التوليد</strong><small>يُشترط رفعه فعليًا قبل التوليد بالذكاء الاصطناعي</small></div></div>
-			<label class="article-file-drop" for="ai-source-file-input"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 16V4m0 0L8 8m4-4 4 4M5 14v5h14v-5" /></svg><span>اختر ملف المصدر (DOCX أو PDF)</span><small>سيُقرأ محتواه لتوليد مقالة موثّقة منه</small><input id="ai-source-file-input" type="file" accept=".docx,.pdf" /></label>
-			<p id="ai-source-status" class="form-hint">لم يُرفع أي ملف بعد.</p>
-			<input type="hidden" id="ai-source-file-id" name="ai_source_file_id" value="" />
+			<div class="article-side-section-heading"><span class="article-side-section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 16V4m0 0L8 8m4-4 4 4M5 14v5h14v-5" /></svg></span><div><strong>ملف مصدر التوليد</strong><small>يُشترط توفر ملف قبل التوليد بالذكاء الاصطناعي</small></div></div>
+			{files.length > 0 && (
+				<div><label for="ai-source-existing-select" class={labelClass}>من الملفات المرفقة بالمقالة</label>
+				<select id="ai-source-existing-select" class={inputClass}>
+					{files.map((f: any, i: number) => <option value={f.id} selected={i === 0}>{f.file_name}</option>)}
+					<option value="">— رفع ملف جديد بدلًا من ذلك —</option>
+				</select></div>
+			)}
+			<label class="article-file-drop" for="ai-source-file-input" id="ai-source-upload-label" hidden={files.length > 0}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 16V4m0 0L8 8m4-4 4 4M5 14v5h14v-5" /></svg><span>اختر ملف المصدر (DOCX أو PDF)</span><small>سيُقرأ محتواه لتوليد مقالة موثّقة منه</small><input id="ai-source-file-input" type="file" accept=".docx,.pdf" /></label>
+			<p id="ai-source-status" class="form-hint">{files.length > 0 ? `سيُستخدم "${files[0].file_name}" مصدرًا للتوليد.` : 'لم يُرفع أي ملف بعد.'}</p>
+			<input type="hidden" id="ai-source-file-id" name="ai_source_file_id" value={files.length > 0 ? files[0].id : ''} />
 		</section>
 
 		{!article?.id && (
@@ -879,13 +886,36 @@ function formatSize(bytes: number): string {
 		renderStagedFiles();
 	});
 
-	// AI-source file — unlike the staged attachments above, this uploads immediately (via the
-	// generic, article-less /api/dashboard/files/upload endpoint) so the backend can actually
-	// read its content before generation runs. The resulting file id is associated with the
-	// article once it exists — see the ai_source_file_id hidden input and articles/save.ts.
+	// AI-source file. When the article already has attached files, picking one here just
+	// reuses its existing id directly — no upload, no re-reading the same file the admin
+	// already uploaded. Only picking "رفع ملف جديد" (or having no attachments yet) falls back
+	// to the upload flow below, which uploads immediately (via the generic, article-less
+	// /api/dashboard/files/upload endpoint) so the backend can read it before generation runs.
+	// The resulting file id is associated with the article once it exists either way — see the
+	// ai_source_file_id hidden input and articles/save.ts.
 	const aiSourceInput = document.getElementById('ai-source-file-input') as HTMLInputElement | null;
+	const aiSourceUploadLabel = document.getElementById('ai-source-upload-label');
 	const aiSourceFileIdInput = document.getElementById('ai-source-file-id') as HTMLInputElement | null;
 	const aiSourceStatus = document.getElementById('ai-source-status');
+	const aiSourceExistingSelect = document.getElementById('ai-source-existing-select') as HTMLSelectElement | null;
+	aiSourceExistingSelect?.addEventListener('change', () => {
+		const option = aiSourceExistingSelect.selectedOptions[0];
+		if (aiSourceExistingSelect.value) {
+			if (aiSourceFileIdInput) aiSourceFileIdInput.value = aiSourceExistingSelect.value;
+			if (aiSourceStatus) {
+				aiSourceStatus.textContent = `سيُستخدم "${option?.textContent ?? ''}" مصدرًا للتوليد.`;
+				aiSourceStatus.className = 'form-hint text-emerald-600 dark:text-emerald-400';
+			}
+			aiSourceUploadLabel?.setAttribute('hidden', '');
+		} else {
+			if (aiSourceFileIdInput) aiSourceFileIdInput.value = '';
+			if (aiSourceStatus) {
+				aiSourceStatus.textContent = 'لم يُرفع أي ملف بعد.';
+				aiSourceStatus.className = 'form-hint';
+			}
+			aiSourceUploadLabel?.removeAttribute('hidden');
+		}
+	});
 	aiSourceInput?.addEventListener('change', async () => {
 		const file = aiSourceInput.files?.[0];
 		if (!file) return;
