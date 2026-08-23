@@ -1,20 +1,21 @@
-name: Phase 4.7 Frontend Verification
+name: Phase 4.7 Apply Verified UI
 
 on:
-  pull_request:
+  push:
     branches: [main]
 
 permissions:
   contents: write
 
 jobs:
-  patch-and-test:
+  apply-verified-ui:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Phase 4.7 frontend branch
+        uses: actions/checkout@v4
         with:
-          ref: ${{ github.head_ref }}
+          ref: fix/phase4-7-generation-ui
           fetch-depth: 0
 
       - uses: actions/setup-node@v4
@@ -22,151 +23,12 @@ jobs:
           node-version: 24
           cache: npm
 
-      - name: Apply Phase 4.7 provenance UI when missing
+      - name: Apply asserted Phase 4.7 source patch
         shell: bash
         run: |
-          python3 <<'PY'
-          from pathlib import Path
-
-          def replace_once(text: str, old: str, new: str, label: str) -> str:
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f"{label}: expected exactly one match, found {count}")
-              return text.replace(old, new, 1)
-
-          article_path = Path('src/components/dashboard/ArticleForm.astro')
-          article = article_path.read_text()
-          if 'id="ai-generation-source-status"' not in article:
-              article = replace_once(article,
-                  '<p id="ai-generate-error" class="form-hint hidden text-red-600 dark:text-red-400"></p>',
-                  '<p id="ai-generate-error" class="form-hint hidden text-red-600 dark:text-red-400"></p>\n\t\t\t\t<p id="ai-generation-source-status" class="form-hint hidden"></p>',
-                  'article provenance markup')
-              article = replace_once(article,
-                  '<small>سيُقرأ محتواه لتوليد مقالة موثّقة منه</small>',
-                  '<small>سيحاول النظام استخراج النص من الملف؛ وإذا تعذرت القراءة سيُعلن بوضوح استخدام المعرفة العامة بدلًا منه</small>',
-                  'article source copy')
-              article = replace_once(article,
-                  "const aiError = document.getElementById('ai-generate-error');",
-                  "const aiError = document.getElementById('ai-generate-error');\n\t\tconst aiSourceModeNotice = document.getElementById('ai-generation-source-status');",
-                  'article status binding')
-              article = replace_once(article,
-                  "aiButton?.addEventListener('click', async () => {\n\t\t\taiError?.classList.add('hidden');",
-                  "aiButton?.addEventListener('click', async () => {\n\t\t\taiError?.classList.add('hidden');\n\t\t\taiSourceModeNotice?.classList.add('hidden');",
-                  'article status reset')
-              old = '''\t\t\t\t\t\tconst article = statusJson.article;
-\t\t\t\t\t\tif (article?.meta_description && metaDescriptionInput && !metaDescriptionInput.value.trim()) {
-\t\t\t\t\t\t\tmetaDescriptionInput.value = article.meta_description;
-\t\t\t\t\t\t}
-\t\t\t\t\t\tif (Array.isArray(article?.keywords) && article.keywords.length && keywordsInput && !keywordsInput.value.trim()) {
-\t\t\t\t\t\t\tkeywordsInput.value = article.keywords.join('، ');
-\t\t\t\t\t\t}
-\t\t\t\t\t\tif (typeof article?.seo_score === 'number' && aiError) {
-\t\t\t\t\t\t\tconst hasIssues = Array.isArray(article.seo_issues) && article.seo_issues.length > 0;
-\t\t\t\t\t\t\tif (article.seo_score < 99 || hasIssues) {
-\t\t\t\t\t\t\t\tconst topIssue = hasIssues ? ` — ${article.seo_issues[0]}` : '';
-\t\t\t\t\t\t\t\tconst scoreNote = article.seo_score < 99 ? `تم التوليد بجودة SEO ${article.seo_score}% (أقل من 99%)` : `تم التوليد بجودة SEO ${article.seo_score}%`;
-\t\t\t\t\t\t\t\taiError.textContent = `${scoreNote}${topIssue}. راجع المحتوى قبل النشر.`;
-\t\t\t\t\t\t\t\taiError.classList.remove('hidden');
-\t\t\t\t\t\t\t}
-\t\t\t\t\t\t}'''
-              new = '''\t\t\t\t\t\tconst article = statusJson.article;
-\t\t\t\t\t\tif (aiSourceModeNotice) {
-\t\t\t\t\t\t\tif (article?.source_mode === 'grounded_file') {
-\t\t\t\t\t\t\t\tconst grounding = typeof article?.grounding_score === 'number' ? ` — توثيق ${article.grounding_score}/100` : '';
-\t\t\t\t\t\t\t\taiSourceModeNotice.textContent = `✓ تم إنشاء المسودة من النص المستخرج من الملف والتحقق من الادعاءات بشكل مستقل${grounding}.`;
-\t\t\t\t\t\t\t\taiSourceModeNotice.className = 'form-hint text-emerald-700 dark:text-emerald-300';
-\t\t\t\t\t\t\t\taiSourceModeNotice.classList.remove('hidden');
-\t\t\t\t\t\t\t} else if (article?.source_mode === 'general_knowledge_fallback') {
-\t\t\t\t\t\t\t\taiSourceModeNotice.textContent = `⚠ ${article?.source_warning || 'تعذر الاعتماد على نص الملف؛ تم إنشاء المسودة بالمعرفة العامة وتحتاج مراجعة بشرية دقيقة.'}`;
-\t\t\t\t\t\t\t\taiSourceModeNotice.className = 'form-hint text-amber-700 dark:text-amber-300';
-\t\t\t\t\t\t\t\taiSourceModeNotice.classList.remove('hidden');
-\t\t\t\t\t\t\t}
-\t\t\t\t\t\t}
-\t\t\t\t\t\tif (article?.meta_description && metaDescriptionInput && !metaDescriptionInput.value.trim()) {
-\t\t\t\t\t\t\tmetaDescriptionInput.value = article.meta_description;
-\t\t\t\t\t\t}
-\t\t\t\t\t\tif (Array.isArray(article?.keywords) && article.keywords.length && keywordsInput && !keywordsInput.value.trim()) {
-\t\t\t\t\t\t\tkeywordsInput.value = article.keywords.join('، ');
-\t\t\t\t\t\t}
-\t\t\t\t\t\tconst draftQualityScore = typeof article?.draft_quality_score === 'number' ? article.draft_quality_score : article?.seo_score;
-\t\t\t\t\t\tconst draftQualityIssues = Array.isArray(article?.draft_quality_issues) ? article.draft_quality_issues : article?.seo_issues;
-\t\t\t\t\t\tif (typeof draftQualityScore === 'number' && aiError) {
-\t\t\t\t\t\t\tconst hasIssues = Array.isArray(draftQualityIssues) && draftQualityIssues.length > 0;
-\t\t\t\t\t\t\tif (draftQualityScore < 99 || hasIssues) {
-\t\t\t\t\t\t\t\tconst topIssue = hasIssues ? ` — ${draftQualityIssues[0]}` : '';
-\t\t\t\t\t\t\t\tconst scoreNote = draftQualityScore < 99 ? `درجة جودة المسودة ${draftQualityScore}/100 (أقل من الهدف الداخلي 99/100)` : `درجة جودة المسودة ${draftQualityScore}/100`;
-\t\t\t\t\t\t\t\taiError.textContent = `${scoreNote}${topIssue}. راجع المحتوى قبل النشر.`;
-\t\t\t\t\t\t\t\taiError.classList.remove('hidden');
-\t\t\t\t\t\t\t}
-\t\t\t\t\t\t}'''
-              article = replace_once(article, old, new, 'article done block')
-              article = article.replace('then up to 3 writer/validator rounds chasing the 99% SEO bar', 'then up to 3 writer/validator rounds chasing the internal 99/100 draft-quality target')
-              article_path.write_text(article)
-
-          post_path = Path('src/components/dashboard/PostForm.astro')
-          post = post_path.read_text()
-          if 'id="post-ai-source-status"' not in post:
-              post = replace_once(post,
-                  '<p id="post-ai-error" class="post-field-error" hidden></p>',
-                  '<p id="post-ai-error" class="post-field-error" hidden></p>\n\t\t\t\t\t<p id="post-ai-source-status" class="post-field-hint" hidden></p>',
-                  'post provenance markup')
-              post = replace_once(post,
-                  '<div class="post-side-heading"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 16V4m0 0L8 8m4-4 4 4M5 14v5h14v-5" /></svg></span><div><h2>ملف مصدر التوليد</h2><p>يُشترط توفر ملف قبل التوليد بالذكاء الاصطناعي</p></div></div>',
-                  '<div class="post-side-heading"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 16V4m0 0L8 8m4-4 4 4M5 14v5h14v-5" /></svg></span><div><h2>ملف مصدر التوليد</h2><p>يُحاول استخراج النص منه أولًا، ويُعلن fallback بوضوح إذا تعذرت القراءة</p></div></div>',
-                  'post source copy')
-              post = replace_once(post,
-                  "const aiError = document.getElementById('post-ai-error');",
-                  "const aiError = document.getElementById('post-ai-error');\n\t\tconst aiSourceModeNotice = document.getElementById('post-ai-source-status');",
-                  'post status binding')
-              post = replace_once(post,
-                  "aiButton?.addEventListener('click', async () => {\n\t\t\tif (aiError) aiError.hidden = true;",
-                  "aiButton?.addEventListener('click', async () => {\n\t\t\tif (aiError) aiError.hidden = true;\n\t\t\tif (aiSourceModeNotice) aiSourceModeNotice.hidden = true;",
-                  'post status reset')
-              old = '''\t\t\t\t\tconst html = status.content_html || status.content || '';
-\t\t\t\t\tif (html) quill.clipboard.dangerouslyPasteHTML(html);
-\t\t\t\t\tif (typeof status.article?.seo_score === 'number' && aiError) {
-\t\t\t\t\t\tconst hasIssues = Array.isArray(status.article.seo_issues) && status.article.seo_issues.length > 0;
-\t\t\t\t\t\tif (status.article.seo_score < 99 || hasIssues) {
-\t\t\t\t\t\t\tconst topIssue = hasIssues ? ` — ${status.article.seo_issues[0]}` : '';
-\t\t\t\t\t\t\tconst scoreNote = status.article.seo_score < 99 ? `تم التوليد بجودة SEO ${status.article.seo_score}% (أقل من 99%)` : `تم التوليد بجودة SEO ${status.article.seo_score}%`;
-\t\t\t\t\t\t\taiError.textContent = `${scoreNote}${topIssue}. راجع المحتوى قبل النشر.`;
-\t\t\t\t\t\t\taiError.hidden = false;
-\t\t\t\t\t\t}
-\t\t\t\t\t}'''
-              new = '''\t\t\t\t\tconst html = status.content_html || status.content || '';
-\t\t\t\t\tif (html) quill.clipboard.dangerouslyPasteHTML(html);
-\t\t\t\t\tconst article = status.article;
-\t\t\t\t\tif (aiSourceModeNotice) {
-\t\t\t\t\t\tif (article?.source_mode === 'grounded_file') {
-\t\t\t\t\t\t\tconst grounding = typeof article?.grounding_score === 'number' ? ` — توثيق ${article.grounding_score}/100` : '';
-\t\t\t\t\t\t\taiSourceModeNotice.textContent = `✓ تم إنشاء المسودة من النص المستخرج من الملف والتحقق من الادعاءات بشكل مستقل${grounding}.`;
-\t\t\t\t\t\t\taiSourceModeNotice.className = 'post-field-hint is-success';
-\t\t\t\t\t\t\taiSourceModeNotice.hidden = false;
-\t\t\t\t\t\t} else if (article?.source_mode === 'general_knowledge_fallback') {
-\t\t\t\t\t\t\taiSourceModeNotice.textContent = `⚠ ${article?.source_warning || 'تعذر الاعتماد على نص الملف؛ تم إنشاء المسودة بالمعرفة العامة وتحتاج مراجعة بشرية دقيقة.'}`;
-\t\t\t\t\t\t\taiSourceModeNotice.className = 'post-field-hint is-warning';
-\t\t\t\t\t\t\taiSourceModeNotice.hidden = false;
-\t\t\t\t\t\t}
-\t\t\t\t\t}
-\t\t\t\t\tconst draftQualityScore = typeof article?.draft_quality_score === 'number' ? article.draft_quality_score : article?.seo_score;
-\t\t\t\t\tconst draftQualityIssues = Array.isArray(article?.draft_quality_issues) ? article.draft_quality_issues : article?.seo_issues;
-\t\t\t\t\tif (typeof draftQualityScore === 'number' && aiError) {
-\t\t\t\t\t\tconst hasIssues = Array.isArray(draftQualityIssues) && draftQualityIssues.length > 0;
-\t\t\t\t\t\tif (draftQualityScore < 99 || hasIssues) {
-\t\t\t\t\t\t\tconst topIssue = hasIssues ? ` — ${draftQualityIssues[0]}` : '';
-\t\t\t\t\t\t\tconst scoreNote = draftQualityScore < 99 ? `درجة جودة المسودة ${draftQualityScore}/100 (أقل من الهدف الداخلي 99/100)` : `درجة جودة المسودة ${draftQualityScore}/100`;
-\t\t\t\t\t\t\taiError.textContent = `${scoreNote}${topIssue}. راجع المحتوى قبل النشر.`;
-\t\t\t\t\t\t\taiError.hidden = false;
-\t\t\t\t\t\t}
-\t\t\t\t\t}'''
-              post = replace_once(post, old, new, 'post done block')
-              post = post.replace('then up to 3 writer/validator rounds chasing the 99% SEO bar', 'then up to 3 writer/validator rounds chasing the internal 99/100 draft-quality target')
-              post = replace_once(post,
-                  '.post-field-hint.is-success{color:#0f8464}.post-field-hint.is-error{color:#c53030}',
-                  '.post-field-hint.is-success{color:#0f8464}.post-field-hint.is-warning{color:#9a6700}.post-field-hint.is-error{color:#c53030}',
-                  'post warning style')
-              post_path.write_text(post)
-          PY
+          awk 'BEGIN{emit=0} /python3 <<'"'"'PY'"'"'/{emit=1;next} /^[[:space:]]*PY[[:space:]]*$/{if(emit){exit}} emit{sub(/^          /,""); print}' .github/workflows/phase4-7-edit-test.yml > /tmp/phase47.py
+          test -s /tmp/phase47.py
+          python3 /tmp/phase47.py
 
       - name: Install dependencies
         run: npm ci
@@ -175,20 +37,33 @@ jobs:
         run: npx astro check
 
       - name: Production build
+        env:
+          PUBLIC_API_URL: https://api.imanjo.com
+          INTERNAL_API_URL: https://api.imanjo.com
+          FRONTEND_API_KEY: ci-placeholder-not-a-production-secret
+          PUBLIC_SITE_URL: https://imanjo.com
         run: npm run build
 
-      - name: Validate diff
-        run: git diff --check
-
-      - name: Commit verified source changes when needed
+      - name: Validate Phase 4.7 patch
         shell: bash
         run: |
-          if git diff --quiet -- src/components/dashboard/ArticleForm.astro src/components/dashboard/PostForm.astro; then
-            echo "Phase 4.7 UI already applied; verification passed."
-            exit 0
-          fi
+          git diff --check
+          grep -q 'ai-generation-source-status' src/components/dashboard/ArticleForm.astro
+          grep -q 'post-ai-source-status' src/components/dashboard/PostForm.astro
+          grep -q 'draft_quality_score' src/components/dashboard/ArticleForm.astro
+          grep -q 'draft_quality_score' src/components/dashboard/PostForm.astro
+          grep -q 'general_knowledge_fallback' src/components/dashboard/ArticleForm.astro
+          grep -q 'general_knowledge_fallback' src/components/dashboard/PostForm.astro
+
+      - name: Commit verified source to feature branch
+        shell: bash
+        run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src/components/dashboard/ArticleForm.astro src/components/dashboard/PostForm.astro
-          git commit -m "feat(ai): show generation provenance and draft quality [phase4.7-applied]"
-          git push origin HEAD:${{ github.head_ref }}
+          if git diff --cached --quiet; then
+            echo "Phase 4.7 source already applied"
+            exit 0
+          fi
+          git commit -m "feat(ai): show generation provenance and draft quality [phase4.7-verified]"
+          git push origin HEAD:fix/phase4-7-generation-ui
