@@ -1134,10 +1134,14 @@ function formatSize(bytes: number): string {
 						if (Array.isArray(article?.keywords) && article.keywords.length && keywordsInput && !keywordsInput.value.trim()) {
 							keywordsInput.value = article.keywords.join('، ');
 						}
-						if (typeof article?.seo_score === 'number' && article.seo_score < 99 && aiError) {
-							const topIssue = Array.isArray(article.seo_issues) && article.seo_issues.length ? ` — ${article.seo_issues[0]}` : '';
-							aiError.textContent = `تم التوليد بجودة SEO ${article.seo_score}% (أقل من 99%)${topIssue}. راجع المحتوى قبل النشر.`;
-							aiError.classList.remove('hidden');
+						if (typeof article?.seo_score === 'number' && aiError) {
+							const hasIssues = Array.isArray(article.seo_issues) && article.seo_issues.length > 0;
+							if (article.seo_score < 99 || hasIssues) {
+								const topIssue = hasIssues ? ` — ${article.seo_issues[0]}` : '';
+								const scoreNote = article.seo_score < 99 ? `تم التوليد بجودة SEO ${article.seo_score}% (أقل من 99%)` : `تم التوليد بجودة SEO ${article.seo_score}%`;
+								aiError.textContent = `${scoreNote}${topIssue}. راجع المحتوى قبل النشر.`;
+								aiError.classList.remove('hidden');
+							}
 						}
 						setAIBusy(false);
 						return;

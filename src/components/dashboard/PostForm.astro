@@ -328,10 +328,14 @@ const files: any[] = Array.isArray(post?.files) ? post.files : [];
 					if (status?.status !== 'done') continue;
 					const html = status.content_html || status.content || '';
 					if (html) quill.clipboard.dangerouslyPasteHTML(html);
-					if (typeof status.article?.seo_score === 'number' && status.article.seo_score < 99 && aiError) {
-						const topIssue = Array.isArray(status.article.seo_issues) && status.article.seo_issues.length ? ` — ${status.article.seo_issues[0]}` : '';
-						aiError.textContent = `تم التوليد بجودة SEO ${status.article.seo_score}% (أقل من 99%)${topIssue}. راجع المحتوى قبل النشر.`;
-						aiError.hidden = false;
+					if (typeof status.article?.seo_score === 'number' && aiError) {
+						const hasIssues = Array.isArray(status.article.seo_issues) && status.article.seo_issues.length > 0;
+						if (status.article.seo_score < 99 || hasIssues) {
+							const topIssue = hasIssues ? ` — ${status.article.seo_issues[0]}` : '';
+							const scoreNote = status.article.seo_score < 99 ? `تم التوليد بجودة SEO ${status.article.seo_score}% (أقل من 99%)` : `تم التوليد بجودة SEO ${status.article.seo_score}%`;
+							aiError.textContent = `${scoreNote}${topIssue}. راجع المحتوى قبل النشر.`;
+							aiError.hidden = false;
+						}
 					}
 					if (status.article?.meta_description && metaInput && !metaInput.value.trim()) {
 						metaInput.value = status.article.meta_description;
