@@ -279,6 +279,7 @@ const files: any[] = Array.isArray(post?.files) ? post.files : [];
 		const categoryInput = document.getElementById('category_id') as HTMLSelectElement | null;
 		const metaInput = document.getElementById('meta_description') as HTMLTextAreaElement | null;
 		const keywordsInput = document.getElementById('keywords') as HTMLInputElement | null;
+		const altInputForAI = document.getElementById('alt') as HTMLInputElement | null;
 
 		const setAiBusy = (busy: boolean) => {
 			if (aiButton) aiButton.disabled = busy;
@@ -336,7 +337,8 @@ const files: any[] = Array.isArray(post?.files) ? post.files : [];
 						metaInput.value = status.article.meta_description;
 						metaInput.dispatchEvent(new Event('input'));
 					}
-					if (Array.isArray(status.article?.keywords) && keywordsInput && !keywordsInput.value.trim()) keywordsInput.value = status.article.keywords.join('، ');
+					if (Array.isArray(status.article?.keywords) && status.article.keywords.length && keywordsInput && !keywordsInput.value.trim()) keywordsInput.value = status.article.keywords.join('، ');
+					if (status.article?.cover_alt_text && altInputForAI && !altInputForAI.value.trim()) altInputForAI.value = status.article.cover_alt_text;
 					setAiBusy(false);
 					return;
 				}
