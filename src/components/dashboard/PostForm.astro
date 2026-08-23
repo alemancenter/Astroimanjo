@@ -65,6 +65,7 @@ const files: any[] = Array.isArray(post?.files) ? post.files : [];
 						</button>
 					</div>
 					<p id="post-ai-error" class="post-field-error" hidden></p>
+					<p id="post-ai-source-status" class="post-field-hint" hidden></p>
 					<div id="post-editor-toolbar">
 						<span class="ql-formats"><button type="button" class="ql-bold"></button><button type="button" class="ql-italic"></button><button type="button" class="ql-underline"></button><button type="button" class="ql-strike"></button></span>
 						<span class="ql-formats"><select class="ql-header"><option value="2"></option><option value="3"></option><option value=""></option></select></span>
@@ -133,7 +134,7 @@ const files: any[] = Array.isArray(post?.files) ? post.files : [];
 			</section>
 
 			<section class="post-side-card">
-				<div class="post-side-heading"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 16V4m0 0L8 8m4-4 4 4M5 14v5h14v-5" /></svg></span><div><h2>ملف مصدر التوليد</h2><p>يُشترط توفر ملف قبل التوليد بالذكاء الاصطناعي</p></div></div>
+				<div class="post-side-heading"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 16V4m0 0L8 8m4-4 4 4M5 14v5h14v-5" /></svg></span><div><h2>ملف مصدر التوليد</h2><p>يُحاول استخراج النص منه أولًا، ويُعلن fallback بوضوح إذا تعذرت القراءة</p></div></div>
 				{files.length > 0 && (
 					<div class="post-field">
 						<label for="ai-source-existing-select">من الملفات المرفقة بالمنشور</label>
@@ -275,6 +276,7 @@ const files: any[] = Array.isArray(post?.files) ? post.files : [];
 		const aiLabel = document.getElementById('post-ai-label');
 		const aiIcon = document.getElementById('post-ai-icon');
 		const aiError = document.getElementById('post-ai-error');
+		const aiSourceModeNotice = document.getElementById('post-ai-source-status');
 		const titleInput = document.getElementById('title') as HTMLInputElement | null;
 		const categoryInput = document.getElementById('category_id') as HTMLSelectElement | null;
 		const metaInput = document.getElementById('meta_description') as HTMLTextAreaElement | null;
@@ -289,6 +291,7 @@ const files: any[] = Array.isArray(post?.files) ? post.files : [];
 
 		aiButton?.addEventListener('click', async () => {
 			if (aiError) aiError.hidden = true;
+			if (aiSourceModeNotice) aiSourceModeNotice.hidden = true;
 			const title = titleInput?.value.trim() ?? '';
 			if (title.length < 5) {
 				if (aiError) { aiError.textContent = 'أدخل عنوانًا من 5 أحرف على الأقل قبل التوليد.'; aiError.hidden = false; }
@@ -316,7 +319,7 @@ const files: any[] = Array.isArray(post?.files) ? post.files : [];
 				if (!response.ok || !payload?.job_id) throw new Error(payload?.message || 'تعذّر بدء عملية التوليد');
 
 				// File-grounded generation runs several sequential AI calls (fact extraction,
-				// then up to 3 writer/validator rounds chasing the 99% SEO bar) — genuinely
+				// then up to 3 writer/validator rounds chasing the internal 99/100 draft-quality target) — genuinely
 				// slower than plain title-only generation used to be. 160 x 2s = ~5m20s, just
 				// past the backend's own groundedGenerationTimeout (5m) so it reports failure
 				// first instead of the frontend giving up while the job is still running.
@@ -328,11 +331,26 @@ const files: any[] = Array.isArray(post?.files) ? post.files : [];
 					if (status?.status !== 'done') continue;
 					const html = status.content_html || status.content || '';
 					if (html) quill.clipboard.dangerouslyPasteHTML(html);
-					if (typeof status.article?.seo_score === 'number' && aiError) {
-						const hasIssues = Array.isArray(status.article.seo_issues) && status.article.seo_issues.length > 0;
-						if (status.article.seo_score < 99 || hasIssues) {
-							const topIssue = hasIssues ? ` — ${status.article.seo_issues[0]}` : '';
-							const scoreNote = status.article.seo_score < 99 ? `تم التوليد بجودة SEO ${status.article.seo_score}% (أقل من 99%)` : `تم التوليد بجودة SEO ${status.article.seo_score}%`;
+					const article = status.article;
+					if (aiSourceModeNotice) {
+						if (article?.source_mode === 'grounded_file') {
+							const grounding = typeof article?.grounding_score === 'number' ? ` — توثيق ${article.grounding_score}/100` : '';
+							aiSourceModeNotice.textContent = `✓ تم إنشاء المسودة من النص المستخرج من الملف والتحقق من الادعاءات بشكل مستقل${grounding}.`;
+							aiSourceModeNotice.className = 'post-field-hint is-success';
+							aiSourceModeNotice.hidden = false;
+						} else if (article?.source_mode === 'general_knowledge_fallback') {
+							aiSourceModeNotice.textContent = `⚠ ${article?.source_warning || 'تعذر الاعتماد على نص الملف؛ تم إنشاء المسودة بالمعرفة العامة وتحتاج مراجعة بشرية دقيقة.'}`;
+							aiSourceModeNotice.className = 'post-field-hint is-warning';
+							aiSourceModeNotice.hidden = false;
+						}
+					}
+					const draftQualityScore = typeof article?.draft_quality_score === 'number' ? article.draft_quality_score : article?.seo_score;
+					const draftQualityIssues = Array.isArray(article?.draft_quality_issues) ? article.draft_quality_issues : article?.seo_issues;
+					if (typeof draftQualityScore === 'number' && aiError) {
+						const hasIssues = Array.isArray(draftQualityIssues) && draftQualityIssues.length > 0;
+						if (draftQualityScore < 99 || hasIssues) {
+							const topIssue = hasIssues ? ` — ${draftQualityIssues[0]}` : '';
+							const scoreNote = draftQualityScore < 99 ? `درجة جودة المسودة ${draftQualityScore}/100 (أقل من الهدف الداخلي 99/100)` : `درجة جودة المسودة ${draftQualityScore}/100`;
 							aiError.textContent = `${scoreNote}${topIssue}. راجع المحتوى قبل النشر.`;
 							aiError.hidden = false;
 						}
@@ -404,7 +422,7 @@ const files: any[] = Array.isArray(post?.files) ? post.files : [];
 	.post-editor-grid{display:grid;grid-template-columns:minmax(0,1fr) 17.5rem;align-items:start;gap:1rem}.post-main-column,.post-sidebar{display:grid;gap:1rem}.post-sidebar{position:sticky;top:1rem}.post-card,.post-side-card{border:1px solid var(--post-line);border-radius:.8rem;background:#fff;box-shadow:0 1px 2px rgb(15 23 42 / .05)}.post-card{padding:1rem}.post-side-card{padding:.9rem}
 	.post-card-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem;border-bottom:1px solid #edf1f5;padding-bottom:.8rem}.post-card-heading>div{display:grid;grid-template-columns:auto 1fr;column-gap:.5rem}.post-card-heading .post-step{grid-row:1 / span 2;display:grid;width:1.75rem;height:1.75rem;place-items:center;border-radius:.4rem;background:#edf4fc;color:#1a4d8f;font-size:.6rem;font-weight:900}.post-card-heading h2{margin:0;color:#102a43;font-size:.86rem;font-weight:900}.post-card-heading p{margin:.12rem 0 0;color:var(--post-muted);font-size:.64rem}.post-card-heading>svg{width:1.1rem;height:1.1rem;color:#1a4d8f}
 	.post-field{display:grid;gap:.35rem;margin-top:.85rem}.post-field:first-of-type{margin-top:0}.post-field label,.post-label-row label{color:#243b53;font-size:.68rem;font-weight:850}.post-label-row{display:flex;align-items:center;justify-content:space-between;gap:.75rem}.post-label-row>span{color:#91a0b2;font-size:.6rem}.post-field input,.post-field select,.post-field textarea{width:100%;min-height:2.45rem;border:1px solid #d9e2ec;border-radius:.5rem;background:#fff;padding:.52rem .65rem;color:#102a43;font-family:inherit;font-size:.72rem;transition:border-color .15s,box-shadow .15s}.post-field textarea{resize:vertical;line-height:1.7}.post-field input:focus,.post-field select:focus,.post-field textarea:focus{border-color:#7da4d7;outline:0;box-shadow:0 0 0 3px rgb(26 77 143 / .07)}.post-field small{color:#8796a8;font-size:.58rem}
-	.post-editor-field{margin-top:1rem}.post-ai-button{display:inline-flex;min-height:2rem;align-items:center;gap:.35rem;border:1px solid #b8cce5;border-radius:.45rem;background:#fff;padding:.35rem .6rem;color:#1a4d8f;font-size:.64rem;font-weight:800}.post-ai-button:hover{background:#f4f8fd}.post-ai-button:disabled{cursor:wait;opacity:.65}.post-ai-button svg{width:.85rem;height:.85rem}.post-ai-button svg.is-spinning{animation:post-spin 1s linear infinite}.post-field-error{margin:0;color:#c53030;font-size:.62rem;font-weight:750}.post-field-hint{margin:.5rem 0 0;color:#8796a8;font-size:.6rem}.post-field-hint.is-success{color:#0f8464}.post-field-hint.is-error{color:#c53030}
+	.post-editor-field{margin-top:1rem}.post-ai-button{display:inline-flex;min-height:2rem;align-items:center;gap:.35rem;border:1px solid #b8cce5;border-radius:.45rem;background:#fff;padding:.35rem .6rem;color:#1a4d8f;font-size:.64rem;font-weight:800}.post-ai-button:hover{background:#f4f8fd}.post-ai-button:disabled{cursor:wait;opacity:.65}.post-ai-button svg{width:.85rem;height:.85rem}.post-ai-button svg.is-spinning{animation:post-spin 1s linear infinite}.post-field-error{margin:0;color:#c53030;font-size:.62rem;font-weight:750}.post-field-hint{margin:.5rem 0 0;color:#8796a8;font-size:.6rem}.post-field-hint.is-success{color:#0f8464}.post-field-hint.is-warning{color:#9a6700}.post-field-hint.is-error{color:#c53030}
 	:global(#post-editor-toolbar.ql-toolbar.ql-snow){border:1px solid #d9e2ec;border-radius:.55rem .55rem 0 0;background:#fbfcfe;padding:.45rem;direction:rtl}:global(#post-editor-container.ql-container.ql-snow){height:23rem;border:1px solid #d9e2ec;border-top:0;border-radius:0 0 .55rem .55rem;background:#fff;font-family:inherit;font-size:.82rem}:global(#post-editor-container .ql-editor){padding:1rem 1.1rem;line-height:1.9}:global(#post-editor-toolbar .ql-formats){margin-right:0;margin-left:.45rem}.post-editor-footer{display:flex;min-height:1.5rem;align-items:center;justify-content:space-between;gap:1rem;color:#8796a8;font-size:.58rem}
 	.post-side-heading{display:flex;align-items:flex-start;gap:.6rem;margin-bottom:.85rem}.post-side-heading>span{display:grid;width:1.9rem;height:1.9rem;flex:none;place-items:center;border-radius:.45rem;background:#edf4fc;color:#1a4d8f}.post-side-heading svg{width:.95rem;height:.95rem}.post-side-heading h2{margin:0;color:#102a43;font-size:.76rem;font-weight:900}.post-side-heading p{margin:.12rem 0 0;color:var(--post-muted);font-size:.58rem}
 	.post-image-drop{position:relative;display:grid;min-height:9.5rem;cursor:pointer;overflow:hidden;place-items:center;border:1px dashed #afc2d8;border-radius:.6rem;background:#fafcfe;text-align:center}.post-image-drop:hover{border-color:#1a4d8f;background:#f6f9fd}.post-image-drop input,.post-files-drop input{position:absolute;width:1px;height:1px;opacity:0}.post-image-drop img{width:100%;height:10.5rem;object-fit:cover}.post-image-drop>span{display:grid;justify-items:center;gap:.25rem;color:#60758a}.post-image-drop svg,.post-files-drop svg{width:1.25rem;height:1.25rem;color:#1a4d8f}.post-image-drop strong,.post-files-drop strong{font-size:.68rem}.post-image-drop small,.post-files-drop small{color:#8796a8;font-size:.56rem}

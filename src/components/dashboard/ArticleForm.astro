@@ -91,6 +91,7 @@ function formatSize(bytes: number): string {
 					</button>
 				</div>
 				<p id="ai-generate-error" class="form-hint hidden text-red-600 dark:text-red-400"></p>
+				<p id="ai-generation-source-status" class="form-hint hidden"></p>
 				<div id="quill-toolbar">
 					<span class="ql-formats"><button type="button" class="ql-bold"></button><button type="button" class="ql-italic"></button><button type="button" class="ql-underline"></button><button type="button" class="ql-strike"></button></span>
 					<span class="ql-formats"><select class="ql-header"><option value="1"></option><option value="2"></option><option value="3"></option><option value=""></option></select><select class="ql-size"><option value="12px">صغير</option><option value="" selected>عادي</option><option value="20px">كبير</option><option value="28px">كبير جدًا</option></select></span>
@@ -141,7 +142,7 @@ function formatSize(bytes: number): string {
 					<option value="">— رفع ملف جديد بدلًا من ذلك —</option>
 				</select></div>
 			)}
-			<label class="article-file-drop" for="ai-source-file-input" id="ai-source-upload-label" hidden={files.length > 0}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 16V4m0 0L8 8m4-4 4 4M5 14v5h14v-5" /></svg><span>اختر ملف المصدر (DOCX أو PDF)</span><small>سيُقرأ محتواه لتوليد مقالة موثّقة منه</small><input id="ai-source-file-input" type="file" accept=".docx,.pdf" /></label>
+			<label class="article-file-drop" for="ai-source-file-input" id="ai-source-upload-label" hidden={files.length > 0}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 16V4m0 0L8 8m4-4 4 4M5 14v5h14v-5" /></svg><span>اختر ملف المصدر (DOCX أو PDF)</span><small>سيحاول النظام استخراج النص من الملف؛ وإذا تعذرت القراءة سيُعلن بوضوح استخدام المعرفة العامة بدلًا منه</small><input id="ai-source-file-input" type="file" accept=".docx,.pdf" /></label>
 			<p id="ai-source-status" class="form-hint">{files.length > 0 ? `سيُستخدم "${files[0].file_name}" مصدرًا للتوليد.` : 'لم يُرفع أي ملف بعد.'}</p>
 			<input type="hidden" id="ai-source-file-id" name="ai_source_file_id" value={files.length > 0 ? files[0].id : ''} />
 		</section>
@@ -1047,6 +1048,7 @@ function formatSize(bytes: number): string {
 		const aiIcon = document.getElementById('ai-generate-icon');
 		const aiLabel = document.getElementById('ai-generate-label');
 		const aiError = document.getElementById('ai-generate-error');
+		const aiSourceModeNotice = document.getElementById('ai-generation-source-status');
 		const titleInput = document.getElementById('title') as HTMLInputElement | null;
 		const metaDescriptionInput = document.getElementById('meta_description') as HTMLTextAreaElement | null;
 		const keywordsInput = document.getElementById('keywords') as HTMLInputElement | null;
@@ -1062,6 +1064,7 @@ function formatSize(bytes: number): string {
 
 		aiButton?.addEventListener('click', async () => {
 			aiError?.classList.add('hidden');
+			aiSourceModeNotice?.classList.add('hidden');
 			const title = titleInput?.value.trim() ?? '';
 			if (title.length < 5) {
 				if (aiError) {
@@ -1114,7 +1117,7 @@ function formatSize(bytes: number): string {
 
 				const jobId = genJson.job_id;
 				// File-grounded generation runs several sequential AI calls (fact extraction,
-				// then up to 3 writer/validator rounds chasing the 99% SEO bar), so this can
+				// then up to 3 writer/validator rounds chasing the internal 99/100 draft-quality target), so this can
 				// legitimately take a couple of minutes. Hard cap at ~5m20s (just past the
 				// backend's own groundedGenerationTimeout of 5m) instead of polling forever.
 				const maxPollAttempts = 107;
@@ -1128,17 +1131,31 @@ function formatSize(bytes: number): string {
 						const html = statusJson.content_html || statusJson.content || '';
 						if (html) quill.clipboard.dangerouslyPasteHTML(html);
 						const article = statusJson.article;
+						if (aiSourceModeNotice) {
+							if (article?.source_mode === 'grounded_file') {
+								const grounding = typeof article?.grounding_score === 'number' ? ` — توثيق ${article.grounding_score}/100` : '';
+								aiSourceModeNotice.textContent = `✓ تم إنشاء المسودة من النص المستخرج من الملف والتحقق من الادعاءات بشكل مستقل${grounding}.`;
+								aiSourceModeNotice.className = 'form-hint text-emerald-700 dark:text-emerald-300';
+								aiSourceModeNotice.classList.remove('hidden');
+							} else if (article?.source_mode === 'general_knowledge_fallback') {
+								aiSourceModeNotice.textContent = `⚠ ${article?.source_warning || 'تعذر الاعتماد على نص الملف؛ تم إنشاء المسودة بالمعرفة العامة وتحتاج مراجعة بشرية دقيقة.'}`;
+								aiSourceModeNotice.className = 'form-hint text-amber-700 dark:text-amber-300';
+								aiSourceModeNotice.classList.remove('hidden');
+							}
+						}
 						if (article?.meta_description && metaDescriptionInput && !metaDescriptionInput.value.trim()) {
 							metaDescriptionInput.value = article.meta_description;
 						}
 						if (Array.isArray(article?.keywords) && article.keywords.length && keywordsInput && !keywordsInput.value.trim()) {
 							keywordsInput.value = article.keywords.join('، ');
 						}
-						if (typeof article?.seo_score === 'number' && aiError) {
-							const hasIssues = Array.isArray(article.seo_issues) && article.seo_issues.length > 0;
-							if (article.seo_score < 99 || hasIssues) {
-								const topIssue = hasIssues ? ` — ${article.seo_issues[0]}` : '';
-								const scoreNote = article.seo_score < 99 ? `تم التوليد بجودة SEO ${article.seo_score}% (أقل من 99%)` : `تم التوليد بجودة SEO ${article.seo_score}%`;
+						const draftQualityScore = typeof article?.draft_quality_score === 'number' ? article.draft_quality_score : article?.seo_score;
+						const draftQualityIssues = Array.isArray(article?.draft_quality_issues) ? article.draft_quality_issues : article?.seo_issues;
+						if (typeof draftQualityScore === 'number' && aiError) {
+							const hasIssues = Array.isArray(draftQualityIssues) && draftQualityIssues.length > 0;
+							if (draftQualityScore < 99 || hasIssues) {
+								const topIssue = hasIssues ? ` — ${draftQualityIssues[0]}` : '';
+								const scoreNote = draftQualityScore < 99 ? `درجة جودة المسودة ${draftQualityScore}/100 (أقل من الهدف الداخلي 99/100)` : `درجة جودة المسودة ${draftQualityScore}/100`;
 								aiError.textContent = `${scoreNote}${topIssue}. راجع المحتوى قبل النشر.`;
 								aiError.classList.remove('hidden');
 							}
