@@ -1,21 +1,20 @@
-name: Phase 4.7 Frontend Patch and Verification
+name: Phase 4.7 Frontend Verification
 
 on:
-  push:
-    branches: [fix/phase4-7-generation-source-mode]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: write
 
 jobs:
-  patch-test-commit:
-    if: ${{ !contains(github.event.head_commit.message, '[phase4.7-applied]') }}
+  patch-and-test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: fix/phase4-7-generation-source-mode
+          ref: ${{ github.head_ref }}
           fetch-depth: 0
 
       - uses: actions/setup-node@v4
@@ -23,7 +22,7 @@ jobs:
           node-version: 24
           cache: npm
 
-      - name: Apply explicit provenance UI patch
+      - name: Apply Phase 4.7 provenance UI when missing
         shell: bash
         run: |
           python3 <<'PY'
@@ -37,31 +36,24 @@ jobs:
 
           article_path = Path('src/components/dashboard/ArticleForm.astro')
           article = article_path.read_text()
-          article = replace_once(
-              article,
-              '<p id="ai-generate-error" class="form-hint hidden text-red-600 dark:text-red-400"></p>',
-              '<p id="ai-generate-error" class="form-hint hidden text-red-600 dark:text-red-400"></p>\n\t\t\t\t<p id="ai-generation-source-status" class="form-hint hidden"></p>',
-              'article provenance status markup',
-          )
-          article = replace_once(
-              article,
-              '<small>سيُقرأ محتواه لتوليد مقالة موثّقة منه</small>',
-              '<small>سيحاول النظام استخراج النص من الملف؛ وإذا تعذرت القراءة سيُعلن بوضوح استخدام المعرفة العامة بدلًا منه</small>',
-              'article source description',
-          )
-          article = replace_once(
-              article,
-              "const aiError = document.getElementById('ai-generate-error');",
-              "const aiError = document.getElementById('ai-generate-error');\n\t\tconst aiSourceModeNotice = document.getElementById('ai-generation-source-status');",
-              'article source status binding',
-          )
-          article = replace_once(
-              article,
-              "aiButton?.addEventListener('click', async () => {\n\t\t\taiError?.classList.add('hidden');",
-              "aiButton?.addEventListener('click', async () => {\n\t\t\taiError?.classList.add('hidden');\n\t\t\taiSourceModeNotice?.classList.add('hidden');",
-              'article reset provenance notice',
-          )
-          old_article_done = '''\t\t\t\t\t\tconst article = statusJson.article;
+          if 'id="ai-generation-source-status"' not in article:
+              article = replace_once(article,
+                  '<p id="ai-generate-error" class="form-hint hidden text-red-600 dark:text-red-400"></p>',
+                  '<p id="ai-generate-error" class="form-hint hidden text-red-600 dark:text-red-400"></p>\n\t\t\t\t<p id="ai-generation-source-status" class="form-hint hidden"></p>',
+                  'article provenance markup')
+              article = replace_once(article,
+                  '<small>سيُقرأ محتواه لتوليد مقالة موثّقة منه</small>',
+                  '<small>سيحاول النظام استخراج النص من الملف؛ وإذا تعذرت القراءة سيُعلن بوضوح استخدام المعرفة العامة بدلًا منه</small>',
+                  'article source copy')
+              article = replace_once(article,
+                  "const aiError = document.getElementById('ai-generate-error');",
+                  "const aiError = document.getElementById('ai-generate-error');\n\t\tconst aiSourceModeNotice = document.getElementById('ai-generation-source-status');",
+                  'article status binding')
+              article = replace_once(article,
+                  "aiButton?.addEventListener('click', async () => {\n\t\t\taiError?.classList.add('hidden');",
+                  "aiButton?.addEventListener('click', async () => {\n\t\t\taiError?.classList.add('hidden');\n\t\t\taiSourceModeNotice?.classList.add('hidden');",
+                  'article status reset')
+              old = '''\t\t\t\t\t\tconst article = statusJson.article;
 \t\t\t\t\t\tif (article?.meta_description && metaDescriptionInput && !metaDescriptionInput.value.trim()) {
 \t\t\t\t\t\t\tmetaDescriptionInput.value = article.meta_description;
 \t\t\t\t\t\t}
@@ -77,7 +69,7 @@ jobs:
 \t\t\t\t\t\t\t\taiError.classList.remove('hidden');
 \t\t\t\t\t\t\t}
 \t\t\t\t\t\t}'''
-          new_article_done = '''\t\t\t\t\t\tconst article = statusJson.article;
+              new = '''\t\t\t\t\t\tconst article = statusJson.article;
 \t\t\t\t\t\tif (aiSourceModeNotice) {
 \t\t\t\t\t\t\tif (article?.source_mode === 'grounded_file') {
 \t\t\t\t\t\t\t\tconst grounding = typeof article?.grounding_score === 'number' ? ` — توثيق ${article.grounding_score}/100` : '';
@@ -107,37 +99,30 @@ jobs:
 \t\t\t\t\t\t\t\taiError.classList.remove('hidden');
 \t\t\t\t\t\t\t}
 \t\t\t\t\t\t}'''
-          article = replace_once(article, old_article_done, new_article_done, 'article done block')
-          article = article.replace('then up to 3 writer/validator rounds chasing the 99% SEO bar', 'then up to 3 writer/validator rounds chasing the internal 99/100 draft-quality target')
-          article_path.write_text(article)
+              article = replace_once(article, old, new, 'article done block')
+              article = article.replace('then up to 3 writer/validator rounds chasing the 99% SEO bar', 'then up to 3 writer/validator rounds chasing the internal 99/100 draft-quality target')
+              article_path.write_text(article)
 
           post_path = Path('src/components/dashboard/PostForm.astro')
           post = post_path.read_text()
-          post = replace_once(
-              post,
-              '<p id="post-ai-error" class="post-field-error" hidden></p>',
-              '<p id="post-ai-error" class="post-field-error" hidden></p>\n\t\t\t\t\t<p id="post-ai-source-status" class="post-field-hint" hidden></p>',
-              'post provenance status markup',
-          )
-          post = replace_once(
-              post,
-              '<div class="post-side-heading"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 16V4m0 0L8 8m4-4 4 4M5 14v5h14v-5" /></svg></span><div><h2>ملف مصدر التوليد</h2><p>يُشترط توفر ملف قبل التوليد بالذكاء الاصطناعي</p></div></div>',
-              '<div class="post-side-heading"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 16V4m0 0L8 8m4-4 4 4M5 14v5h14v-5" /></svg></span><div><h2>ملف مصدر التوليد</h2><p>يُحاول استخراج النص منه أولًا، ويُعلن fallback بوضوح إذا تعذرت القراءة</p></div></div>',
-              'post source description',
-          )
-          post = replace_once(
-              post,
-              "const aiError = document.getElementById('post-ai-error');",
-              "const aiError = document.getElementById('post-ai-error');\n\t\tconst aiSourceModeNotice = document.getElementById('post-ai-source-status');",
-              'post source status binding',
-          )
-          post = replace_once(
-              post,
-              "aiButton?.addEventListener('click', async () => {\n\t\t\tif (aiError) aiError.hidden = true;",
-              "aiButton?.addEventListener('click', async () => {\n\t\t\tif (aiError) aiError.hidden = true;\n\t\t\tif (aiSourceModeNotice) aiSourceModeNotice.hidden = true;",
-              'post reset provenance notice',
-          )
-          old_post_done = '''\t\t\t\t\tconst html = status.content_html || status.content || '';
+          if 'id="post-ai-source-status"' not in post:
+              post = replace_once(post,
+                  '<p id="post-ai-error" class="post-field-error" hidden></p>',
+                  '<p id="post-ai-error" class="post-field-error" hidden></p>\n\t\t\t\t\t<p id="post-ai-source-status" class="post-field-hint" hidden></p>',
+                  'post provenance markup')
+              post = replace_once(post,
+                  '<div class="post-side-heading"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 16V4m0 0L8 8m4-4 4 4M5 14v5h14v-5" /></svg></span><div><h2>ملف مصدر التوليد</h2><p>يُشترط توفر ملف قبل التوليد بالذكاء الاصطناعي</p></div></div>',
+                  '<div class="post-side-heading"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 16V4m0 0L8 8m4-4 4 4M5 14v5h14v-5" /></svg></span><div><h2>ملف مصدر التوليد</h2><p>يُحاول استخراج النص منه أولًا، ويُعلن fallback بوضوح إذا تعذرت القراءة</p></div></div>',
+                  'post source copy')
+              post = replace_once(post,
+                  "const aiError = document.getElementById('post-ai-error');",
+                  "const aiError = document.getElementById('post-ai-error');\n\t\tconst aiSourceModeNotice = document.getElementById('post-ai-source-status');",
+                  'post status binding')
+              post = replace_once(post,
+                  "aiButton?.addEventListener('click', async () => {\n\t\t\tif (aiError) aiError.hidden = true;",
+                  "aiButton?.addEventListener('click', async () => {\n\t\t\tif (aiError) aiError.hidden = true;\n\t\t\tif (aiSourceModeNotice) aiSourceModeNotice.hidden = true;",
+                  'post status reset')
+              old = '''\t\t\t\t\tconst html = status.content_html || status.content || '';
 \t\t\t\t\tif (html) quill.clipboard.dangerouslyPasteHTML(html);
 \t\t\t\t\tif (typeof status.article?.seo_score === 'number' && aiError) {
 \t\t\t\t\t\tconst hasIssues = Array.isArray(status.article.seo_issues) && status.article.seo_issues.length > 0;
@@ -148,7 +133,7 @@ jobs:
 \t\t\t\t\t\t\taiError.hidden = false;
 \t\t\t\t\t\t}
 \t\t\t\t\t}'''
-          new_post_done = '''\t\t\t\t\tconst html = status.content_html || status.content || '';
+              new = '''\t\t\t\t\tconst html = status.content_html || status.content || '';
 \t\t\t\t\tif (html) quill.clipboard.dangerouslyPasteHTML(html);
 \t\t\t\t\tconst article = status.article;
 \t\t\t\t\tif (aiSourceModeNotice) {
@@ -174,15 +159,13 @@ jobs:
 \t\t\t\t\t\t\taiError.hidden = false;
 \t\t\t\t\t\t}
 \t\t\t\t\t}'''
-          post = replace_once(post, old_post_done, new_post_done, 'post done block')
-          post = post.replace('then up to 3 writer/validator rounds chasing the 99% SEO bar', 'then up to 3 writer/validator rounds chasing the internal 99/100 draft-quality target')
-          post = replace_once(
-              post,
-              ".post-field-hint.is-success{color:#0f8464}.post-field-hint.is-error{color:#c53030}",
-              ".post-field-hint.is-success{color:#0f8464}.post-field-hint.is-warning{color:#9a6700}.post-field-hint.is-error{color:#c53030}",
-              'post warning style',
-          )
-          post_path.write_text(post)
+              post = replace_once(post, old, new, 'post done block')
+              post = post.replace('then up to 3 writer/validator rounds chasing the 99% SEO bar', 'then up to 3 writer/validator rounds chasing the internal 99/100 draft-quality target')
+              post = replace_once(post,
+                  '.post-field-hint.is-success{color:#0f8464}.post-field-hint.is-error{color:#c53030}',
+                  '.post-field-hint.is-success{color:#0f8464}.post-field-hint.is-warning{color:#9a6700}.post-field-hint.is-error{color:#c53030}',
+                  'post warning style')
+              post_path.write_text(post)
           PY
 
       - name: Install dependencies
@@ -194,11 +177,18 @@ jobs:
       - name: Production build
         run: npm run build
 
-      - name: Commit verified Phase 4.7 patch
+      - name: Validate diff
+        run: git diff --check
+
+      - name: Commit verified source changes when needed
+        shell: bash
         run: |
+          if git diff --quiet -- src/components/dashboard/ArticleForm.astro src/components/dashboard/PostForm.astro; then
+            echo "Phase 4.7 UI already applied; verification passed."
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src/components/dashboard/ArticleForm.astro src/components/dashboard/PostForm.astro
-          git diff --cached --check
           git commit -m "feat(ai): show generation provenance and draft quality [phase4.7-applied]"
-          git push origin HEAD:fix/phase4-7-generation-source-mode
+          git push origin HEAD:${{ github.head_ref }}
