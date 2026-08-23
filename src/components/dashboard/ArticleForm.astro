@@ -132,6 +132,13 @@ function formatSize(bytes: number): string {
 			<div><label for="semester_id" class={labelClass}>الفصل الدراسي</label><select id="semester_id" name="semester_id" required class={inputClass}>{article?.semester ? <option value={article.semester_id} selected>{article.semester.semester_name}</option> : <option value="">— اختر المادة أولًا —</option>}</select></div>
 		</section>
 
+		<section class="article-side-card article-ai-source-section">
+			<div class="article-side-section-heading"><span class="article-side-section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 16V4m0 0L8 8m4-4 4 4M5 14v5h14v-5" /></svg></span><div><strong>ملف مصدر التوليد</strong><small>يُشترط رفعه فعليًا قبل التوليد بالذكاء الاصطناعي</small></div></div>
+			<label class="article-file-drop" for="ai-source-file-input"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 16V4m0 0L8 8m4-4 4 4M5 14v5h14v-5" /></svg><span>اختر ملف المصدر (DOCX أو PDF)</span><small>سيُقرأ محتواه لتوليد مقالة موثّقة منه</small><input id="ai-source-file-input" type="file" accept=".docx,.pdf" /></label>
+			<p id="ai-source-status" class="form-hint">لم يُرفع أي ملف بعد.</p>
+			<input type="hidden" id="ai-source-file-id" name="ai_source_file_id" value="" />
+		</section>
+
 		{!article?.id && (
 			<section class="article-side-card article-create-attachments">
 				<div class="article-side-section-heading"><span class="article-side-section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m8.5 12.5 5-5a3 3 0 1 1 4.2 4.2l-7.1 7.1a5 5 0 0 1-7.1-7.1l7.8-7.8" /></svg></span><div><strong>المرفقات</strong><small>الملفات التابعة للمقال</small></div></div>
@@ -872,6 +879,41 @@ function formatSize(bytes: number): string {
 		renderStagedFiles();
 	});
 
+	// AI-source file — unlike the staged attachments above, this uploads immediately (via the
+	// generic, article-less /api/dashboard/files/upload endpoint) so the backend can actually
+	// read its content before generation runs. The resulting file id is associated with the
+	// article once it exists — see the ai_source_file_id hidden input and articles/save.ts.
+	const aiSourceInput = document.getElementById('ai-source-file-input') as HTMLInputElement | null;
+	const aiSourceFileIdInput = document.getElementById('ai-source-file-id') as HTMLInputElement | null;
+	const aiSourceStatus = document.getElementById('ai-source-status');
+	aiSourceInput?.addEventListener('change', async () => {
+		const file = aiSourceInput.files?.[0];
+		if (!file) return;
+		if (aiSourceStatus) {
+			aiSourceStatus.textContent = `جارِ رفع ${file.name}...`;
+			aiSourceStatus.className = 'form-hint';
+		}
+		if (aiSourceFileIdInput) aiSourceFileIdInput.value = '';
+		try {
+			const uploadData = new FormData();
+			uploadData.set('file', file);
+			const res = await fetch('/api/dashboard/files/upload', { method: 'POST', headers: { 'X-Requested-With': 'fetch' }, body: uploadData });
+			const json = await res.json();
+			if (!res.ok || !json?.success || !json?.id) throw new Error(json?.message || 'تعذّر رفع الملف');
+			if (aiSourceFileIdInput) aiSourceFileIdInput.value = String(json.id);
+			if (aiSourceStatus) {
+				aiSourceStatus.textContent = `تم رفع ${json.file_name || file.name} بنجاح — يمكنك الآن التوليد.`;
+				aiSourceStatus.className = 'form-hint text-emerald-600 dark:text-emerald-400';
+			}
+		} catch (err) {
+			if (aiSourceStatus) {
+				aiSourceStatus.textContent = err instanceof Error ? err.message : 'تعذّر رفع الملف';
+				aiSourceStatus.className = 'form-hint text-red-600 dark:text-red-400';
+			}
+			aiSourceInput.value = '';
+		}
+	});
+
 	if (container && hiddenTextarea) {
 		const quill = new Quill(container, {
 			theme: 'snow',
@@ -998,9 +1040,24 @@ function formatSize(bytes: number): string {
 				}
 				return;
 			}
+			const sourceFileId = aiSourceFileIdInput?.value.trim() ?? '';
+			if (!sourceFileId) {
+				if (aiError) {
+					aiError.textContent = 'يرجى رفع ملف مصدر التوليد أولًا (أعلى قسم المرفقات).';
+					aiError.classList.remove('hidden');
+				}
+				return;
+			}
 
 			const subjectOption = subjectSelectForAI?.selectedOptions[0];
 			const semesterOption = semesterSelectForAI?.selectedOptions[0];
+			if (!subjectOption?.value || !semesterOption?.value) {
+				if (aiError) {
+					aiError.textContent = 'يرجى اختيار الصف والمادة والفصل الدراسي كاملة قبل التوليد.';
+					aiError.classList.remove('hidden');
+				}
+				return;
+			}
 			const countryCode = COUNTRY_ID_TO_CODE[countrySelectForAI?.value ?? ''] ?? '';
 
 			setAIBusy(true);
@@ -1012,6 +1069,7 @@ function formatSize(bytes: number): string {
 						title,
 						content_type: 'article',
 						country_code: countryCode,
+						file_ids: [Number(sourceFileId)],
 						grade_level: subjectOption?.dataset.gradeLevel || undefined,
 						subject_id: subjectOption?.value || undefined,
 						subject_name: subjectOption?.textContent?.trim() || undefined,
@@ -1037,6 +1095,11 @@ function formatSize(bytes: number): string {
 						}
 						if (Array.isArray(article?.keywords) && article.keywords.length && keywordsInput && !keywordsInput.value.trim()) {
 							keywordsInput.value = article.keywords.join('، ');
+						}
+						if (typeof article?.seo_score === 'number' && article.seo_score < 99 && aiError) {
+							const topIssue = Array.isArray(article.seo_issues) && article.seo_issues.length ? ` — ${article.seo_issues[0]}` : '';
+							aiError.textContent = `تم التوليد بجودة SEO ${article.seo_score}% (أقل من 99%)${topIssue}. راجع المحتوى قبل النشر.`;
+							aiError.classList.remove('hidden');
 						}
 						setAIBusy(false);
 						return;

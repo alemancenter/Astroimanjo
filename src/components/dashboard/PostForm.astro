@@ -132,6 +132,12 @@ const keywordsValue = typeof post?.keywords === 'string'
 			</section>
 
 			<section class="post-side-card">
+				<div class="post-side-heading"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 16V4m0 0L8 8m4-4 4 4M5 14v5h14v-5" /></svg></span><div><h2>ملف مصدر التوليد</h2><p>يُشترط رفعه قبل التوليد بالذكاء الاصطناعي</p></div></div>
+				<label class="post-files-drop" for="ai-source-file-input"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 16V4m0 0L8 8m4-4 4 4M5 14v5h14v-5" /></svg><strong>اختر ملف المصدر (DOCX أو PDF)</strong><small id="ai-source-status">لم يُرفع أي ملف بعد.</small><input id="ai-source-file-input" type="file" accept=".docx,.pdf" /></label>
+				<input type="hidden" id="ai-source-file-id" name="ai_source_file_id" value="" />
+			</section>
+
+			<section class="post-side-card">
 				<div class="post-side-heading"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m8.5 12.5 5-5a3 3 0 1 1 4.2 4.2l-7.1 7.1a5 5 0 0 1-7.1-7.1l7.8-7.8" /></svg></span><div><h2>المرفقات</h2><p>ملفات إضافية للمنشور</p></div></div>
 				<label class="post-files-drop" for="post-attachments"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 16V4m0 0L8 8m4-4 4 4M5 14v5h14v-5" /></svg><strong>اختر الملفات</strong><small id="post-files-label">يمكن اختيار أكثر من ملف</small><input id="post-attachments" type="file" name="attachments" multiple /></label>
 			</section>
@@ -153,6 +159,32 @@ const keywordsValue = typeof post?.keywords === 'string'
 	const postForm = document.getElementById('post-editor-form') as HTMLFormElement | null;
 	const contentError = document.getElementById('post-content-error');
 	const wordCount = document.getElementById('post-word-count');
+
+	// AI-source file — uploads immediately (generic, post-less /api/dashboard/files/upload
+	// endpoint) so the backend can read its content before generation runs, unlike the general
+	// "attachments" input below which only travels inside the final multipart save. The
+	// resulting file id is associated with the post once it exists — see posts/save.ts.
+	const aiSourceInput = document.getElementById('ai-source-file-input') as HTMLInputElement | null;
+	const aiSourceFileIdInput = document.getElementById('ai-source-file-id') as HTMLInputElement | null;
+	const aiSourceStatus = document.getElementById('ai-source-status');
+	aiSourceInput?.addEventListener('change', async () => {
+		const file = aiSourceInput.files?.[0];
+		if (!file) return;
+		if (aiSourceStatus) aiSourceStatus.textContent = `جارِ رفع ${file.name}...`;
+		if (aiSourceFileIdInput) aiSourceFileIdInput.value = '';
+		try {
+			const uploadData = new FormData();
+			uploadData.set('file', file);
+			const res = await fetch('/api/dashboard/files/upload', { method: 'POST', headers: { 'X-Requested-With': 'fetch' }, body: uploadData });
+			const json = await res.json();
+			if (!res.ok || !json?.success || !json?.id) throw new Error(json?.message || 'تعذّر رفع الملف');
+			if (aiSourceFileIdInput) aiSourceFileIdInput.value = String(json.id);
+			if (aiSourceStatus) aiSourceStatus.textContent = `تم رفع ${json.file_name || file.name} بنجاح — يمكنك الآن التوليد.`;
+		} catch (err) {
+			if (aiSourceStatus) aiSourceStatus.textContent = err instanceof Error ? err.message : 'تعذّر رفع الملف';
+			aiSourceInput.value = '';
+		}
+	});
 
 	if (editorContainer && contentInput) {
 		const quill = new Quill(editorContainer, {
@@ -217,6 +249,15 @@ const keywordsValue = typeof post?.keywords === 'string'
 				if (aiError) { aiError.textContent = 'أدخل عنوانًا من 5 أحرف على الأقل قبل التوليد.'; aiError.hidden = false; }
 				return;
 			}
+			const sourceFileId = aiSourceFileIdInput?.value.trim() ?? '';
+			if (!sourceFileId) {
+				if (aiError) { aiError.textContent = 'يرجى رفع ملف مصدر التوليد أولًا (في الشريط الجانبي).'; aiError.hidden = false; }
+				return;
+			}
+			if (!categoryInput?.value) {
+				if (aiError) { aiError.textContent = 'يرجى اختيار القسم أولًا قبل التوليد.'; aiError.hidden = false; }
+				return;
+			}
 
 			setAiBusy(true);
 			try {
@@ -224,7 +265,7 @@ const keywordsValue = typeof post?.keywords === 'string'
 				const response = await fetch('/api/dashboard/ai/generate', {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ title, content_type: 'post', category_id: categoryInput?.value || undefined, category_name: selectedCategory?.textContent?.trim() || undefined }),
+					body: JSON.stringify({ title, content_type: 'post', file_ids: [Number(sourceFileId)], category_id: categoryInput?.value || undefined, category_name: selectedCategory?.textContent?.trim() || undefined }),
 				});
 				const payload = await response.json();
 				if (!response.ok || !payload?.job_id) throw new Error(payload?.message || 'تعذّر بدء عملية التوليد');
@@ -237,6 +278,11 @@ const keywordsValue = typeof post?.keywords === 'string'
 					if (status?.status !== 'done') continue;
 					const html = status.content_html || status.content || '';
 					if (html) quill.clipboard.dangerouslyPasteHTML(html);
+					if (typeof status.article?.seo_score === 'number' && status.article.seo_score < 99 && aiError) {
+						const topIssue = Array.isArray(status.article.seo_issues) && status.article.seo_issues.length ? ` — ${status.article.seo_issues[0]}` : '';
+						aiError.textContent = `تم التوليد بجودة SEO ${status.article.seo_score}% (أقل من 99%)${topIssue}. راجع المحتوى قبل النشر.`;
+						aiError.hidden = false;
+					}
 					if (status.article?.meta_description && metaInput && !metaInput.value.trim()) {
 						metaInput.value = status.article.meta_description;
 						metaInput.dispatchEvent(new Event('input'));

@@ -64,6 +64,21 @@ export const POST: APIRoute = async ({ request, cookies, locals, redirect, cache
 		return redirect(`${back}?error=${encodeURIComponent(message)}`);
 	}
 
+	// The AI-source file (if any) was uploaded immediately, before the article existed, via
+	// files/upload.ts with no article_id set — see ArticleForm.astro. Now that a real article
+	// id exists, associate it so it shows up as a normal attachment too, not just AI input.
+	const sourceFileId = String(form.get('ai_source_file_id') || '').trim();
+	const articleId = isEdit ? id : json?.data?.id;
+	if (sourceFileId && articleId) {
+		await apiRawFetch(`/dashboard/files/${sourceFileId}`, {
+			method: 'PUT',
+			countryId: locals.countryId,
+			cookieHeader: `token=${token}`,
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ article_id: Number(articleId) }),
+		}).catch(() => null);
+	}
+
 	// Article/file counts roll up into the parent class and subject pages too.
 	await cache.invalidate({ tags: ['articles', 'classes', 'subjects'] });
 

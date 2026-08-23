@@ -53,6 +53,22 @@ export const POST: APIRoute = async ({ request, cookies, locals, redirect, cache
 		const back = isEdit ? `/dashboard/posts/${id}/edit` : '/dashboard/posts/new';
 		return redirect(`${back}?error=${encodeURIComponent(json?.message || 'تعذّر حفظ المنشور')}`);
 	}
+
+	// The AI-source file (if any) was uploaded immediately, before the post existed, via
+	// files/upload.ts with no post_id set — see PostForm.astro. Now that a real post id
+	// exists, associate it so it shows up as a normal attachment too, not just AI input.
+	const sourceFileId = String(incoming.get('ai_source_file_id') || '').trim();
+	const postId = isEdit ? id : json?.data?.id;
+	if (sourceFileId && postId) {
+		await apiRawFetch(`/dashboard/files/${sourceFileId}`, {
+			method: 'PUT',
+			countryId: locals.countryId,
+			cookieHeader: `token=${token}`,
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ post_id: Number(postId) }),
+		}).catch(() => null);
+	}
+
 	await cache.invalidate({ tags: ['posts'] });
 	return redirect('/dashboard/posts?success=1');
 };
