@@ -147,6 +147,12 @@ function buildBaseHeaders(countryId: string, cookieHeader?: string): Record<stri
 	const headers: Record<string, string> = {
 		'X-Country-Id': countryId,
 		'X-Frontend-Key': API_KEY,
+		// The Plesk/nginx layer in front of the API mislabels or double-wraps compressed
+		// responses under gzip/br negotiation (confirmed: valid-looking gzip framing that
+		// decompresses to non-JSON garbage, and raw undeclared brotli bytes) — breaks
+		// undici's automatic decompression. Server-to-server traffic gets no bandwidth
+		// benefit from compression anyway, so just opt out.
+		'Accept-Encoding': 'identity',
 	};
 	const clientIp = getClientIp();
 	if (clientIp) headers['X-Forwarded-For'] = clientIp;

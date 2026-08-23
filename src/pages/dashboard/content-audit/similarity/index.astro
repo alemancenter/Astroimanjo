@@ -1,5 +1,6 @@
 ---
 import DashboardLayout from '../../../../layouts/DashboardLayout.astro';
+import ContentAuditScanNav from '../../../../components/dashboard/ContentAuditScanNav.astro';
 import { isAdmin, requireDashboard } from '../../../../lib/auth';
 import { apiFetch } from '../../../../lib/api';
 import { getCountryById } from '../../../../lib/countries';
@@ -62,6 +63,7 @@ const pairMember = (cluster: any, key: string) => (cluster.members || []).find((
 
 <DashboardLayout title="كشف التكرار والتشابه" user={user} description="مراجعة التكرار الكامل وشبه التكرار والقوالب المتشابهة قبل قرارات الدمج أو 301.">
 	<div class="mx-auto max-w-[1500px] space-y-6">
+		<ContentAuditScanNav active="similarity" />
 		<header class="overflow-hidden rounded-3xl border border-graphite-200 bg-white shadow-sm dark:border-graphite-800 dark:bg-graphite-900">
 			<div class="grid gap-6 p-6 lg:grid-cols-[1fr_auto] lg:items-center lg:p-8">
 				<div>

@@ -6,9 +6,9 @@ export const prerender = false;
 
 export const POST: APIRoute = async ({ request, cookies, locals, redirect }) => {
 	const token = cookies.get('token')?.value;
-	if (!token) return redirect(`/login?redirect_to=${encodeURIComponent('/dashboard/content-audit?tab=ai')}`);
+	if (!token) return redirect(`/login?redirect_to=${encodeURIComponent('/dashboard/content-audit/ai-operations')}`);
 	const form = await request.formData();
-	const redirectTo = safeRedirectPath(String(form.get('redirect_to') || ''), '/dashboard/content-audit?tab=ai');
+	const redirectTo = safeRedirectPath(String(form.get('redirect_to') || ''), '/dashboard/content-audit/ai-operations');
 	const separator = redirectTo.includes('?') ? '&' : '?';
 	const payload = {
 		country_code: String(form.get('country_code') || 'jo'), content_type: String(form.get('content_type') || 'all'),

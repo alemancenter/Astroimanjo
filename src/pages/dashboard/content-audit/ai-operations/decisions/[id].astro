@@ -1,0 +1,83 @@
+---
+import DashboardLayout from '../../../../../layouts/DashboardLayout.astro';
+import ContentAuditAINav from '../../../../../components/dashboard/ContentAuditAINav.astro';
+import { requireDashboard } from '../../../../../lib/auth';
+import { apiFetch } from '../../../../../lib/api';
+
+const guard = await requireDashboard(Astro, 'manage content audit');
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+const token = Astro.cookies.get('token')?.value;
+const auth = { countryId: Astro.locals.countryId, cookieHeader: `token=${token}` };
+const decisionId = Astro.params.id;
+
+const result = await apiFetch<any>(`/dashboard/content-audit/ai/decisions/${decisionId}`, auth);
+const decision: any = result.ok ? result.data : null;
+
+const nf = new Intl.NumberFormat('ar-EG');
+const df = new Intl.DateTimeFormat('ar-EG', { dateStyle: 'medium', timeStyle: 'short' });
+const formatDate = (value?: string | null) => value ? df.format(new Date(value)) : '—';
+const labelType = (type: string) => type === 'article' ? 'مقال' : type === 'post' ? 'منشور' : type;
+const decisionLabels: Record<string, string> = { approved: 'معتمد', needs_fix: 'يحتاج إصلاح', restricted_ads: 'إعلانات مقيدة', rejected: 'مرفوض' };
+const issues: any[] = Array.isArray(decision?.issues) ? decision.issues : [];
+const suggestions: any[] = Array.isArray(decision?.suggestions) ? decision.suggestions : [];
+---
+
+<DashboardLayout title={`قرار الذكاء الاصطناعي #${decisionId}`} user={user}>
+	<div class="audit-page">
+		<header class="audit-hero">
+			<div class="audit-hero-copy"><span><a href="/dashboard/content-audit/ai-operations">← عمليات الذكاء الاصطناعي</a></span><h1>قرار الذكاء الاصطناعي #{decisionId}</h1>{decision && <p>{labelType(decision.content_type)} #{decision.content_id} · {decision.title || 'بلا عنوان'}</p>}</div>
+		</header>
+
+		<ContentAuditAINav active="ai-operations" />
+
+		{!decision ? <section class="audit-empty is-error"><i>!</i><h2>لم يتم العثور على هذا القرار</h2><p>تأكد من صحة المعرّف.</p><a href="/dashboard/content-audit/ai-operations">العودة لعمليات الذكاء الاصطناعي</a></section> : <>
+			<section class="audit-card">
+				<header><div><span>الخلاصة</span><h2>{decisionLabels[decision.decision] || decision.decision}</h2></div><b class:list={['risk-tag', `is-${decision.adsense_risk}`]}>خطر {decision.adsense_risk || 'غير محدد'}</b></header>
+				{decision.summary && <p class="summary-text">{decision.summary}</p>}
+				<div class="run-metrics">
+					<div><span>الدرجة الكلية</span><strong>{nf.format(decision.score||0)}</strong></div>
+					<div><span>السياسة</span><strong>{nf.format(decision.policy_score||0)}</strong></div>
+					<div><span>SEO</span><strong>{nf.format(decision.seo_score||0)}</strong></div>
+					<div><span>اللغة</span><strong>{nf.format(decision.language_score||0)}</strong></div>
+					<div><span>السلامة والروابط</span><strong>{nf.format(decision.safety_links_score||0)}</strong></div>
+					<div><span>البنية</span><strong>{nf.format(decision.structure_score||0)}</strong></div>
+				</div>
+				<div class="run-metrics">
+					<div><span>قابل للإصلاح تلقائيًا</span><strong>{decision.can_auto_fix ? 'نعم' : 'لا'}</strong></div>
+					<div><span>النموذج</span><strong dir="ltr">{decision.model || '—'}</strong></div>
+					<div><span>المزوّد</span><strong>{decision.provider || '—'}</strong></div>
+					<div><span>زمن المعالجة</span><strong>{nf.format(decision.processing_time_ms||0)} ms</strong></div>
+					<div><span>الرموز</span><strong>{nf.format(decision.ai_tokens||0)}</strong></div>
+					<div><span>تاريخ التحليل</span><strong>{formatDate(decision.created_at)}</strong></div>
+				</div>
+			</section>
+
+			<div class="two-col">
+				<section class="audit-card">
+					<header><div><span>المشكلات</span><h2>{nf.format(issues.length)} ملاحظة</h2></div></header>
+					<div class="findings-list">{issues.map((issue:any)=><article><span class:list={['finding-risk',`is-${issue.severity}`]}>{issue.severity}</span><div><span>{issue.type}</span><h4>{issue.message}</h4>{issue.action && <small><b>الإجراء المقترح:</b> {issue.action}</small>}</div></article>)}{!issues.length && <p class="empty-line">لا توجد مشكلات مسجلة.</p>}</div>
+				</section>
+				<section class="audit-card">
+					<header><div><span>الاقتراحات</span><h2>{nf.format(suggestions.length)} اقتراح</h2></div></header>
+					<div class="findings-list">{suggestions.map((s:any)=><article><span class:list={['finding-risk',`is-${s.priority}`]}>{s.priority}</span><div><span>{s.type}</span><h4>{s.message}</h4></div></article>)}{!suggestions.length && <p class="empty-line">لا توجد اقتراحات مسجلة.</p>}</div>
+				</section>
+			</div>
+		</>}
+	</div>
+
+	<style>
+		.audit-page{--au-blue:#1a4d8f;--au-green:#0f8464;--au-orange:#e8a244;--au-red:#c43d49;--au-ink:#18283d;--au-muted:#68788d;--au-line:#dce4ed;direction:rtl}.audit-page *{box-sizing:border-box}
+		.audit-hero{margin-bottom:.75rem;border:1px solid var(--au-line);border-radius:1rem;background:#fff;padding:1.15rem 1.25rem;box-shadow:0 3px 12px rgb(23 43 77/.05)}.audit-hero-copy>span a{color:var(--au-blue);font-size:.68rem;font-weight:850}.audit-hero h1{margin:.35rem 0 .15rem;color:var(--au-ink);font-size:1.3rem;font-weight:950}.audit-hero p{margin:0;color:var(--au-muted);font-size:.72rem}
+		.audit-card{border:1px solid var(--au-line);border-radius:.82rem;background:#fff;box-shadow:0 3px 10px rgb(23 43 77/.04);padding:.85rem;margin-bottom:.65rem}.audit-card>header{display:flex;align-items:center;justify-content:space-between;gap:.6rem;border-bottom:1px solid #edf1f5;padding-bottom:.6rem;margin-bottom:.65rem}.audit-card>header span{color:var(--au-blue);font-size:.62rem;font-weight:850}.audit-card h2{margin:.08rem 0 0;color:var(--au-ink);font-size:.9rem;font-weight:950}
+		.summary-text{margin:0 0 .65rem;color:var(--au-muted);font-size:.7rem;line-height:1.7}
+		.risk-tag{border-radius:.32rem;background:#f0f3f6;padding:.28rem .5rem;color:#6f7e91;font-size:.58rem;font-weight:850}.risk-tag.is-high{background:#ffeaec;color:var(--au-red)}.risk-tag.is-medium{background:#fff0df;color:#a96817}
+		.run-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem;margin-bottom:.4rem}.run-metrics div{border:1px solid #e5ebf1;border-radius:.44rem;padding:.45rem}.run-metrics span{display:block;color:var(--au-muted);font-size:.53rem}.run-metrics strong{color:var(--au-ink);font-size:.62rem}
+		.two-col{display:grid;grid-template-columns:repeat(2,1fr);gap:.65rem}
+		.findings-list{display:grid}.findings-list>article{display:grid;grid-template-columns:auto minmax(0,1fr);gap:.5rem;border-top:1px solid #edf1f5;padding:.58rem 0}.findings-list>article:first-child{border-top:0}.finding-risk{align-self:start;border-radius:.32rem;background:#f0f3f6;padding:.23rem .35rem;color:#68788c;font-size:.5rem;font-weight:850}.finding-risk.is-high,.finding-risk.is-critical{background:#ffeaec;color:var(--au-red)}.finding-risk.is-medium{background:#fff0df;color:#a96817}.findings-list article>div{display:grid}.findings-list article>div>span{color:var(--au-blue);font-size:.49rem;font-weight:850}.findings-list h4{margin:.06rem 0;color:var(--au-ink);font-size:.64rem}.findings-list small{margin-top:.18rem;color:#7e8b9b;font-size:.52rem}
+		.empty-line{padding:.8rem;color:var(--au-muted);font-size:.65rem;text-align:center}
+		.audit-empty{display:grid;min-height:18rem;place-items:center;align-content:center;border:1px dashed #d8e1eb;border-radius:.72rem;background:#fafbfd;text-align:center}.audit-empty>i{display:grid;width:3rem;height:3rem;place-items:center;border-radius:50%;background:#ffeaec;color:var(--au-red);font-style:normal;font-weight:950}.audit-empty h2{margin:.55rem 0 .12rem;color:var(--au-ink);font-size:.86rem}.audit-empty p{margin:0;color:var(--au-muted);font-size:.65rem}.audit-empty a{margin-top:.5rem;color:var(--au-blue);font-size:.6rem;font-weight:850}
+		.dark .audit-page{--au-ink:#f4f7fb;--au-muted:#9eacc0;--au-line:#30445d}.dark .audit-hero,.dark .audit-card{border-color:#30445d;background:#0f2547;color:#cbd5e1}.dark .audit-card>header,.dark .findings-list>article{border-color:#29405c}
+		@media(max-width:780px){.run-metrics{grid-template-columns:repeat(2,1fr)}.two-col{grid-template-columns:1fr}}
+	</style>
+</DashboardLayout>

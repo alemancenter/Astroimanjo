@@ -1,5 +1,6 @@
 ---
 import DashboardLayout from '../../../../layouts/DashboardLayout.astro';
+import ContentAuditScanNav from '../../../../components/dashboard/ContentAuditScanNav.astro';
 import { isAdmin, requireDashboard } from '../../../../lib/auth';
 import { apiFetch } from '../../../../lib/api';
 import { getCountryById } from '../../../../lib/countries';
@@ -49,6 +50,7 @@ const pageHref = (target: number) => { const u = new URL(Astro.url); u.searchPar
 
 <DashboardLayout title="مخزون معالجة المحتوى" user={user} description="قائمة Phase 3 لتصنيف ومعالجة المحتوى حسب الجودة والفساد والتكرار مع قرارات تحريرية قابلة للتتبع.">
 	<div class="mx-auto max-w-[1600px] space-y-6">
+		<ContentAuditScanNav active="inventory" />
 		{error && <div class="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">{error}</div>}
 		{success === 'classified' && <div class="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-200"><strong>تم حفظ التصنيف التحريري.</strong> {seoEffect === 'noindex' ? 'تم تفعيل NOINDEX فورًا عبر بوابة الجودة. أعد توليد Sitemap لإزالة الرابط من الخريطة الحالية.' : 'لا يوجد تغيير SEO تلقائي لهذا القرار.'} <a href="/dashboard/sitemap" class="font-black underline">فتح خريطة الموقع</a></div>}
 

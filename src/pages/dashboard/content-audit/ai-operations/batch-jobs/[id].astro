@@ -1,0 +1,72 @@
+---
+import DashboardLayout from '../../../../../layouts/DashboardLayout.astro';
+import ContentAuditAINav from '../../../../../components/dashboard/ContentAuditAINav.astro';
+import { requireDashboard } from '../../../../../lib/auth';
+import { apiFetch } from '../../../../../lib/api';
+
+const guard = await requireDashboard(Astro, 'manage content audit');
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+const token = Astro.cookies.get('token')?.value;
+const auth = { countryId: Astro.locals.countryId, cookieHeader: `token=${token}` };
+const jobId = Astro.params.id;
+
+const result = await apiFetch<any>(`/dashboard/content-audit/ai/batch-jobs/${jobId}`, auth);
+const job: any = result.ok ? result.data : null;
+
+const nf = new Intl.NumberFormat('ar-EG');
+const df = new Intl.DateTimeFormat('ar-EG', { dateStyle: 'medium', timeStyle: 'short' });
+const formatDate = (value?: string | null) => value ? df.format(new Date(value)) : '—';
+const labelType = (type: string) => type === 'article' ? 'مقال' : type === 'post' ? 'منشور' : 'الكل';
+const runStatus: Record<string, string> = { running: 'قيد التنفيذ', completed: 'مكتمل', failed: 'فشل', queued: 'في الانتظار', cancelling: 'جارٍ الإلغاء', cancelled: 'ملغى', success: 'نجح', error: 'خطأ' };
+const items: any[] = Array.isArray(job?.items) ? job.items : [];
+---
+
+<DashboardLayout title={`دفعة تحليل #${jobId}`} user={user}>
+	<div class="audit-page">
+		<header class="audit-hero">
+			<div class="audit-hero-copy"><span><a href="/dashboard/content-audit/ai-operations">← عمليات الذكاء الاصطناعي</a></span><h1>دفعة تحليل #{jobId}</h1>{job && <p>{job.preset?.replaceAll('_',' ') || 'دفعة تحسين'} · {labelType(job.content_type)} · استراتيجية {job.model_strategy}</p>}</div>
+		</header>
+
+		<ContentAuditAINav active="ai-operations" />
+
+		{!job ? <section class="audit-empty is-error"><i>!</i><h2>لم يتم العثور على هذه الدفعة</h2><p>ربما انتهت صلاحيتها من الذاكرة أو أن المعرّف غير صحيح.</p><a href="/dashboard/content-audit/ai-operations">العودة لعمليات الذكاء الاصطناعي</a></section> : <>
+			<section class="audit-card">
+				<header><div><span>الحالة</span><h2>{runStatus[job.status]||job.status}</h2></div><b>{nf.format(job.progress||0)}%</b></header>
+				<i class="batch-progress"><span style={`width:${Math.min(100,Number(job.progress||0))}%`}></span></i>
+				{job.error && <div class="run-error"><strong>خطأ</strong><span>{job.error}</span></div>}
+				<div class="run-metrics">
+					<div><span>الإجمالي</span><strong>{nf.format(job.total_items||0)}</strong></div>
+					<div><span>تمت معالجتها</span><strong>{nf.format(job.processed_items||0)}</strong></div>
+					<div><span>ناجحة</span><strong>{nf.format(job.successful_items||0)}</strong></div>
+					<div><span>فاشلة</span><strong>{nf.format(job.failed_items||0)}</strong></div>
+					<div><span>متبقية</span><strong>{nf.format(job.pending_items||0)}</strong></div>
+					<div><span>التزامن</span><strong>{nf.format(job.concurrency||0)}</strong></div>
+					<div><span>بدأت في</span><strong>{formatDate(job.started_at)}</strong></div>
+					<div><span>انتهت في</span><strong>{formatDate(job.finished_at)}</strong></div>
+					<div><span>أُنشئت في</span><strong>{formatDate(job.created_at)}</strong></div>
+				</div>
+			</section>
+
+			<section class="audit-card items-card">
+				<header><div><span>عناصر الدفعة</span><h2>{nf.format(items.length)} عنصر</h2></div></header>
+				{items.length ? <div class="readiness-table-wrap"><table><thead><tr><th>المحتوى</th><th>الحالة</th><th>الدرجة قبل/بعد</th><th>رسالة</th><th></th></tr></thead><tbody>{items.map((item:any)=><tr><td><div class="content-cell"><span>{labelType(item.content_type)}</span><strong>{item.title || `#${item.content_id}`}</strong><small>#{item.content_id}</small></div></td><td><span class:list={['batch-status',`is-${item.status}`]}><i></i>{runStatus[item.status]||item.status}</span></td><td>{nf.format(item.score_before||0)} → {item.score_after ? nf.format(item.score_after) : '—'}</td><td class="item-message">{item.error || item.message || '—'}</td><td>{item.decision_id ? <a href={`/dashboard/content-audit/ai-operations/decisions/${item.decision_id}`}>عرض القرار</a> : item.url ? <a href={item.url} target="_blank">فتح المحتوى</a> : null}</td></tr>)}</tbody></table></div> : <p class="empty-line">لا توجد عناصر مسجلة لهذه الدفعة بعد.</p>}
+			</section>
+		</>}
+	</div>
+
+	<style>
+		.audit-page{--au-blue:#1a4d8f;--au-green:#0f8464;--au-orange:#e8a244;--au-red:#c43d49;--au-ink:#18283d;--au-muted:#68788d;--au-line:#dce4ed;direction:rtl}.audit-page *{box-sizing:border-box}
+		.audit-hero{margin-bottom:.75rem;border:1px solid var(--au-line);border-radius:1rem;background:#fff;padding:1.15rem 1.25rem;box-shadow:0 3px 12px rgb(23 43 77/.05)}.audit-hero-copy>span a{color:var(--au-blue);font-size:.68rem;font-weight:850}.audit-hero h1{margin:.35rem 0 .15rem;color:var(--au-ink);font-size:1.3rem;font-weight:950}.audit-hero p{margin:0;color:var(--au-muted);font-size:.72rem}
+		.audit-card{border:1px solid var(--au-line);border-radius:.82rem;background:#fff;box-shadow:0 3px 10px rgb(23 43 77/.04);padding:.85rem;margin-bottom:.65rem}.audit-card>header{display:flex;align-items:center;justify-content:space-between;gap:.6rem;border-bottom:1px solid #edf1f5;padding-bottom:.6rem}.audit-card>header span{color:var(--au-blue);font-size:.62rem;font-weight:850}.audit-card>header b{color:var(--au-blue);font-size:.9rem}.audit-card h2{margin:.08rem 0 0;color:var(--au-ink);font-size:.9rem;font-weight:950}
+		.batch-progress{display:block;height:.4rem;overflow:hidden;margin:.65rem 0;border-radius:99rem;background:#edf1f5}.batch-progress span{display:block;height:100%;border-radius:inherit;background:var(--au-blue)}
+		.run-error{display:grid;margin-bottom:.65rem;border:1px solid #efc9cd;border-radius:.45rem;background:#fff6f7;padding:.45rem;color:var(--au-red)}.run-error strong{font-size:.6rem}.run-error span{font-size:.6rem}
+		.run-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem}.run-metrics div{border:1px solid #e5ebf1;border-radius:.44rem;padding:.45rem}.run-metrics span{display:block;color:var(--au-muted);font-size:.53rem}.run-metrics strong{color:var(--au-ink);font-size:.62rem}
+		.readiness-table-wrap{overflow-x:auto;border:1px solid #e0e7ee;border-radius:.58rem}.readiness-table-wrap table{width:100%;border-collapse:collapse;white-space:nowrap}.readiness-table-wrap th{background:#f8fafc;padding:.52rem .58rem;color:#718096;font-size:.57rem;text-align:right}.readiness-table-wrap td{border-top:1px solid #edf1f5;padding:.56rem .58rem;color:#53667d;font-size:.6rem}.content-cell{display:grid;max-width:16rem}.content-cell>span{color:var(--au-blue);font-size:.53rem;font-weight:850}.content-cell strong{overflow:hidden;color:var(--au-ink);font-size:.66rem;text-overflow:ellipsis;white-space:normal}.content-cell small{color:#8a96a5;font-size:.52rem}.item-message{max-width:16rem;overflow:hidden;white-space:normal}.readiness-table-wrap td a{color:var(--au-blue);font-size:.58rem;font-weight:850}
+		.batch-status{display:flex!important;align-items:center;gap:.25rem!important;color:#768599!important;font-size:.58rem!important}.batch-status i{width:.4rem;height:.4rem;border-radius:50%;background:#9eabb9}.batch-status.is-running,.batch-status.is-completed,.batch-status.is-success{color:var(--au-green)!important}.batch-status.is-running i,.batch-status.is-completed i,.batch-status.is-success i{background:var(--au-green)}.batch-status.is-failed,.batch-status.is-error{color:var(--au-red)!important}.batch-status.is-failed i,.batch-status.is-error i{background:var(--au-red)}
+		.empty-line{padding:.8rem;color:var(--au-muted);font-size:.65rem;text-align:center}
+		.audit-empty{display:grid;min-height:18rem;place-items:center;align-content:center;border:1px dashed #d8e1eb;border-radius:.72rem;background:#fafbfd;text-align:center}.audit-empty>i{display:grid;width:3rem;height:3rem;place-items:center;border-radius:50%;background:#ffeaec;color:var(--au-red);font-style:normal;font-weight:950}.audit-empty h2{margin:.55rem 0 .12rem;color:var(--au-ink);font-size:.86rem}.audit-empty p{margin:0;color:var(--au-muted);font-size:.65rem}.audit-empty a{margin-top:.5rem;color:var(--au-blue);font-size:.6rem;font-weight:850}
+		.dark .audit-page{--au-ink:#f4f7fb;--au-muted:#9eacc0;--au-line:#30445d}.dark .audit-hero,.dark .audit-card{border-color:#30445d;background:#0f2547;color:#cbd5e1}.dark .audit-card>header{border-color:#29405c}.dark .readiness-table-wrap th{background:#122b4b}.dark .readiness-table-wrap td{border-color:#29405c}
+		@media(max-width:780px){.run-metrics{grid-template-columns:repeat(2,1fr)}}
+	</style>
+</DashboardLayout>

@@ -35,9 +35,10 @@ export const DASHBOARD_NAV_ITEMS: DashboardNavItem[] = [
 	{ label: 'الأمان', href: '/dashboard/security', group: 'النظام والذكاء', icon: 'security', permission: 'manage security' },
 	{ label: 'الشاتبوت', href: '/dashboard/chatbot', group: 'النظام والذكاء', icon: 'bot', permission: 'manage settings' },
 	{ label: 'تدقيق المحتوى AI', href: '/dashboard/content-audit', group: 'النظام والذكاء', icon: 'audit', permission: 'manage content audit' },
-	{ label: 'مخزون معالجة المحتوى', href: '/dashboard/content-audit/inventory', group: 'النظام والذكاء', icon: 'audit', permission: null, adminOnly: true },
-	{ label: 'مراقبة فساد المحتوى', href: '/dashboard/content-audit/corruption', group: 'النظام والذكاء', icon: 'security', permission: null, adminOnly: true },
-	{ label: 'كشف التكرار والتشابه', href: '/dashboard/content-audit/similarity', group: 'النظام والذكاء', icon: 'audit', permission: null, adminOnly: true },
+	// Deterministic tools (legacy scan, corruption, similarity, inventory) are a separate
+	// area from the AI hub above — see ContentAuditScanNav.astro. All four of its pages are
+	// AdminOnly, mirrored here the same way the Redis entry below mirrors its own page check.
+	{ label: 'أدوات تدقيق حتمية', href: '/dashboard/content-audit/scan', group: 'النظام والذكاء', icon: 'security', permission: null, adminOnly: true },
 	// Actual page (pages/dashboard/redis/index.astro) checks isAdmin() directly, not a
 	// named permission — mirror that here so the link isn't shown to non-admin dashboard
 	// users who'd otherwise click it and land straight back on a "forbidden" bounce.

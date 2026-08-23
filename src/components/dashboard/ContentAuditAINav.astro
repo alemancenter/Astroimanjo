@@ -1,0 +1,32 @@
+---
+interface Props { active: 'overview' | 'readiness' | 'ai-operations'; }
+const { active } = Astro.props;
+const tabs = [
+	{ key: 'overview', label: 'نظرة عامة', href: '/dashboard/content-audit' },
+	{ key: 'readiness', label: 'جاهزية المحتوى', href: '/dashboard/content-audit/readiness' },
+	{ key: 'ai-operations', label: 'عمليات الذكاء الاصطناعي', href: '/dashboard/content-audit/ai-operations' },
+];
+---
+
+<nav class="audit-sub-nav" aria-label="أقسام نظام الذكاء الاصطناعي لتدقيق المحتوى">
+	<div class="audit-sub-nav-scroll">
+		{tabs.map((tab) => (
+			<a href={tab.href} class:list={['audit-sub-nav-link', { 'is-active': active === tab.key }]} aria-current={active === tab.key ? 'page' : undefined}>
+				<span>{tab.label}</span>
+			</a>
+		))}
+	</div>
+</nav>
+
+<style>
+	.audit-sub-nav{margin-bottom:.75rem;border:1px solid var(--au-line,#dfe6ee);border-radius:.75rem;background:#fff;padding:.3rem;box-shadow:0 1px 2px rgb(15 23 42/.04)}
+	.audit-sub-nav-scroll{display:flex;gap:.2rem;overflow-x:auto;scrollbar-width:thin}
+	.audit-sub-nav-link{display:inline-flex;min-height:2.45rem;flex:1;align-items:center;justify-content:center;border:1px solid transparent;border-radius:.52rem;padding:.45rem .8rem;color:#64748b;font-size:.76rem;font-weight:800;white-space:nowrap;transition:border-color .15s,background-color .15s,color .15s}
+	.audit-sub-nav-link:hover{background:#f6f8fb;color:var(--au-blue,#1a4d8f)}
+	.audit-sub-nav-link.is-active{border-color:#c9d9ec;background:#edf4fc;color:var(--au-blue,#1a4d8f);box-shadow:0 1px 2px rgb(26 77 143/.08)}
+	:global(.dark) .audit-sub-nav{border-color:#334155;background:#0f2547}
+	:global(.dark) .audit-sub-nav-link{color:#94a3b8}
+	:global(.dark) .audit-sub-nav-link:hover{background:#132d50;color:#dbeafe}
+	:global(.dark) .audit-sub-nav-link.is-active{border-color:#315b8f;background:#17365f;color:#bfdbfe}
+	@media(max-width:720px){.audit-sub-nav-link{flex:none;padding-inline:.75rem;font-size:.73rem}}
+</style>

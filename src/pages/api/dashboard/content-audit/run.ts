@@ -6,9 +6,9 @@ export const prerender = false;
 
 export const POST: APIRoute = async ({ request, cookies, locals, redirect }) => {
 	const token = cookies.get('token')?.value;
-	if (!token) return redirect(`/login?redirect_to=${encodeURIComponent('/dashboard/content-audit')}`);
+	if (!token) return redirect(`/login?redirect_to=${encodeURIComponent('/dashboard/content-audit/scan')}`);
 	const form = await request.formData();
-	const redirectTo = safeRedirectPath(String(form.get('redirect_to') || ''), '/dashboard/content-audit');
+	const redirectTo = safeRedirectPath(String(form.get('redirect_to') || ''), '/dashboard/content-audit/scan');
 	const separator = redirectTo.includes('?') ? '&' : '?';
 	const res = await apiRawFetch('/dashboard/content-audit/run', { method: 'POST', countryId: locals.countryId, cookieHeader: `token=${token}` });
 	const json: any = await res.json().catch(() => null);
