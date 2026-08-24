@@ -1,0 +1,106 @@
+---
+import type { ReadinessProblem, ReadinessRepairCenter } from '../../../features/content-audit/readiness-types';
+import { actionLabel } from '../../../features/content-audit/readiness-types';
+
+interface Props {
+	repair: ReadinessRepairCenter;
+	countryCode: string;
+	contentType: string;
+	redirectTo: string;
+}
+
+const { repair, countryCode, contentType, redirectTo } = Astro.props;
+const problems = Array.isArray(repair?.problems) ? repair.problems : [];
+const nf = new Intl.NumberFormat('ar-EG');
+const recommended = problems.find((problem) => problem.code === repair?.recommended_code);
+const batchSize = Math.max(1, Math.min(20, Number(repair?.batch_size || 20)));
+const limitedCount = (problem: ReadinessProblem) => Math.max(1, Math.min(batchSize, Number(problem.count || 0)));
+const problemHref = (code: string) => `/dashboard/content-audit/readiness?problem=${encodeURIComponent(code)}`;
+---
+
+<section class="repair-overview" aria-labelledby="repair-overview-title">
+	<header>
+		<div>
+			<span>مركز الإصلاح</span>
+			<h2 id="repair-overview-title">حوّل التقرير إلى خطة معالجة</h2>
+			<p>ابدأ بالأعلى تأثيرًا، أنشئ مسودات في دفعات صغيرة، ثم راجع كل تغيير قبل تطبيقه.</p>
+		</div>
+		<button type="button" data-open-repair-center>
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m14.7 6.3 3 3M4 20l3.8-.8L19 8a2.1 2.1 0 0 0-3-3L4.8 16.2Z"/><path d="M12 20h8"/></svg>
+			إصلاح أبرز المشاكل
+		</button>
+	</header>
+
+	<div class="repair-kpis">
+		<article><i class="is-red"></i><span>عناصر متأثرة</span><strong>{nf.format(Number(repair?.affected_items || 0))}</strong><small>تحتاج إجراءً أو مراجعة</small></article>
+		<article><i class="is-blue"></i><span>قابلة للمعالجة</span><strong>{nf.format(Number(repair?.actionable_items || 0))}</strong><small>تحليل أو معاينة ذكية</small></article>
+		<article><i class="is-orange"></i><span>مراجعة يدوية</span><strong>{nf.format(Number(repair?.manual_items || 0))}</strong><small>لن يعدّلها النظام تلقائيًا</small></article>
+		<article><i class="is-purple"></i><span>إجمالي الإشارات</span><strong>{nf.format(Number(repair?.total_findings || 0))}</strong><small>قد تجتمع عدة إشارات في عنصر</small></article>
+	</div>
+
+	{recommended ? <div class="recommended-problem">
+		<div><span>الأولوية المقترحة</span><strong>{recommended.label}</strong><p>{recommended.description}</p></div>
+		<b>{nf.format(Number(recommended.count || 0))} عنصر</b>
+		<button type="button" data-open-repair-center>عرض خطة الإصلاح</button>
+	</div> : <div class="recommended-problem is-clean"><div><span>نتيجة التقرير</span><strong>لا توجد مشكلات قابلة للمعالجة</strong><p>راجع العناصر الجاهزة دوريًا بعد أي تحديث جوهري للمحتوى.</p></div></div>}
+</section>
+
+<dialog id="readiness-repair-center" class="repair-dialog" aria-labelledby="repair-dialog-title">
+	<div class="repair-dialog-shell">
+		<header>
+			<div><span>معالجة آمنة على دفعات</span><h2 id="repair-dialog-title">إصلاح أبرز مشاكل الجاهزية</h2><p>كل إجراء ذكي ينشئ تحليلًا أو معاينة فقط. لا يُنشر أي نص قبل اعتمادك اليدوي.</p></div>
+			<button type="button" data-close-repair-center aria-label="إغلاق">×</button>
+		</header>
+
+		<aside class="repair-safety-note">
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 3 4 6v5c0 5 3.4 8.2 8 10 4.6-1.8 8-5 8-10V6Z"/><path d="m9 12 2 2 4-5"/></svg>
+			<p><strong>المراجعة البشرية إلزامية</strong><span>يُعالَج بحد أقصى {nf.format(batchSize)} عنصرًا في الدفعة لتسهيل المقارنة والتحقق.</span></p>
+		</aside>
+
+		<div class="repair-problem-list">
+			{problems.map((problem) => <article class:list={[`is-${problem.severity}`, problem.code === repair?.recommended_code && 'is-recommended']}>
+				<div class="problem-rank"><i></i><span>{problem.code === repair?.recommended_code ? 'ابدأ هنا' : problem.severity === 'critical' ? 'حرج' : problem.severity === 'high' ? 'مرتفع' : problem.severity === 'medium' ? 'متوسط' : 'يدوي'}</span></div>
+				<div class="problem-copy"><h3>{problem.label}</h3><p>{problem.description}</p><small>{nf.format(Number(problem.count || 0))} عنصر متأثر</small></div>
+				<div class="problem-action">
+					<a href={problemHref(problem.code)}>عرض العناصر</a>
+					{problem.action_type === 'manual' ? <a class="is-primary is-manual" href={problemHref(problem.code)}>فتح المراجعة</a> : <form method="post" action="/api/dashboard/content-audit/batches/start">
+						<input type="hidden" name="country_code" value={countryCode}/>
+						<input type="hidden" name="content_type" value={contentType}/>
+						<input type="hidden" name="level" value="weak"/>
+						<input type="hidden" name="preset" value={problem.preset || problem.code}/>
+						<input type="hidden" name="mode" value={problem.mode || (problem.action_type === 'analyze' ? 'analyze_only' : 'fix_preview')}/>
+						<input type="hidden" name="model_strategy" value={problem.model_strategy || 'balanced'}/>
+						<input type="hidden" name="limit" value={limitedCount(problem)}/>
+						<input type="hidden" name="concurrency" value="2"/>
+						<input type="hidden" name="redirect_to" value={redirectTo}/>
+						<button type="submit">{actionLabel(problem.action_type)}</button>
+					</form>}
+				</div>
+			</article>)}
+			{!problems.length && <p class="repair-empty">لا توجد إشارات إصلاح في النطاق الحالي.</p>}
+		</div>
+
+		<footer><button type="button" data-close-repair-center>إغلاق</button><a href="/dashboard/content-audit/ai-operations">فتح طابور المعاينات</a></footer>
+	</div>
+</dialog>
+
+<script>
+	const repairDialog = document.getElementById('readiness-repair-center') as HTMLDialogElement | null;
+	document.querySelectorAll<HTMLButtonElement>('[data-open-repair-center]').forEach((button) => button.addEventListener('click', () => repairDialog?.showModal()));
+	document.querySelectorAll<HTMLButtonElement>('[data-close-repair-center]').forEach((button) => button.addEventListener('click', () => repairDialog?.close()));
+	repairDialog?.addEventListener('click', (event) => { if (event.target === repairDialog) repairDialog.close(); });
+</script>
+
+<style>
+	.repair-overview{margin-bottom:.75rem;border:1px solid var(--au-line);border-radius:.9rem;background:#fff;padding:.9rem;box-shadow:0 3px 10px rgb(23 43 77/.04)}
+	.repair-overview>header{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:.75rem}.repair-overview>header span{color:var(--au-blue);font-size:.62rem;font-weight:900}.repair-overview h2{margin:.1rem 0;color:var(--au-ink);font-size:.94rem;font-weight:950}.repair-overview header p{margin:0;color:var(--au-muted);font-size:.65rem}.repair-overview>header button{display:flex;min-height:2.5rem;align-items:center;gap:.4rem;border:1px solid var(--au-blue);border-radius:.5rem;background:var(--au-blue);padding:.45rem .75rem;color:#fff;font-family:inherit;font-size:.65rem;font-weight:900;cursor:pointer}.repair-overview>header svg{width:.9rem;height:.9rem;stroke-width:2}
+	.repair-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.5rem}.repair-kpis article{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:.1rem .4rem;border:1px solid #e3e9f0;border-radius:.6rem;background:#fafbfd;padding:.65rem}.repair-kpis i{grid-row:1/3;width:.5rem;height:.5rem;border-radius:50%;background:#9aa8b8;box-shadow:0 0 0 .2rem #e8edf2}.repair-kpis i.is-red{background:#c43d49;box-shadow:0 0 0 .2rem #fde9eb}.repair-kpis i.is-blue{background:#1a4d8f;box-shadow:0 0 0 .2rem #e5eef9}.repair-kpis i.is-orange{background:#d78b26;box-shadow:0 0 0 .2rem #fff0d9}.repair-kpis i.is-purple{background:#7451b7;box-shadow:0 0 0 .2rem #eee8fa}.repair-kpis span{color:#607288;font-size:.58rem;font-weight:850}.repair-kpis strong{grid-row:1/3;color:var(--au-ink);font-size:1rem}.repair-kpis small{color:#8a97a6;font-size:.51rem}
+	.recommended-problem{display:flex;align-items:center;gap:.7rem;margin-top:.55rem;border:1px solid #f0d6a8;border-radius:.6rem;background:#fff9ef;padding:.65rem}.recommended-problem>div{display:grid;flex:1;gap:.05rem}.recommended-problem span{color:#a86a15;font-size:.52rem;font-weight:900}.recommended-problem strong{color:#5e421e;font-size:.67rem}.recommended-problem p{margin:0;color:#806b50;font-size:.56rem}.recommended-problem>b{border-radius:.35rem;background:#fff;padding:.32rem .45rem;color:#9a641a;font-size:.56rem}.recommended-problem>button{border:1px solid #d9a652;border-radius:.4rem;background:#fff;color:#865611;padding:.4rem .55rem;font-family:inherit;font-size:.56rem;font-weight:900;cursor:pointer}.recommended-problem.is-clean{border-color:#bfe4d5;background:#f0fbf7}.recommended-problem.is-clean span,.recommended-problem.is-clean strong{color:#0f755a}
+	.repair-dialog{width:min(64rem,calc(100% - 1.5rem));max-height:90vh;border:0;border-radius:1rem;background:transparent;padding:0;color:inherit}.repair-dialog::backdrop{background:rgb(8 24 45/.62);backdrop-filter:blur(3px)}.repair-dialog-shell{overflow:hidden;border:1px solid #d8e1eb;border-radius:1rem;background:#fff;box-shadow:0 1.5rem 4rem rgb(7 24 46/.25)}.repair-dialog-shell>header{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;border-bottom:1px solid #e7ecf2;padding:1rem 1.1rem}.repair-dialog-shell>header span{color:var(--au-blue);font-size:.6rem;font-weight:900}.repair-dialog-shell h2{margin:.12rem 0;color:var(--au-ink);font-size:1.05rem}.repair-dialog-shell header p{margin:0;color:var(--au-muted);font-size:.62rem}.repair-dialog-shell>header>button{display:grid;width:2rem;height:2rem;place-items:center;border:1px solid #dce4ed;border-radius:.45rem;background:#fff;color:#718096;font-size:1.15rem;cursor:pointer}
+	.repair-safety-note{display:flex;align-items:center;gap:.55rem;margin:.75rem;border:1px solid #bdddcf;border-radius:.55rem;background:#f1faf6;padding:.65rem;color:#0f7258}.repair-safety-note svg{width:1.2rem;height:1.2rem;flex:none}.repair-safety-note p{display:grid;gap:.08rem;margin:0}.repair-safety-note strong{font-size:.62rem}.repair-safety-note span{font-size:.55rem}
+	.repair-problem-list{display:grid;max-height:57vh;gap:.45rem;overflow:auto;padding:0 .75rem .75rem}.repair-problem-list article{display:grid;grid-template-columns:5rem minmax(0,1fr) auto;align-items:center;gap:.65rem;border:1px solid #e2e8ef;border-radius:.6rem;padding:.65rem}.repair-problem-list article.is-recommended{border-color:#e5b967;background:#fffaf2}.problem-rank{display:flex;align-items:center;gap:.35rem}.problem-rank i{width:.48rem;height:.48rem;border-radius:50%;background:#aab4bf}.is-critical .problem-rank i{background:#b82f3e;box-shadow:0 0 0 .18rem #fbe5e8}.is-high .problem-rank i{background:#d27426;box-shadow:0 0 0 .18rem #fceddf}.is-medium .problem-rank i{background:#b69432;box-shadow:0 0 0 .18rem #f7f0d8}.problem-rank span{color:#718096;font-size:.52rem;font-weight:900}.problem-copy{display:grid;gap:.08rem}.problem-copy h3{margin:0;color:var(--au-ink);font-size:.66rem}.problem-copy p{margin:0;color:var(--au-muted);font-size:.55rem;line-height:1.55}.problem-copy small{color:var(--au-blue);font-size:.51rem;font-weight:850}.problem-action{display:flex;align-items:center;gap:.35rem}.problem-action>a,.problem-action button{display:grid;min-height:2rem;place-items:center;border:1px solid #d7e0e9;border-radius:.4rem;background:#fff;padding:.3rem .5rem;color:#607288;font-family:inherit;font-size:.53rem;font-weight:850;white-space:nowrap;cursor:pointer}.problem-action button,.problem-action>a.is-primary{border-color:var(--au-blue);background:var(--au-blue);color:#fff}.problem-action>a.is-manual{border-color:#6d7c8d;background:#6d7c8d}.repair-empty{padding:2rem;color:var(--au-muted);font-size:.65rem;text-align:center}.repair-dialog-shell>footer{display:flex;justify-content:flex-end;gap:.4rem;border-top:1px solid #e7ecf2;padding:.75rem}.repair-dialog-shell>footer button,.repair-dialog-shell>footer a{display:grid;min-height:2.2rem;place-items:center;border:1px solid #d7e0e9;border-radius:.42rem;background:#fff;padding:.35rem .65rem;color:#607288;font-family:inherit;font-size:.58rem;font-weight:900;cursor:pointer}.repair-dialog-shell>footer a{border-color:var(--au-blue);background:var(--au-blue);color:#fff}
+	:global(.dark) .repair-overview,:global(.dark) .repair-dialog-shell{border-color:#30445d;background:#0f2547}:global(.dark) .repair-kpis article,:global(.dark) .repair-problem-list article,:global(.dark) .repair-dialog-shell>header>button{border-color:#30445d;background:#122b4b}:global(.dark) .recommended-problem{border-color:#5f5036;background:#28291f}:global(.dark) .recommended-problem strong{color:#e8c688}:global(.dark) .repair-dialog-shell>header,:global(.dark) .repair-dialog-shell>footer{border-color:#30445d}
+	@media(max-width:900px){.repair-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.repair-problem-list article{grid-template-columns:4rem minmax(0,1fr)}.problem-action{grid-column:1/-1;justify-content:flex-end}}
+	@media(max-width:620px){.repair-overview>header{align-items:stretch;flex-direction:column}.repair-kpis{grid-template-columns:1fr}.recommended-problem{align-items:stretch;flex-direction:column}.repair-dialog{width:calc(100% - .6rem)}.repair-problem-list article{grid-template-columns:1fr}.problem-action{grid-column:auto;display:grid;grid-template-columns:1fr 1fr}.problem-action form,.problem-action button{width:100%}}
+</style>
+
