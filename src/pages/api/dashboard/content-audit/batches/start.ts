@@ -10,6 +10,12 @@ export const POST: APIRoute = async ({ request, cookies, locals, redirect }) => 
 	const form = await request.formData();
 	const redirectTo = safeRedirectPath(String(form.get('redirect_to') || ''), '/dashboard/content-audit/ai-operations');
 	const separator = redirectTo.includes('?') ? '&' : '?';
+	const targets = form.getAll('targets')
+		.flatMap((value) => String(value).split(','))
+		.map((value) => value.trim().match(/^(article|post):(\d+)$/))
+		.filter((match): match is RegExpMatchArray => Boolean(match && Number(match[2]) > 0))
+		.slice(0, 100)
+		.map((match) => ({ content_type: match[1], content_id: Number(match[2]) }));
 	const payload = {
 		country_code: String(form.get('country_code') || 'jo'), content_type: String(form.get('content_type') || 'all'),
 		level: String(form.get('level') || 'weak'), q: String(form.get('q') || '').trim(),
@@ -17,6 +23,7 @@ export const POST: APIRoute = async ({ request, cookies, locals, redirect }) => 
 		concurrency: Math.max(1, Math.min(6, Number(form.get('concurrency') || 2))),
 		mode: String(form.get('mode') || 'fix_preview'), model_strategy: String(form.get('model_strategy') || 'balanced'),
 		source: 'adsense_readiness', preset: String(form.get('preset') || 'weak_first'),
+		targets,
 	};
 	const res = await apiRawFetch('/dashboard/content-audit/ai/batch-jobs', {
 		method: 'POST', countryId: locals.countryId, cookieHeader: `token=${token}`,
@@ -24,5 +31,6 @@ export const POST: APIRoute = async ({ request, cookies, locals, redirect }) => 
 	});
 	const json: any = await res.json().catch(() => null);
 	if (!res.ok || json?.success === false) return redirect(`${redirectTo}${separator}error=${encodeURIComponent(json?.message || 'تعذّر بدء دفعة التحليل')}`);
-	return redirect(`${redirectTo}${separator}success=batch_started`);
+	const batchId = String(json?.data?.id || '').trim();
+	return redirect(`${redirectTo}${separator}success=batch_started${batchId ? `&batch_id=${encodeURIComponent(batchId)}` : ''}`);
 };
