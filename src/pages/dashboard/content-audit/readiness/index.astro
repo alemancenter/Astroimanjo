@@ -41,12 +41,13 @@ const batchId = String(Astro.url.searchParams.get('batch_id') || '');
 <DashboardLayout title="جاهزية المحتوى" user={user}>
 	<div class="audit-page">
 		<header class="audit-hero">
-			<div class="audit-hero-copy"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 4h14v16H5zM8 8h8m-8 4h8m-8 4h5"/></svg>فحص قابلية النشر والربح</span><h1>تقرير جاهزية المحتوى</h1><p>شخّص مشكلات الجودة والفهرسة وأهلية الإعلانات لكل مقال ومنشور في {currentCountry.name}، ثم ابدأ التحليل أو أنشئ معاينات إصلاح مباشرة دون نشر آلي.</p></div>
+			<div class="audit-hero-copy"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 4h14v16H5zM8 8h8m-8 4h8m-8 4h5"/></svg>فحص قابلية النشر والربح</span><h1>تقرير جاهزية المحتوى</h1><p>شخّص مشكلات الجودة والفهرسة وأهلية الإعلانات لكل مقال ومنشور في {currentCountry.name}. يمكن إصلاح الوصف التعريفي الآمن مباشرة مع إعادة الفحص، بينما تبقى تغييرات العنوان والمحتوى بمعاينة واعتماد بشري.</p></div>
 			<div class="audit-hero-actions"><button type="button" data-open-repair-center><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m14.7 6.3 3 3M4 20l3.8-.8L19 8a2.1 2.1 0 0 0-3-3L4.8 16.2Z"/><path d="M12 20h8"/></svg>إصلاح أبرز المشاكل</button><a href="/dashboard/content-audit/scan" class="is-secondary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6 9a7 7 0 0 1 12-2l2 2M4 15l2 2a7 7 0 0 0 12-2"/></svg>الفحص الشامل</a></div>
 		</header>
 
 		<ContentAuditAINav active="readiness" />
 		{success === 'batch_started' && <section class="audit-flash is-success"><div><strong>تم إنشاء دفعة المعالجة بنجاح</strong><span>بدأت المعالجة في الخلفية، وستظهر النتائج كمعاينات تحتاج اعتمادك.</span></div>{batchId ? <a href={`/dashboard/content-audit/ai-operations/batch-jobs/${batchId}`}>متابعة الدفعة</a> : <a href="/dashboard/content-audit/ai-operations">فتح العمليات</a>}</section>}
+		{success === 'auto_repair_started' && <section class="audit-flash is-success"><div><strong>بدأ إصلاح الوصف التعريفي الآمن</strong><span>سيولّد النظام الوصف ويطبّقه على الحقل الوصفي فقط، ثم يعيد تدقيق الفهرسة وأهلية الإعلانات تلقائيًا.</span></div>{batchId ? <a href={`/dashboard/content-audit/ai-operations/batch-jobs/${batchId}`}>متابعة الإصلاح</a> : <a href="/dashboard/content-audit/ai-operations">فتح العمليات</a>}</section>}
 		{error && <section class="audit-flash is-error"><div><strong>تعذّر بدء المعالجة</strong><span>{error}</span></div><button type="button" data-dismiss-flash>إغلاق</button></section>}
 
 		{!readinessResult.ok ? <section class="audit-empty is-error"><i>!</i><h2>تعذّر تحميل تقرير الجاهزية</h2><p>تحقق من اتصال الخادم ثم أعد المحاولة.</p><a href={Astro.url.pathname}>إعادة المحاولة</a></section> : <section class="readiness-section">

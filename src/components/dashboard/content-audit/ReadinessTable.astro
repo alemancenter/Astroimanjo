@@ -13,12 +13,14 @@ const nf = new Intl.NumberFormat('ar-EG');
 const labelType = (type: string) => type === 'article' ? 'مقال' : type === 'post' ? 'منشور' : 'محتوى';
 const levelLabels: Record<string, string> = { ready: 'جاهز', review: 'يحتاج مراجعة', weak: 'ضعيف' };
 const primaryProblem = (item: ReadinessItem): ReadinessProblem | undefined => item.problems?.[0];
-const batchMode = (problem?: ReadinessProblem) => problem?.action_type === 'analyze' ? 'analyze_only' : problem?.action_type === 'full_review' ? 'full_review' : 'fix_preview';
-const modelStrategy = (problem?: ReadinessProblem) => problem?.action_type === 'full_review' ? 'final_review' : ['thin_content', 'needs_enrichment', 'ads_not_eligible'].includes(problem?.code || '') ? 'quality' : 'balanced';
-const actionText = (problem?: ReadinessProblem) => problem?.action_type === 'analyze' ? 'فحص الآن' : problem?.action_type === 'full_review' ? 'مراجعة نهائية' : problem?.action_type === 'manual' ? 'تعديل يدوي' : 'إنشاء إصلاح';
+const actionableProblems = (item: ReadinessItem) => (item.problems || []).filter((problem) => problem.action_type !== 'manual');
+const batchMode = (problem?: ReadinessProblem) => problem?.mode || (problem?.action_type === 'analyze' ? 'analyze_only' : problem?.action_type === 'auto_repair' ? 'auto_apply' : problem?.action_type === 'full_review' ? 'full_review' : 'fix_preview');
+const modelStrategy = (problem?: ReadinessProblem) => problem?.model_strategy || (problem?.action_type === 'full_review' ? 'final_review' : ['thin_content', 'needs_enrichment', 'ads_not_eligible'].includes(problem?.code || '') ? 'quality' : 'balanced');
+const actionText = (problem?: ReadinessProblem) => problem?.action_type === 'analyze' ? 'فحص الآن' : problem?.action_type === 'auto_repair' ? 'توليد وإصلاح الوصف' : problem?.action_type === 'full_review' ? 'مراجعة نهائية' : problem?.action_type === 'manual' ? 'تعديل يدوي' : 'إنشاء معاينة إصلاح';
 const detailsPayload = (item: ReadinessItem) => JSON.stringify({
 	title: item.title,
 	type: labelType(item.type),
+	contentType: item.type,
 	id: item.id,
 	audited: item.audited,
 	indexable: item.should_index,
@@ -30,6 +32,9 @@ const detailsPayload = (item: ReadinessItem) => JSON.stringify({
 	diagnostics: item.diagnostic_signals || [],
 	editUrl: editContentHref(item),
 	publicUrl: item.url,
+	target: itemTarget(item),
+	countryCode,
+	redirectTo,
 });
 ---
 
@@ -39,16 +44,17 @@ const detailsPayload = (item: ReadinessItem) => JSON.stringify({
 		<input type="hidden" name="country_code" value={countryCode}/>
 		<input type="hidden" name="content_type" value="all"/>
 		<input type="hidden" name="level" value="weak"/>
-		<input type="hidden" name="preset" value="selected_items"/>
+		<input type="hidden" name="preset" value="selected_items" data-selected-preset/>
 		<input type="hidden" name="mode" value="fix_preview" data-selected-mode/>
-		<input type="hidden" name="model_strategy" value="quality"/>
+		<input type="hidden" name="model_strategy" value="quality" data-selected-model/>
 		<input type="hidden" name="limit" value="20" data-selected-limit/>
 		<input type="hidden" name="concurrency" value="2"/>
 		<input type="hidden" name="redirect_to" value={redirectTo}/>
 		<div data-selected-targets></div>
-		<button type="submit" data-selected-action="analyze_only">تحليل المحدد</button>
-		<button type="submit" class="is-primary" data-selected-action="fix_preview">إنشاء معاينات للمحدد</button>
+		<label class="bulk-problem-picker"><span>المشكلة المشتركة</span><select data-selected-problem aria-label="اختر المشكلة المشتركة"></select></label>
+		<button type="submit" class="is-primary" data-selected-run disabled>اختر مشكلة مشتركة</button>
 	</form>
+	<small data-selected-note></small>
 	<button type="button" data-clear-selection>إلغاء التحديد</button>
 </div>
 
@@ -57,9 +63,10 @@ const detailsPayload = (item: ReadinessItem) => JSON.stringify({
 		<thead><tr><th class="select-column"><input type="checkbox" data-select-page aria-label="تحديد العناصر القابلة للمعالجة في الصفحة"/></th><th>المحتوى</th><th>درجة الجودة</th><th>المؤشرات</th><th>أبرز المشكلات</th><th>الفهرسة</th><th>الإعلانات</th><th>الإجراء</th></tr></thead>
 		<tbody>{items.map((item) => {
 			const problem = primaryProblem(item);
-			const canProcess = !item.should_show_ads && problem?.action_type !== 'manual';
+			const rowProblems = actionableProblems(item);
+			const canProcess = rowProblems.length > 0;
 			return <tr>
-				<td class="select-column"><input type="checkbox" data-select-item value={itemTarget(item)} disabled={!canProcess} aria-label={`تحديد ${item.title}`}/></td>
+				<td class="select-column"><input type="checkbox" data-select-item value={itemTarget(item)} data-problems={JSON.stringify(rowProblems)} disabled={!canProcess} aria-label={`تحديد ${item.title}`}/></td>
 				<td><div class="content-cell"><span>{labelType(item.type)}</span><strong title={item.title}>{item.title}</strong><small>#{nf.format(item.id)} · {item.status === 'published' ? 'منشور' : 'غير منشور'}</small></div></td>
 				<td><div class:list={['audit-score', `is-${item.level}`]} style={`--score:${Math.max(0, Math.min(100, Number(item.score || 0)))}`}><strong>{nf.format(item.score || 0)}</strong><i><span></span></i><small>{levelLabels[item.level] || item.level}{!item.audited && item.score > 0 && <em class="baseline-tag" title="درجة أولية من الفحص الحتمي — لم تُراجَع بالذكاء الاصطناعي بعد">· فحص حتمي</em>}</small></div></td>
 				<td><div class="content-metrics"><span><b>{nf.format(item.word_count || 0)}</b> كلمة</span><span><b>{nf.format(item.files_count || 0)}</b> مرفق</span></div></td>
@@ -67,8 +74,8 @@ const detailsPayload = (item: ReadinessItem) => JSON.stringify({
 				<td><span class:list={['boolean-badge', item.should_index && 'is-yes']}><i></i>{item.should_index ? 'مفهرس' : 'غير مفهرس'}</span></td>
 				<td><button type="button" class:list={['boolean-badge', 'eligibility-button', item.should_show_ads && 'is-yes']} data-open-eligibility data-payload={detailsPayload(item)}><i></i>{item.should_show_ads ? 'جاهز مبدئيًا' : 'غير مؤهل'}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8h.01"/></svg></button></td>
 				<td><div class="row-actions">
-					{problem?.action_type === 'manual' || !problem ? <a class="repair-row-button is-manual" href={editContentHref(item)}>{problem ? actionText(problem) : 'فتح المحرر'}</a> : item.should_show_ads ? <span class="ready-label">لا يلزم إجراء</span> : <form method="post" action="/api/dashboard/content-audit/batches/start">
-						<input type="hidden" name="country_code" value={countryCode}/><input type="hidden" name="content_type" value={item.type}/><input type="hidden" name="targets" value={itemTarget(item)}/><input type="hidden" name="preset" value="selected_items"/><input type="hidden" name="mode" value={batchMode(problem)}/><input type="hidden" name="model_strategy" value={modelStrategy(problem)}/><input type="hidden" name="limit" value="1"/><input type="hidden" name="concurrency" value="1"/><input type="hidden" name="redirect_to" value={redirectTo}/><button class="repair-row-button" type="submit">{actionText(problem)}</button>
+					{problem?.action_type === 'manual' || !problem ? <a class="repair-row-button is-manual" href={editContentHref(item)}>{problem ? actionText(problem) : 'فتح المحرر'}</a> : <form method="post" action="/api/dashboard/content-audit/batches/start" data-table-auto-repair={problem.action_type === 'auto_repair' ? 'true' : undefined}>
+						<input type="hidden" name="country_code" value={countryCode}/><input type="hidden" name="content_type" value={item.type}/><input type="hidden" name="targets" value={itemTarget(item)}/><input type="hidden" name="preset" value={problem.preset || problem.code}/><input type="hidden" name="mode" value={batchMode(problem)}/><input type="hidden" name="model_strategy" value={modelStrategy(problem)}/><input type="hidden" name="limit" value="1"/><input type="hidden" name="concurrency" value="1"/><input type="hidden" name="redirect_to" value={redirectTo}/><button class="repair-row-button" type="submit">{actionText(problem)}</button>
 					</form>}
 					<a class="open-content" href={item.url} target="_blank" rel="noreferrer" title="فتح المحتوى"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 5h5v5m0-5-8 8M19 13v6H5V5h6"/></svg></a>
 				</div></td>
@@ -89,32 +96,108 @@ const detailsPayload = (item: ReadinessItem) => JSON.stringify({
 </dialog>
 
 <script>
+	type ClientProblem = { code: string; label: string; message?: string; severity?: string; action_type: string; preset?: string; mode?: string; model_strategy?: string };
+	type DetailPayload = { title: string; type: string; contentType: 'article' | 'post'; id: number; audited: boolean; indexable: boolean; adsEligible: boolean; decision: string; risk: string; problems: ClientProblem[]; gateReasons: string[]; diagnostics: string[]; editUrl: string; publicUrl: string; target: string; countryCode: string; redirectTo: string };
+
+	const clientMode = (problem: ClientProblem) => problem.mode || (problem.action_type === 'analyze' ? 'analyze_only' : problem.action_type === 'auto_repair' ? 'auto_apply' : problem.action_type === 'full_review' ? 'full_review' : 'fix_preview');
+	const clientModel = (problem: ClientProblem) => problem.model_strategy || (problem.action_type === 'full_review' ? 'final_review' : ['thin_content', 'needs_enrichment', 'ads_not_eligible'].includes(problem.code) ? 'quality' : 'balanced');
+	const clientActionText = (problem: ClientProblem, bulk = false) => {
+		if (problem.action_type === 'analyze') return bulk ? 'فحص العناصر المحددة' : 'فحص الآن';
+		if (problem.action_type === 'auto_repair') return bulk ? 'توليد وإصلاح الأوصاف المحددة' : 'توليد وإصلاح الوصف';
+		if (problem.action_type === 'full_review') return bulk ? 'إنشاء مراجعة نهائية للمحدد' : 'إنشاء مراجعة نهائية';
+		if (problem.action_type === 'manual') return 'فتح المحرر';
+		return bulk ? 'إنشاء معاينات للمحدد' : 'إنشاء معاينة إصلاح';
+	};
+	const hiddenInput = (name: string, value: string) => {
+		const input = document.createElement('input');
+		input.type = 'hidden'; input.name = name; input.value = value;
+		return input;
+	};
+
 	const selectionBoxes = Array.from(document.querySelectorAll<HTMLInputElement>('[data-select-item]:not(:disabled)'));
 	const selectPage = document.querySelector<HTMLInputElement>('[data-select-page]');
 	const bulkToolbar = document.querySelector<HTMLElement>('[data-bulk-toolbar]');
 	const selectedCount = document.querySelector<HTMLElement>('[data-selected-count]');
 	const selectedTargets = document.querySelector<HTMLElement>('[data-selected-targets]');
 	const selectedLimit = document.querySelector<HTMLInputElement>('[data-selected-limit]');
+	const selectedPreset = document.querySelector<HTMLInputElement>('[data-selected-preset]');
 	const selectedMode = document.querySelector<HTMLInputElement>('[data-selected-mode]');
+	const selectedModel = document.querySelector<HTMLInputElement>('[data-selected-model]');
+	const selectedProblem = document.querySelector<HTMLSelectElement>('[data-selected-problem]');
+	const selectedRun = document.querySelector<HTMLButtonElement>('[data-selected-run]');
+	const selectedNote = document.querySelector<HTMLElement>('[data-selected-note]');
 	const selectedForm = document.getElementById('selected-readiness-form') as HTMLFormElement | null;
+	const boxProblems = (box: HTMLInputElement): ClientProblem[] => {
+		try { return JSON.parse(box.dataset.problems || '[]') as ClientProblem[]; } catch { return []; }
+	};
+	const commonProblems = (checked: HTMLInputElement[]) => {
+		if (!checked.length) return [] as ClientProblem[];
+		return boxProblems(checked[0]).filter((problem) => problem.action_type !== 'manual' && checked.every((box) => boxProblems(box).some((candidate) => candidate.code === problem.code)));
+	};
+	const syncBulkAction = () => {
+		const checked = selectionBoxes.filter((box) => box.checked);
+		const problems = commonProblems(checked);
+		const current = selectedProblem?.value || '';
+		if (selectedProblem) {
+			selectedProblem.replaceChildren();
+			if (!problems.length) {
+				const option = new Option('لا توجد مشكلة مشتركة', ''); option.disabled = true; option.selected = true; selectedProblem.add(option);
+			} else {
+				problems.forEach((problem) => selectedProblem.add(new Option(`${problem.label} (${clientActionText(problem)})`, problem.code)));
+				selectedProblem.value = problems.some((problem) => problem.code === current) ? current : problems[0].code;
+			}
+			selectedProblem.disabled = !problems.length;
+		}
+		const active = problems.find((problem) => problem.code === selectedProblem?.value);
+		if (selectedPreset) selectedPreset.value = active?.preset || active?.code || 'selected_items';
+		if (selectedMode) selectedMode.value = active ? clientMode(active) : 'fix_preview';
+		if (selectedModel) selectedModel.value = active ? clientModel(active) : 'quality';
+		if (selectedRun) { selectedRun.disabled = !active; selectedRun.textContent = active ? clientActionText(active, true) : 'اختر مشكلة مشتركة'; }
+		if (selectedNote) selectedNote.textContent = checked.length > 1 && !active ? 'اختر عناصر تشترك في المشكلة نفسها حتى تتم معالجتها بأمان.' : active?.action_type === 'auto_repair' ? 'سيُطبّق الوصف التعريفي فقط ثم يُعاد فحص كل صفحة.' : '';
+	};
 	const syncSelection = () => {
 		const checked = selectionBoxes.filter((box) => box.checked);
 		if (selectedCount) selectedCount.textContent = String(checked.length);
 		if (selectedLimit) selectedLimit.value = String(Math.max(1, Math.min(100, checked.length)));
-		if (selectedTargets) selectedTargets.innerHTML = checked.map((box) => `<input type="hidden" name="targets" value="${box.value}">`).join('');
+		if (selectedTargets) selectedTargets.replaceChildren(...checked.map((box) => hiddenInput('targets', box.value)));
 		if (bulkToolbar) bulkToolbar.hidden = checked.length === 0;
 		if (selectPage) { selectPage.checked = checked.length > 0 && checked.length === selectionBoxes.length; selectPage.indeterminate = checked.length > 0 && checked.length < selectionBoxes.length; }
+		syncBulkAction();
 	};
 	selectionBoxes.forEach((box) => box.addEventListener('change', syncSelection));
 	selectPage?.addEventListener('change', () => { selectionBoxes.forEach((box) => { box.checked = Boolean(selectPage.checked); }); syncSelection(); });
 	document.querySelector('[data-clear-selection]')?.addEventListener('click', () => { selectionBoxes.forEach((box) => { box.checked = false; }); syncSelection(); });
-	document.querySelectorAll<HTMLButtonElement>('[data-selected-action]').forEach((button) => button.addEventListener('click', () => { if (selectedMode) selectedMode.value = button.dataset.selectedAction || 'fix_preview'; }));
-	selectedForm?.addEventListener('submit', (event) => { if (!selectionBoxes.some((box) => box.checked)) event.preventDefault(); });
+	selectedProblem?.addEventListener('change', syncBulkAction);
+	selectedForm?.addEventListener('submit', (event) => {
+		const checked = selectionBoxes.filter((box) => box.checked);
+		const active = commonProblems(checked).find((problem) => problem.code === selectedProblem?.value);
+		if (!checked.length || !active) { event.preventDefault(); return; }
+		if (active.action_type === 'auto_repair' && !window.confirm(`سيتم توليد وتطبيق وصف تعريفي لـ ${checked.length} عنصر ثم إعادة فحص الجاهزية. هل تريد المتابعة؟`)) event.preventDefault();
+	});
 
-	type DetailPayload = { title: string; type: string; id: number; audited: boolean; indexable: boolean; adsEligible: boolean; decision: string; risk: string; problems: Array<{ label: string; message: string }>; gateReasons: string[]; diagnostics: string[]; editUrl: string; publicUrl: string };
 	const detailsDialog = document.getElementById('eligibility-details') as HTMLDialogElement | null;
 	const setText = (selector: string, value: string) => { const node = detailsDialog?.querySelector<HTMLElement>(selector); if (node) node.textContent = value || '—'; };
 	const fillList = (selector: string, values: string[], empty: string) => { const node = detailsDialog?.querySelector<HTMLUListElement>(selector); if (node) node.innerHTML = values.length ? values.map((value) => `<li>${value.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char] || char))}</li>`).join('') : `<li class="is-empty">${empty}</li>`; };
+	const renderProblemActions = (data: DetailPayload) => {
+		const list = detailsDialog?.querySelector<HTMLUListElement>('[data-detail-problems]');
+		if (!list) return;
+		list.replaceChildren();
+		if (!data.problems?.length) { const empty = document.createElement('li'); empty.className = 'is-empty'; empty.textContent = 'لا توجد مشكلات مصنفة.'; list.append(empty); return; }
+		data.problems.forEach((problem) => {
+			const item = document.createElement('li'); item.className = `detail-problem is-${problem.severity || 'medium'}`;
+			const copy = document.createElement('div'); const label = document.createElement('strong'); const message = document.createElement('span');
+			label.textContent = problem.label; message.textContent = problem.message || 'تحتاج هذه المشكلة إلى معالجة.'; copy.append(label, message);
+			if (problem.action_type === 'manual') {
+				const link = document.createElement('a'); link.href = data.editUrl; link.textContent = clientActionText(problem); item.append(copy, link);
+			} else {
+				const form = document.createElement('form'); form.method = 'post'; form.action = '/api/dashboard/content-audit/batches/start';
+				if (problem.action_type === 'auto_repair') form.dataset.tableAutoRepair = 'true';
+				form.append(hiddenInput('country_code', data.countryCode), hiddenInput('content_type', data.contentType), hiddenInput('targets', data.target), hiddenInput('preset', problem.preset || problem.code), hiddenInput('mode', clientMode(problem)), hiddenInput('model_strategy', clientModel(problem)), hiddenInput('limit', '1'), hiddenInput('concurrency', '1'), hiddenInput('redirect_to', data.redirectTo));
+				const submit = document.createElement('button'); submit.type = 'submit'; submit.textContent = clientActionText(problem); form.append(submit); item.append(copy, form);
+			}
+			list.append(item);
+		});
+	};
 	document.querySelectorAll<HTMLButtonElement>('[data-open-eligibility]').forEach((button) => button.addEventListener('click', () => {
 		try {
 			const data = JSON.parse(button.dataset.payload || '{}') as DetailPayload;
@@ -124,7 +207,7 @@ const detailsPayload = (item: ReadinessItem) => JSON.stringify({
 			setText('[data-detail-index]', data.indexable ? 'مفهرس' : 'متوقف');
 			setText('[data-detail-ads]', data.adsEligible ? 'جاهز مبدئيًا' : 'غير مؤهل');
 			setText('[data-detail-risk]', data.risk || 'غير محدد');
-			fillList('[data-detail-problems]', (data.problems || []).map((problem) => `${problem.label}: ${problem.message}`), 'لا توجد مشكلات مصنفة.');
+			renderProblemActions(data);
 			fillList('[data-detail-reasons]', data.gateReasons || [], 'لا توجد أسباب إضافية.');
 			fillList('[data-detail-diagnostics]', data.diagnostics || [], 'لا توجد إشارات تحريرية إضافية.');
 			const edit = detailsDialog?.querySelector<HTMLAnchorElement>('[data-detail-edit]'); if (edit) edit.href = data.editUrl;
@@ -132,15 +215,20 @@ const detailsPayload = (item: ReadinessItem) => JSON.stringify({
 			detailsDialog?.showModal();
 		} catch { /* malformed row data should not break the table */ }
 	}));
+	document.addEventListener('submit', (event) => {
+		const form = event.target as HTMLFormElement;
+		if (form?.dataset?.tableAutoRepair === 'true' && !window.confirm('سيتم توليد وصف تعريفي من نص الصفحة، وتطبيقه تلقائيًا ثم إعادة فحص الجاهزية. هل تريد المتابعة؟')) event.preventDefault();
+	});
 	document.querySelectorAll('[data-close-eligibility]').forEach((button) => button.addEventListener('click', () => detailsDialog?.close()));
 	detailsDialog?.addEventListener('click', (event) => { if (event.target === detailsDialog) detailsDialog.close(); });
 </script>
 
 <style>
-	.bulk-toolbar{display:flex;align-items:center;gap:.55rem;margin-bottom:.55rem;border:1px solid #a9c5e5;border-radius:.58rem;background:#f0f6fd;padding:.48rem .6rem}.bulk-toolbar[hidden]{display:none}.bulk-toolbar>div{display:flex;align-items:center;gap:.25rem;color:#526a84;font-size:.58rem}.bulk-toolbar>div strong{color:var(--au-blue);font-size:.8rem}.bulk-toolbar form{display:flex;flex:1;justify-content:flex-end;gap:.35rem}.bulk-toolbar button{min-height:2rem;border:1px solid #b9c9da;border-radius:.4rem;background:#fff;padding:.3rem .55rem;color:#526a84;font-family:inherit;font-size:.54rem;font-weight:900;cursor:pointer}.bulk-toolbar button.is-primary{border-color:var(--au-blue);background:var(--au-blue);color:#fff}
+	.bulk-toolbar{display:flex;align-items:center;gap:.55rem;margin-bottom:.55rem;border:1px solid #a9c5e5;border-radius:.58rem;background:#f0f6fd;padding:.48rem .6rem}.bulk-toolbar[hidden]{display:none}.bulk-toolbar>div{display:flex;align-items:center;gap:.25rem;color:#526a84;font-size:.58rem}.bulk-toolbar>div strong{color:var(--au-blue);font-size:.8rem}.bulk-toolbar>form{display:flex;flex:1;align-items:flex-end;justify-content:flex-end;gap:.35rem}.bulk-toolbar>small{max-width:13rem;color:#6d7f92;font-size:.49rem;line-height:1.45}.bulk-problem-picker{display:grid;gap:.12rem}.bulk-problem-picker span{color:#607288;font-size:.48rem;font-weight:850}.bulk-problem-picker select{min-width:13rem;height:2rem;border:1px solid #b9c9da;border-radius:.4rem;background:#fff;padding:0 .4rem;color:#344a63;font-family:inherit;font-size:.53rem}.bulk-toolbar button{min-height:2rem;border:1px solid #b9c9da;border-radius:.4rem;background:#fff;padding:.3rem .55rem;color:#526a84;font-family:inherit;font-size:.54rem;font-weight:900;cursor:pointer}.bulk-toolbar button.is-primary{border-color:var(--au-blue);background:var(--au-blue);color:#fff}.bulk-toolbar button:disabled{cursor:not-allowed;opacity:.5}
 	.readiness-table-wrap{overflow-x:auto;border:1px solid #e0e7ee;border-radius:.58rem}.readiness-table-wrap table{width:100%;border-collapse:collapse;white-space:nowrap}.readiness-table-wrap th{background:#f8fafc;padding:.52rem .58rem;color:#718096;font-size:.57rem;text-align:right}.readiness-table-wrap td{border-top:1px solid #edf1f5;padding:.56rem .58rem;color:#53667d;font-size:.6rem;vertical-align:middle}.select-column{width:2rem;text-align:center!important}.select-column input{width:.82rem;height:.82rem;accent-color:var(--au-blue)}.select-column input:disabled{opacity:.3}.content-cell{display:grid;max-width:18rem}.content-cell>span{color:var(--au-blue);font-size:.53rem;font-weight:850}.content-cell strong{overflow:hidden;color:var(--au-ink);font-size:.66rem;text-overflow:ellipsis}.content-cell small{color:#8a96a5;font-size:.52rem}.audit-score{display:grid;grid-template-columns:auto 3rem;align-items:center;gap:.1rem .35rem}.audit-score strong{grid-row:1/3;color:var(--au-ink);font-size:.78rem}.audit-score>i{height:.35rem;overflow:hidden;border-radius:99rem;background:#edf1f5}.audit-score>i>span{display:block;width:calc(var(--score)*1%);height:100%;background:var(--au-orange)}.audit-score.is-ready>i>span{background:var(--au-green)}.audit-score.is-weak>i>span{background:var(--au-red)}.audit-score small{font-size:.51rem}.baseline-tag{display:inline-block;margin-inline-start:.2rem;color:#6e42bd;font-style:normal}.content-metrics{display:flex;gap:.3rem}.content-metrics span{border-radius:.3rem;background:#f2f5f8;padding:.25rem .35rem;font-size:.54rem}.content-metrics b{color:var(--au-ink)}
 	.issue-list{display:grid;gap:.16rem;min-width:9rem;max-width:14rem}.issue-list>span{display:flex;align-items:center;gap:.25rem;overflow:hidden;color:#7b5b31;font-size:.51rem;text-overflow:ellipsis}.issue-list>span i{width:.38rem;height:.38rem;flex:none;border-radius:50%;background:#c69550}.issue-list>span.is-critical{color:#a92d3c}.issue-list>span.is-critical i{background:#c43d49}.issue-list>span.is-high{color:#a45a1f}.issue-list>span.is-high i{background:#d47d2e}.issue-list>span.is-clean{color:var(--au-green)}.issue-list>span.is-clean i{background:var(--au-green)}.issue-list>button{justify-self:start;border:0;background:transparent;padding:.08rem 0;color:var(--au-blue);font-family:inherit;font-size:.49rem;font-weight:850;cursor:pointer}.boolean-badge{display:flex;align-items:center;gap:.25rem;border:0;background:transparent;color:#8591a0;font-family:inherit;font-size:.55rem;font-weight:850;white-space:nowrap}.boolean-badge i{width:.4rem;height:.4rem;border-radius:50%;background:#aeb7c1}.boolean-badge.is-yes{color:var(--au-green)}.boolean-badge.is-yes i{background:var(--au-green)}.eligibility-button{cursor:pointer}.eligibility-button svg{width:.7rem;height:.7rem}.row-actions{display:flex;align-items:center;gap:.3rem}.repair-row-button{display:grid;min-height:1.8rem;place-items:center;border:1px solid var(--au-blue);border-radius:.38rem;background:var(--au-blue);padding:.25rem .45rem;color:#fff;font-family:inherit;font-size:.5rem;font-weight:900;cursor:pointer}.repair-row-button.is-manual{border-color:#cfd9e4;background:#fff;color:#607288}.ready-label{color:var(--au-green);font-size:.51rem;font-weight:850}.open-content{display:grid;width:1.8rem;height:1.8rem;place-items:center;border:1px solid #d8e2ec;border-radius:.4rem;color:var(--au-blue)}.open-content svg{width:.75rem;height:.75rem}
 	.eligibility-dialog{width:min(43rem,calc(100% - 1rem));max-height:90vh;border:0;border-radius:.9rem;background:transparent;padding:0}.eligibility-dialog::backdrop{background:rgb(8 24 45/.62);backdrop-filter:blur(2px)}.eligibility-dialog>div{overflow:hidden;border:1px solid #d9e2eb;border-radius:.9rem;background:#fff;box-shadow:0 1.3rem 4rem rgb(7 24 46/.24)}.eligibility-dialog header{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;border-bottom:1px solid #e6ecf2;padding:.9rem}.eligibility-dialog header span{color:var(--au-blue);font-size:.55rem;font-weight:900}.eligibility-dialog h2{margin:.1rem 0;color:var(--au-ink);font-size:.9rem}.eligibility-dialog header p{margin:0;color:var(--au-muted);font-size:.55rem}.eligibility-dialog header button{display:grid;width:1.9rem;height:1.9rem;place-items:center;border:1px solid #d9e2eb;border-radius:.4rem;background:#fff;color:#748296;font-size:1rem;cursor:pointer}.eligibility-status{display:grid!important;grid-template-columns:repeat(4,1fr);gap:.4rem;border:0!important;background:#f7f9fc;padding:.65rem!important}.eligibility-status div{display:grid;gap:.08rem;border-left:1px solid #e1e7ee}.eligibility-status div:last-child{border:0}.eligibility-status span{color:#78879a;font-size:.5rem}.eligibility-status strong{color:var(--au-ink);font-size:.6rem}.eligibility-dialog section{padding:.6rem .9rem;border-bottom:1px solid #edf1f5}.eligibility-dialog section h3{margin:0 0 .3rem;color:var(--au-ink);font-size:.62rem}.eligibility-dialog ul{display:grid;gap:.22rem;margin:0;padding:0;list-style:none}.eligibility-dialog li{position:relative;padding-right:.75rem;color:#5e7085;font-size:.54rem;line-height:1.55;white-space:normal}.eligibility-dialog li::before{position:absolute;top:.45rem;right:0;width:.35rem;height:.35rem;border-radius:50%;background:#d18a32;content:""}.eligibility-dialog li.is-empty{color:#8b97a5}.eligibility-dialog li.is-empty::before{background:#aab5c0}.eligibility-dialog footer{display:flex;justify-content:flex-end;gap:.35rem;padding:.7rem .9rem}.eligibility-dialog footer a{display:grid;min-height:2.1rem;place-items:center;border:1px solid #d5dfe8;border-radius:.4rem;background:#fff;padding:.3rem .6rem;color:#607288;font-size:.55rem;font-weight:900}.eligibility-dialog footer a.is-primary{border-color:var(--au-blue);background:var(--au-blue);color:#fff}
+	.eligibility-dialog li.detail-problem{display:flex;align-items:center;gap:.55rem;border:1px solid #e2e8ef;border-radius:.45rem;padding:.45rem .55rem}.eligibility-dialog li.detail-problem::before{display:none}.detail-problem>div{display:grid;flex:1}.detail-problem strong{color:var(--au-ink);font-size:.57rem}.detail-problem span{color:#6b7b8e;font-size:.51rem}.detail-problem form button,.detail-problem>a{display:grid;min-height:1.9rem;place-items:center;border:1px solid var(--au-blue);border-radius:.38rem;background:var(--au-blue);padding:.25rem .5rem;color:#fff;font-family:inherit;font-size:.5rem;font-weight:900;white-space:nowrap;cursor:pointer}.detail-problem>a{border-color:#cfd9e4;background:#fff;color:#607288}
 	:global(.dark) .bulk-toolbar{border-color:#35547a;background:#122b4b}:global(.dark) .readiness-table-wrap th,:global(.dark) .eligibility-status{background:#122b4b}:global(.dark) .readiness-table-wrap td,:global(.dark) .eligibility-dialog header,:global(.dark) .eligibility-dialog section{border-color:#29405c}:global(.dark) .eligibility-dialog>div,:global(.dark) .eligibility-dialog header button{border-color:#30445d;background:#0f2547}:global(.dark) .content-metrics span{background:#122b4b}
-	@media(max-width:720px){.bulk-toolbar{align-items:stretch;flex-direction:column}.bulk-toolbar form{display:grid;grid-template-columns:1fr 1fr}.eligibility-status{grid-template-columns:repeat(2,1fr)}.eligibility-status div:nth-child(2){border:0}.readiness-table-wrap{margin-inline:-.25rem}}
+	@media(max-width:720px){.bulk-toolbar{align-items:stretch;flex-direction:column}.bulk-toolbar>form{display:grid;grid-template-columns:1fr}.bulk-problem-picker select{width:100%}.eligibility-status{grid-template-columns:repeat(2,1fr)}.eligibility-status div:nth-child(2){border:0}.detail-problem{align-items:stretch!important;flex-direction:column}.detail-problem form,.detail-problem form button{width:100%}.readiness-table-wrap{margin-inline:-.25rem}}
 </style>
