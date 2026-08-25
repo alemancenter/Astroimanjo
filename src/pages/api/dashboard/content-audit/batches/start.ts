@@ -32,5 +32,6 @@ export const POST: APIRoute = async ({ request, cookies, locals, redirect }) => 
 	const json: any = await res.json().catch(() => null);
 	if (!res.ok || json?.success === false) return redirect(`${redirectTo}${separator}error=${encodeURIComponent(json?.message || 'تعذّر بدء دفعة التحليل')}`);
 	const batchId = String(json?.data?.id || '').trim();
-	return redirect(`${redirectTo}${separator}success=batch_started${batchId ? `&batch_id=${encodeURIComponent(batchId)}` : ''}`);
+	const success = payload.mode === 'auto_apply' ? 'auto_repair_started' : 'batch_started';
+	return redirect(`${redirectTo}${separator}success=${success}${batchId ? `&batch_id=${encodeURIComponent(batchId)}` : ''}`);
 };

@@ -1,4 +1,4 @@
-export type ReadinessActionType = 'analyze' | 'ai_preview' | 'full_review' | 'manual';
+export type ReadinessActionType = 'analyze' | 'ai_preview' | 'auto_repair' | 'full_review' | 'manual';
 
 export interface ReadinessProblem {
 	code: string;
@@ -53,9 +53,9 @@ export const itemTarget = (item: Pick<ReadinessItem, 'type' | 'id'>) => `${item.
 export const actionLabel = (action: ReadinessActionType) => {
 	switch (action) {
 		case 'analyze': return 'تشغيل الفحص';
+		case 'auto_repair': return 'توليد وإصلاح الوصف';
 		case 'full_review': return 'إنشاء مراجعة نهائية';
 		case 'ai_preview': return 'إنشاء معاينات إصلاح';
 		default: return 'مراجعة يدويًا';
 	}
 };
-

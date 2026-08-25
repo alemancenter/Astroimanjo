@@ -23,7 +23,7 @@ const problemHref = (code: string) => `/dashboard/content-audit/readiness?proble
 		<div>
 			<span>مركز الإصلاح</span>
 			<h2 id="repair-overview-title">حوّل التقرير إلى خطة معالجة</h2>
-			<p>ابدأ بالأعلى تأثيرًا، أنشئ مسودات في دفعات صغيرة، ثم راجع كل تغيير قبل تطبيقه.</p>
+			<p>أصلح البيانات الوصفية الآمنة مباشرة، وأنشئ معاينات للمشكلات التي تمس العنوان أو نص المحتوى.</p>
 		</div>
 		<button type="button" data-open-repair-center>
 			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m14.7 6.3 3 3M4 20l3.8-.8L19 8a2.1 2.1 0 0 0-3-3L4.8 16.2Z"/><path d="M12 20h8"/></svg>
@@ -33,7 +33,7 @@ const problemHref = (code: string) => `/dashboard/content-audit/readiness?proble
 
 	<div class="repair-kpis">
 		<article><i class="is-red"></i><span>عناصر متأثرة</span><strong>{nf.format(Number(repair?.affected_items || 0))}</strong><small>تحتاج إجراءً أو مراجعة</small></article>
-		<article><i class="is-blue"></i><span>قابلة للمعالجة</span><strong>{nf.format(Number(repair?.actionable_items || 0))}</strong><small>تحليل أو معاينة ذكية</small></article>
+		<article><i class="is-blue"></i><span>قابلة للمعالجة</span><strong>{nf.format(Number(repair?.actionable_items || 0))}</strong><small>إصلاح آمن أو معاينة ذكية</small></article>
 		<article><i class="is-orange"></i><span>مراجعة يدوية</span><strong>{nf.format(Number(repair?.manual_items || 0))}</strong><small>لن يعدّلها النظام تلقائيًا</small></article>
 		<article><i class="is-purple"></i><span>إجمالي الإشارات</span><strong>{nf.format(Number(repair?.total_findings || 0))}</strong><small>قد تجتمع عدة إشارات في عنصر</small></article>
 	</div>
@@ -48,13 +48,13 @@ const problemHref = (code: string) => `/dashboard/content-audit/readiness?proble
 <dialog id="readiness-repair-center" class="repair-dialog" aria-labelledby="repair-dialog-title">
 	<div class="repair-dialog-shell">
 		<header>
-			<div><span>معالجة آمنة على دفعات</span><h2 id="repair-dialog-title">إصلاح أبرز مشاكل الجاهزية</h2><p>كل إجراء ذكي ينشئ تحليلًا أو معاينة فقط. لا يُنشر أي نص قبل اعتمادك اليدوي.</p></div>
+			<div><span>معالجة آمنة على دفعات</span><h2 id="repair-dialog-title">إصلاح أبرز مشاكل الجاهزية</h2><p>الوصف التعريفي فقط يمكن إصلاحه تلقائيًا ثم إعادة فحصه؛ العنوان والمحتوى والسياسات تبقى بمعاينة وموافقة بشرية.</p></div>
 			<button type="button" data-close-repair-center aria-label="إغلاق">×</button>
 		</header>
 
 		<aside class="repair-safety-note">
 			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 3 4 6v5c0 5 3.4 8.2 8 10 4.6-1.8 8-5 8-10V6Z"/><path d="m9 12 2 2 4-5"/></svg>
-			<p><strong>المراجعة البشرية إلزامية</strong><span>يُعالَج بحد أقصى {nf.format(batchSize)} عنصرًا في الدفعة لتسهيل المقارنة والتحقق.</span></p>
+			<p><strong>حماية حسب نوع التغيير</strong><span>التعديل التلقائي محصور في الوصف التعريفي ومُسجّل بالكامل؛ أي تغيير جوهري يحتاج اعتمادك.</span></p>
 		</aside>
 
 		<div class="repair-problem-list">
@@ -63,7 +63,7 @@ const problemHref = (code: string) => `/dashboard/content-audit/readiness?proble
 				<div class="problem-copy"><h3>{problem.label}</h3><p>{problem.description}</p><small>{nf.format(Number(problem.count || 0))} عنصر متأثر</small></div>
 				<div class="problem-action">
 					<a href={problemHref(problem.code)}>عرض العناصر</a>
-					{problem.action_type === 'manual' ? <a class="is-primary is-manual" href={problemHref(problem.code)}>فتح المراجعة</a> : <form method="post" action="/api/dashboard/content-audit/batches/start">
+					{problem.action_type === 'manual' ? <a class="is-primary is-manual" href={problemHref(problem.code)}>فتح المراجعة</a> : <form method="post" action="/api/dashboard/content-audit/batches/start" data-auto-repair-form={problem.action_type === 'auto_repair' ? 'true' : undefined}>
 						<input type="hidden" name="country_code" value={countryCode}/>
 						<input type="hidden" name="content_type" value={contentType}/>
 						<input type="hidden" name="level" value="weak"/>
@@ -80,7 +80,7 @@ const problemHref = (code: string) => `/dashboard/content-audit/readiness?proble
 			{!problems.length && <p class="repair-empty">لا توجد إشارات إصلاح في النطاق الحالي.</p>}
 		</div>
 
-		<footer><button type="button" data-close-repair-center>إغلاق</button><a href="/dashboard/content-audit/ai-operations">فتح طابور المعاينات</a></footer>
+		<footer><button type="button" data-close-repair-center>إغلاق</button><a href="/dashboard/content-audit/ai-operations">فتح سجل العمليات</a></footer>
 	</div>
 </dialog>
 
@@ -89,6 +89,9 @@ const problemHref = (code: string) => `/dashboard/content-audit/readiness?proble
 	document.querySelectorAll<HTMLButtonElement>('[data-open-repair-center]').forEach((button) => button.addEventListener('click', () => repairDialog?.showModal()));
 	document.querySelectorAll<HTMLButtonElement>('[data-close-repair-center]').forEach((button) => button.addEventListener('click', () => repairDialog?.close()));
 	repairDialog?.addEventListener('click', (event) => { if (event.target === repairDialog) repairDialog.close(); });
+	document.querySelectorAll<HTMLFormElement>('[data-auto-repair-form="true"]').forEach((form) => form.addEventListener('submit', (event) => {
+		if (!window.confirm('سيتم توليد وصف تعريفي من نص الصفحة، وتطبيقه تلقائيًا ثم إعادة فحص الجاهزية. هل تريد المتابعة؟')) event.preventDefault();
+	}));
 </script>
 
 <style>
@@ -103,4 +106,3 @@ const problemHref = (code: string) => `/dashboard/content-audit/readiness?proble
 	@media(max-width:900px){.repair-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.repair-problem-list article{grid-template-columns:4rem minmax(0,1fr)}.problem-action{grid-column:1/-1;justify-content:flex-end}}
 	@media(max-width:620px){.repair-overview>header{align-items:stretch;flex-direction:column}.repair-kpis{grid-template-columns:1fr}.recommended-problem{align-items:stretch;flex-direction:column}.repair-dialog{width:calc(100% - .6rem)}.repair-problem-list article{grid-template-columns:1fr}.problem-action{grid-column:auto;display:grid;grid-template-columns:1fr 1fr}.problem-action form,.problem-action button{width:100%}}
 </style>
-
