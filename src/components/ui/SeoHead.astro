@@ -11,6 +11,16 @@ interface Props {
 	jsonLd?: Record<string, unknown> | Record<string, unknown>[];
 	siteName?: string;
 	hreflangSafe?: boolean;
+	robots?: string;
+	ogTitle?: string;
+	ogDescription?: string;
+	ogImage?: string;
+	ogType?: 'website' | 'article';
+	twitterTitle?: string;
+	twitterDescription?: string;
+	twitterImage?: string;
+	twitterSite?: string;
+	qualityIndexable?: boolean;
 }
 
 interface PublicQualityStatus {
@@ -32,14 +42,24 @@ const {
 	jsonLd,
 	siteName = 'موقع الإيمان التعليمي',
 	hreflangSafe = false,
+	robots,
+	ogTitle,
+	ogDescription,
+	ogImage,
+	ogType = 'website',
+	twitterTitle,
+	twitterDescription,
+	twitterImage,
+	twitterSite,
+	qualityIndexable,
 } = Astro.props;
 
 // Content-detail pages are connected to the central backend Content Quality Gate here rather
 // than duplicating SEO logic in every article/post template. Only an explicit gate decision of
 // indexable=false can add noindex. A timeout or backend failure intentionally leaves indexing
 // unchanged so a transient infrastructure problem can never de-index the content inventory.
-let qualityNoindex = false;
-if (!explicitNoindex && (Astro.response.status ?? 200) < 400) {
+let qualityNoindex = qualityIndexable === false;
+if (qualityIndexable === undefined && !explicitNoindex && (Astro.response.status ?? 200) < 400) {
 	const pathname = Astro.url.pathname;
 	const articleMatch = pathname.match(/^\/([^/]+)\/lesson\/articles\/(\d+)\/?$/);
 	const postMatch = pathname.match(/^\/([^/]+)\/posts\/(\d+)\/?$/);
@@ -58,6 +78,12 @@ if (!explicitNoindex && (Astro.response.status ?? 200) < 400) {
 	}
 }
 const effectiveNoindex = explicitNoindex || qualityNoindex;
+
+const effectiveRobots = (() => {
+	if (!effectiveNoindex) return robots?.trim();
+	const directives = (robots || 'index, follow').split(',').map((item) => item.trim()).filter(Boolean).filter((item) => !['index', 'noindex'].includes(item.toLowerCase()));
+	return ['noindex', ...directives].join(', ');
+})();
 
 const fullTitle = title.includes(siteName) ? title : `${title} | ${siteName}`;
 
@@ -113,20 +139,21 @@ const xDefaultHref = currentCountryCode && hreflangSafe
 {/* follow (not nofollow): these are search/filter permutations of real content — Google
    should still crawl the links to the actual articles/posts within, just not index this
    particular query-string URL as its own result. */}
-{effectiveNoindex && <meta name="robots" content="noindex, follow" />}
+{effectiveRobots && <meta name="robots" content={effectiveRobots} />}
 
 <meta property="og:site_name" content={siteName} />
-<meta property="og:type" content="website" />
-<meta property="og:title" content={fullTitle} />
-<meta property="og:description" content={description} />
+<meta property="og:type" content={ogType} />
+<meta property="og:title" content={ogTitle || fullTitle} />
+<meta property="og:description" content={ogDescription || description} />
 <meta property="og:url" content={canonicalUrl} />
 <meta property="og:locale" content="ar_AR" />
-{image && <meta property="og:image" content={image} />}
+{(ogImage || image) && <meta property="og:image" content={ogImage || image} />}
 
-<meta name="twitter:card" content={image ? 'summary_large_image' : 'summary'} />
-<meta name="twitter:title" content={fullTitle} />
-<meta name="twitter:description" content={description} />
-{image && <meta name="twitter:image" content={image} />}
+<meta name="twitter:card" content={(twitterImage || ogImage || image) ? 'summary_large_image' : 'summary'} />
+{twitterSite && <meta name="twitter:site" content={twitterSite.startsWith('@') ? twitterSite : `@${twitterSite}`} />}
+<meta name="twitter:title" content={twitterTitle || ogTitle || fullTitle} />
+<meta name="twitter:description" content={twitterDescription || ogDescription || description} />
+{(twitterImage || ogImage || image) && <meta name="twitter:image" content={twitterImage || ogImage || image} />}
 
 {/* JSON.stringify does not escape the "<" character, and entry.headline/description carry raw
    admin-authored text (e.g. article.title) — a title containing "</script>" would close this

@@ -1,0 +1,154 @@
+---
+import type { SEOMetadata } from '../../lib/iman-seo';
+
+interface Props {
+	seo?: Partial<SEOMetadata> | null;
+	contentType: 'article' | 'post';
+	contentId?: number;
+	legacyDescription?: string;
+	legacyKeywords?: string;
+	imageAlt?: string;
+	includeImageAlt?: boolean;
+}
+
+const {
+	seo,
+	contentType,
+	contentId,
+	legacyDescription = '',
+	legacyKeywords = '',
+	imageAlt = '',
+	includeImageAlt = false,
+} = Astro.props;
+const focusKeyword = seo?.focus_keyword || legacyKeywords.split(/[،,]/)[0]?.trim() || '';
+const additionalKeywords = seo?.additional_keywords || legacyKeywords;
+const schemaJSON = typeof seo?.schema_json === 'string' ? seo.schema_json : seo?.schema_json ? JSON.stringify(seo.schema_json, null, 2) : '';
+const score = Number(seo?.score || 0);
+const defaultSchemaType = contentType === 'post' ? 'BlogPosting' : 'Article';
+---
+
+<div class="iman-seo" data-iman-seo data-content-type={contentType} data-content-id={contentId || ''}>
+	<div class="iman-seo-summary">
+		<div class:list={['iman-seo-score', score >= 80 ? 'is-good' : score >= 50 ? 'is-mid' : 'is-low']} data-seo-score>
+			<strong>{score}</strong><span>/ 100</span>
+		</div>
+		<div><strong>ImanSEO</strong><span>تحليل عربي وبيانات بحث وشبكات اجتماعية وSchema من محرر واحد.</span></div>
+		<button type="button" data-seo-analyze>تحليل الآن</button>
+	</div>
+
+	<div class="iman-seo-preview" aria-label="معاينة نتيجة البحث">
+		<span>imanjo.com › {contentType === 'article' ? 'lesson › articles' : 'posts'}{contentId ? ` › ${contentId}` : ''}</span>
+		<strong data-preview-title>عنوان الصفحة سيظهر هنا</strong>
+		<p data-preview-description>سيظهر الوصف التعريفي هنا بعد كتابته.</p>
+	</div>
+
+	<div class="iman-seo-grid">
+		<label><span>الوصف الأساسي للمحتوى</span><textarea id="meta_description" name="meta_description" maxlength="500" rows="3" placeholder="وصف موجز يظهر عند عدم تخصيص وصف SEO">{legacyDescription}</textarea><small data-legacy-description-count>0 / 160</small></label>
+		<label><span>الكلمات الأساسية</span><input id="keywords" name="keywords" value={legacyKeywords} placeholder="تعليم، امتحانات، شرح" /><small>افصل بينها بفاصلة.</small></label>
+		{includeImageAlt && <label><span>النص البديل للصورة</span><input id="alt" name="alt" maxlength="255" value={imageAlt} placeholder="وصف دقيق للصورة" /><small>ضروري لإتاحة الصورة وفهمها في البحث.</small></label>}
+		<label><span>عنوان SEO المخصص</span><input name="seo_title" value={seo?.seo_title || ''} maxlength="500" placeholder="يُستخدم عنوان المحتوى تلقائيًا عند تركه فارغًا" /><small data-seo-title-count>0 / 65</small></label>
+		<label><span>وصف SEO المخصص</span><textarea name="seo_meta_description" maxlength="500" rows="3" placeholder="يُستخدم الوصف الأساسي تلقائيًا عند تركه فارغًا">{seo?.meta_description || ''}</textarea><small data-seo-description-count>0 / 165</small></label>
+		<label><span>العبارة المفتاحية الرئيسية</span><input name="seo_focus_keyword" value={focusKeyword} maxlength="255" placeholder="مثال: التعلم النشط" /><small>يحلل النظام وجودها وكثافتها دون تشجيع الحشو.</small></label>
+		<label><span>عبارات إضافية</span><input name="seo_additional_keywords" value={additionalKeywords} placeholder="عبارات مرتبطة مفصولة بفاصلة" /></label>
+		<label class="is-wide"><span>الرابط الأساسي Canonical</span><input name="seo_canonical_url" type="url" dir="ltr" value={seo?.canonical_url || ''} placeholder="يُنشأ تلقائيًا من رابط الصفحة" /></label>
+	</div>
+
+	<div class="iman-seo-analysis" data-seo-analysis hidden>
+		<header><strong>نتيجة التحليل</strong><span data-analysis-summary></span></header>
+		<ul data-analysis-checks></ul>
+	</div>
+
+	<details open>
+		<summary>الفهرسة وRobots</summary>
+		<div class="iman-seo-options">
+			<label><input type="checkbox" name="seo_robots_index" value="true" checked={seo?.robots_index ?? true} /><span><strong>السماح بالفهرسة</strong><small>إيقافه يضيف noindex ويزيل الصفحة من الخرائط التالية.</small></span></label>
+			<label><input type="checkbox" name="seo_robots_follow" value="true" checked={seo?.robots_follow ?? true} /><span><strong>السماح بتتبع الروابط</strong><small>اتركه مفعّلًا في معظم الصفحات.</small></span></label>
+			<label><input type="checkbox" name="seo_robots_noarchive" value="true" checked={seo?.robots_noarchive ?? false} /><span><strong>منع النسخة المؤرشفة</strong></span></label>
+			<label><input type="checkbox" name="seo_robots_nosnippet" value="true" checked={seo?.robots_nosnippet ?? false} /><span><strong>منع المقتطف</strong></span></label>
+			<label><span>حد المقتطف</span><input name="seo_max_snippet" type="number" min="-1" value={seo?.max_snippet ?? -1} /></label>
+			<label><span>معاينة الصور</span><select name="seo_max_image_preview"><option value="large" selected={(seo?.max_image_preview || 'large') === 'large'}>كبيرة</option><option value="standard" selected={seo?.max_image_preview === 'standard'}>قياسية</option><option value="none" selected={seo?.max_image_preview === 'none'}>بدون</option></select></label>
+			<label><span>حد معاينة الفيديو</span><input name="seo_max_video_preview" type="number" min="-1" value={seo?.max_video_preview ?? -1} /></label>
+		</div>
+	</details>
+
+	<details>
+		<summary>Facebook وX / Twitter</summary>
+		<div class="iman-seo-grid">
+			<label><span>عنوان Open Graph</span><input name="seo_og_title" value={seo?.og_title || ''} /></label>
+			<label><span>وصف Open Graph</span><textarea name="seo_og_description" rows="2">{seo?.og_description || ''}</textarea></label>
+			<label class="is-wide"><span>صورة Open Graph</span><input name="seo_og_image" type="url" dir="ltr" value={seo?.og_image || ''} placeholder="https://..." /></label>
+			<label><span>عنوان X / Twitter</span><input name="seo_twitter_title" value={seo?.twitter_title || ''} /></label>
+			<label><span>وصف X / Twitter</span><textarea name="seo_twitter_description" rows="2">{seo?.twitter_description || ''}</textarea></label>
+			<label class="is-wide"><span>صورة X / Twitter</span><input name="seo_twitter_image" type="url" dir="ltr" value={seo?.twitter_image || ''} placeholder="https://..." /></label>
+		</div>
+	</details>
+
+	<details>
+		<summary>Schema والخيارات المتقدمة</summary>
+		<div class="iman-seo-grid">
+			<label><span>نوع Schema</span><select name="seo_schema_type">{['Article', 'NewsArticle', 'BlogPosting', 'HowTo', 'FAQPage', 'WebPage', 'Course', 'LearningResource', 'VideoObject'].map((type) => <option value={type} selected={(seo?.schema_type || defaultSchemaType) === type}>{type}</option>)}</select></label>
+			<label class="iman-seo-check"><input type="checkbox" name="seo_cornerstone" value="true" checked={seo?.cornerstone ?? false} /><span><strong>محتوى أساسي Cornerstone</strong><small>يعطيه أولوية عند اقتراح الروابط الداخلية.</small></span></label>
+			<label class="is-wide"><span>JSON-LD مخصص (اختياري)</span><textarea name="seo_schema_json" rows="7" dir="ltr" spellcheck="false" placeholder={'{"@context":"https://schema.org","@type":"FAQPage"}'}>{schemaJSON}</textarea><small>يُقبل كائن JSON صالح فقط ويُحقن بأمان في الصفحة.</small></label>
+			<label class="is-wide"><span>ملاحظة النسخة</span><input name="seo_change_note" maxlength="500" placeholder="ما الذي تغير في إعدادات SEO؟" /></label>
+		</div>
+	</details>
+
+	{contentId && <div class="iman-seo-tools"><button type="button" data-seo-links>اقتراح روابط داخلية</button><a href={`/dashboard/seo/content/${contentType}/${contentId}`}>السجل والنسخ السابقة</a></div>}
+	<div class="iman-seo-links" data-seo-links-result hidden></div>
+</div>
+
+<script>
+	const root = document.querySelector<HTMLElement>('[data-iman-seo]');
+	if (root) {
+		const field = (name: string) => root.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(`[name="${name}"]`);
+		const titleSource = document.getElementById('title') as HTMLInputElement | null;
+		const legacyDescription = document.getElementById('meta_description') as HTMLTextAreaElement | null;
+		const seoTitle = field('seo_title') as HTMLInputElement | null;
+		const seoDescription = field('seo_meta_description') as HTMLTextAreaElement | null;
+		const previewTitle = root.querySelector<HTMLElement>('[data-preview-title]');
+		const previewDescription = root.querySelector<HTMLElement>('[data-preview-description]');
+		const updatePreview = () => {
+			if (previewTitle) previewTitle.textContent = seoTitle?.value.trim() || titleSource?.value.trim() || 'عنوان الصفحة سيظهر هنا';
+			if (previewDescription) previewDescription.textContent = seoDescription?.value.trim() || legacyDescription?.value.trim() || 'سيظهر الوصف التعريفي هنا بعد كتابته.';
+			const titleCount = root.querySelector<HTMLElement>('[data-seo-title-count]');
+			const descriptionCount = root.querySelector<HTMLElement>('[data-seo-description-count]');
+			const legacyCount = root.querySelector<HTMLElement>('[data-legacy-description-count]');
+			if (titleCount) titleCount.textContent = `${(seoTitle?.value || titleSource?.value || '').length} / 65`;
+			if (descriptionCount) descriptionCount.textContent = `${(seoDescription?.value || legacyDescription?.value || '').length} / 165`;
+			if (legacyCount) legacyCount.textContent = `${legacyDescription?.value.length || 0} / 160`;
+		};
+		[titleSource, legacyDescription, seoTitle, seoDescription].forEach((input) => input?.addEventListener('input', updatePreview));
+		updatePreview();
+
+		root.querySelector<HTMLButtonElement>('[data-seo-analyze]')?.addEventListener('click', async (event) => {
+			const button = event.currentTarget as HTMLButtonElement;
+			button.disabled = true; button.textContent = 'جارِ التحليل...';
+			const content = (document.querySelector('#quill-editor-container .ql-editor, #post-editor-container .ql-editor') as HTMLElement | null)?.innerHTML || (document.getElementById('content') as HTMLTextAreaElement | null)?.value || '';
+			try {
+				const response = await fetch('/api/dashboard/seo/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: seoTitle?.value || titleSource?.value || '', content, meta_description: seoDescription?.value || legacyDescription?.value || '', focus_keyword: field('seo_focus_keyword')?.value || '', canonical_url: field('seo_canonical_url')?.value || '', image_url: field('seo_og_image')?.value || '', schema_type: field('seo_schema_type')?.value || (root.dataset.contentType === 'post' ? 'BlogPosting' : 'Article'), schema_json: field('seo_schema_json')?.value || '' }) });
+				const json = await response.json(); if (!response.ok || !json?.success) throw new Error(json?.message || 'تعذّر التحليل');
+				const result = json.data; const scoreBox = root.querySelector<HTMLElement>('[data-seo-score]');
+				if (scoreBox) { scoreBox.className = `iman-seo-score ${result.score >= 80 ? 'is-good' : result.score >= 50 ? 'is-mid' : 'is-low'}`; const strong = scoreBox.querySelector('strong'); if (strong) strong.textContent = String(result.score); }
+				const panel = root.querySelector<HTMLElement>('[data-seo-analysis]'); const summary = root.querySelector<HTMLElement>('[data-analysis-summary]'); const list = root.querySelector<HTMLUListElement>('[data-analysis-checks]');
+				if (summary) summary.textContent = `${result.word_count} كلمة · كثافة ${result.keyword_density}% · ${result.internal_link_count} روابط داخلية`;
+				if (list) { list.replaceChildren(...result.checks.map((check: any) => { const li = document.createElement('li'); li.className = `is-${check.status}`; const icon = document.createElement('i'); icon.textContent = check.status === 'good' ? '✓' : check.status === 'error' ? '!' : '•'; const copy = document.createElement('span'); const strong = document.createElement('strong'); strong.textContent = check.message; copy.append(strong); if (check.recommendation) { const small = document.createElement('small'); small.textContent = check.recommendation; copy.append(small); } li.append(icon, copy); return li; })); }
+				if (panel) panel.hidden = false;
+			} catch (error) { window.alert(error instanceof Error ? error.message : 'تعذّر التحليل'); }
+			finally { button.disabled = false; button.textContent = 'تحليل الآن'; }
+		});
+
+		root.querySelector<HTMLButtonElement>('[data-seo-links]')?.addEventListener('click', async (event) => {
+			const button = event.currentTarget as HTMLButtonElement; const contentType = root.dataset.contentType; const contentId = root.dataset.contentId; if (!contentId) return;
+			button.disabled = true; button.textContent = 'جارِ البحث...';
+			try {
+				const response = await fetch(`/api/dashboard/seo/links/${contentType}/${contentId}`); const json = await response.json(); if (!response.ok || !json?.success) throw new Error(json?.message || 'تعذّر جلب الاقتراحات');
+				const box = root.querySelector<HTMLElement>('[data-seo-links-result]'); if (box) { box.replaceChildren(...(json.data || []).map((item: any) => { const row = document.createElement('div'); const copy = document.createElement('span'); const strong = document.createElement('strong'); strong.textContent = item.title; const small = document.createElement('small'); small.textContent = `${item.url} · توافق ${item.score}%`; copy.append(strong, small); const action = document.createElement('button'); action.type = 'button'; action.textContent = 'نسخ الرابط'; action.addEventListener('click', () => navigator.clipboard.writeText(item.url)); row.append(copy, action); return row; })); if (!(json.data || []).length) box.textContent = 'لا توجد اقتراحات قوية حاليًا.'; box.hidden = false; }
+			} catch (error) { window.alert(error instanceof Error ? error.message : 'تعذّر جلب الاقتراحات'); }
+			finally { button.disabled = false; button.textContent = 'اقتراح روابط داخلية'; }
+		});
+	}
+</script>
+
+<style>
+	.iman-seo{--is-blue:#1a4d8f;--is-green:#0f8464;--is-orange:#b56b15;display:grid;gap:.8rem;color:#18324c}.iman-seo *{box-sizing:border-box}.iman-seo-summary{display:flex;align-items:center;gap:.65rem;border:1px solid #dbe5ef;border-radius:.7rem;background:linear-gradient(110deg,#f7faff,#fff);padding:.65rem}.iman-seo-summary>div:nth-child(2){display:grid;flex:1}.iman-seo-summary>div:nth-child(2)>strong{font-size:.78rem}.iman-seo-summary>div:nth-child(2)>span{color:#718096;font-size:.59rem}.iman-seo-summary>button,.iman-seo-tools button,.iman-seo-tools a{min-height:2.2rem;border:1px solid #b9cee7;border-radius:.45rem;background:#fff;padding:.35rem .65rem;color:var(--is-blue);font-family:inherit;font-size:.62rem;font-weight:850}.iman-seo-summary>button{background:var(--is-blue);color:#fff}.iman-seo-score{display:flex;width:3.4rem;height:3.4rem;flex:none;align-items:baseline;justify-content:center;border:4px solid #d8dee7;border-radius:50%;padding-top:.65rem}.iman-seo-score strong{font-size:.85rem}.iman-seo-score span{font-size:.48rem}.iman-seo-score.is-good{border-color:#58b99c;color:var(--is-green)}.iman-seo-score.is-mid{border-color:#e7ae62;color:var(--is-orange)}.iman-seo-score.is-low{border-color:#df7a82;color:#a82f3a}.iman-seo-preview{display:grid;gap:.18rem;border:1px solid #dfe6ed;border-radius:.65rem;background:#fff;padding:.75rem;direction:rtl}.iman-seo-preview span{color:#26734f;font-size:.58rem}.iman-seo-preview strong{color:#174ea6;font-size:.85rem;font-weight:650}.iman-seo-preview p{margin:0;color:#4d5156;font-size:.62rem;line-height:1.65}.iman-seo-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.65rem}.iman-seo-grid>label,.iman-seo-options>label{display:grid;gap:.3rem}.iman-seo-grid>label>span,.iman-seo-options>label>span:first-child{font-size:.62rem;font-weight:850}.iman-seo-grid input,.iman-seo-grid textarea,.iman-seo-grid select,.iman-seo-options input,.iman-seo-options select{width:100%;min-height:2.35rem;border:1px solid #d9e2ec;border-radius:.45rem;background:#fff;padding:.48rem .6rem;color:#18324c;font-family:inherit;font-size:.67rem}.iman-seo-grid textarea{resize:vertical;line-height:1.65}.iman-seo-grid small,.iman-seo-options small{color:#8090a2;font-size:.52rem}.iman-seo-grid .is-wide{grid-column:1/-1}.iman-seo details{overflow:hidden;border:1px solid #dfe6ed;border-radius:.62rem;background:#fff}.iman-seo summary{cursor:pointer;padding:.65rem .75rem;color:#294b6d;font-size:.67rem;font-weight:900;list-style:none}.iman-seo details[open] summary{border-bottom:1px solid #e7edf3;background:#f8fafc}.iman-seo-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.55rem;padding:.7rem}.iman-seo-options>label:has(input[type=checkbox]),.iman-seo-check{display:flex!important;align-items:flex-start;gap:.45rem;border:1px solid #e4eaf0;border-radius:.45rem;padding:.5rem}.iman-seo-options input[type=checkbox],.iman-seo-check input{width:auto;min-height:0;margin-top:.15rem;accent-color:var(--is-blue)}.iman-seo-options label>span{display:grid}.iman-seo-analysis{border:1px solid #d8e5f3;border-radius:.62rem;background:#f8fbff;padding:.65rem}.iman-seo-analysis header{display:flex;justify-content:space-between}.iman-seo-analysis header strong{font-size:.68rem}.iman-seo-analysis header span{color:#708399;font-size:.55rem}.iman-seo-analysis ul{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.35rem;margin:.55rem 0 0;padding:0;list-style:none}.iman-seo-analysis li{display:flex;gap:.4rem;border:1px solid #e2e9f0;border-radius:.42rem;background:#fff;padding:.4rem}.iman-seo-analysis li i{display:grid;width:1.2rem;height:1.2rem;flex:none;place-items:center;border-radius:50%;background:#eef1f5;color:#6b7786;font-size:.58rem;font-style:normal;font-weight:900}.iman-seo-analysis li.is-good i{background:#dff3eb;color:#08765a}.iman-seo-analysis li.is-error i{background:#fee7e9;color:#ad3440}.iman-seo-analysis li span{display:grid}.iman-seo-analysis li strong{font-size:.56rem}.iman-seo-analysis li small{color:#7b8897;font-size:.5rem}.iman-seo-tools{display:flex;gap:.45rem}.iman-seo-links{display:grid;gap:.35rem;border:1px solid #dfe6ed;border-radius:.55rem;padding:.55rem}.iman-seo-links>div{display:flex;justify-content:space-between;border-bottom:1px solid #edf1f5;padding:.35rem}.iman-seo-links span{display:grid}.iman-seo-links strong{font-size:.58rem}.iman-seo-links small{color:#718096;font-size:.5rem}.iman-seo-links button{border:0;background:transparent;color:var(--is-blue);font-family:inherit;font-size:.52rem;font-weight:850}:global(.dark) .iman-seo{color:#e9f0f8}:global(.dark) .iman-seo-summary,:global(.dark) .iman-seo-preview,:global(.dark) .iman-seo details,:global(.dark) .iman-seo-grid input,:global(.dark) .iman-seo-grid textarea,:global(.dark) .iman-seo-grid select,:global(.dark) .iman-seo-options input,:global(.dark) .iman-seo-options select{border-color:#30465e;background:#102744;color:#e8eef7}:global(.dark) .iman-seo-preview strong{color:#8ab4f8}:global(.dark) .iman-seo-preview p{color:#bcc7d5}@media(max-width:720px){.iman-seo-grid,.iman-seo-analysis ul{grid-template-columns:1fr}.iman-seo-grid .is-wide{grid-column:auto}.iman-seo-options{grid-template-columns:1fr}.iman-seo-summary{align-items:flex-start;flex-wrap:wrap}.iman-seo-summary>button{margin-inline-start:auto}}
+</style>

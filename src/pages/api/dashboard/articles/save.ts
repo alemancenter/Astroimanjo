@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { apiRawFetch } from '../../../../lib/api';
 import { generateMetaDescription, generateKeywords } from '../../../../lib/seo-autofill';
+import { seoPayloadFromForm } from '../../../../lib/iman-seo';
 
 export const prerender = false;
 
@@ -79,14 +80,30 @@ export const POST: APIRoute = async ({ request, cookies, locals, redirect, cache
 		}).catch(() => null);
 	}
 
+	let seoWarning = '';
+	if (articleId) {
+		const seoRes = await apiRawFetch(`/dashboard/seo/metadata/article/${articleId}`, {
+			method: 'PUT',
+			countryId: locals.countryId,
+			cookieHeader: `token=${token}`,
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(seoPayloadFromForm(form)),
+		});
+		if (!seoRes.ok) {
+			const seoJson: any = await seoRes.json().catch(() => null);
+			seoWarning = seoJson?.message || 'حُفظ المقال، لكن تعذّر حفظ إعدادات SEO';
+		}
+	}
+
 	// Article/file counts roll up into the parent class and subject pages too.
 	await cache.invalidate({ tags: ['articles', 'classes', 'subjects'] });
 
-	if (isAjax) return jsonResponse({ success: true, id: json?.data?.id }, 200);
+	if (isAjax) return jsonResponse({ success: true, id: json?.data?.id, seo_warning: seoWarning || undefined }, 200);
 
 	// New articles land on their own edit page (not the list) — that's where file
 	// attachments can actually be added, and there's no reason to make the admin
 	// navigate there manually right after creating it.
 	const newId = json?.data?.id;
-	return redirect(isEdit || !newId ? '/dashboard/articles?success=1' : `/dashboard/articles/${newId}/edit?success=1`);
+	const destination = isEdit || !newId ? '/dashboard/articles?success=1' : `/dashboard/articles/${newId}/edit?success=1`;
+	return redirect(seoWarning ? `${destination}&seo_warning=${encodeURIComponent(seoWarning)}` : destination);
 };

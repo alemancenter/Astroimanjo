@@ -1,0 +1,66 @@
+---
+import DashboardLayout from '../../../layouts/DashboardLayout.astro';
+import { requireDashboard } from '../../../lib/auth';
+import { apiFetch } from '../../../lib/api';
+import { getCountryById } from '../../../lib/countries';
+
+const guard = await requireDashboard(Astro, 'manage seo');
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+const country = getCountryById(Astro.locals.countryId);
+const token = Astro.cookies.get('token')?.value;
+const page = Math.max(1, Number(Astro.url.searchParams.get('page') || 1));
+const type = ['article', 'post'].includes(Astro.url.searchParams.get('type') || '') ? Astro.url.searchParams.get('type')! : 'all';
+const q = Astro.url.searchParams.get('q') || '';
+const auth = { countryId: Astro.locals.countryId, cookieHeader: `token=${token}` };
+const [overviewResult, contentResult, auditsResult] = await Promise.all([
+	apiFetch<any>('/dashboard/seo/overview', auth),
+	apiFetch<any[]>('/dashboard/seo/content', { ...auth, params: { page, per_page: 20, type, q } }),
+	apiFetch<any[]>('/dashboard/seo/audits', { ...auth, params: { limit: 5 } }),
+]);
+const overview = overviewResult.data || { total_content: 0, configured: 0, scores: {}, redirects: 0, unresolved_404: 0 };
+const content = contentResult.data || [];
+const audits = auditsResult.data || [];
+const nf = new Intl.NumberFormat('ar-EG');
+const scoreClass = (score: number) => score >= 80 ? 'is-good' : score >= 50 ? 'is-mid' : 'is-low';
+const typeLabel = (value: string) => value === 'article' ? 'مقال' : 'منشور';
+const editorURL = (item: any) => item.content_type === 'article' ? `/dashboard/articles/${item.content_id}/edit` : `/dashboard/posts/${item.content_id}/edit`;
+const success = Astro.url.searchParams.get('success');
+const error = Astro.url.searchParams.get('error');
+---
+
+<DashboardLayout title="ImanSEO" user={user}>
+	<div class="seo-hub">
+		{success && <div class="hub-alert is-success">تم تنفيذ العملية بنجاح.</div>}
+		{error && <div class="hub-alert is-error">{error}</div>}
+		<header class="hub-hero"><div><span>منصة SEO أصلية لموقع الإيمان</span><h1>مركز ImanSEO</h1><p>إدارة الظهور، التحليل العربي، Schema، التحويلات، الفهرسة وبيانات البحث دون أي اعتماد على WordPress.</p></div><aside><span>{country.flag}</span><strong>{country.name}</strong><small>{nf.format(overview.configured)} من {nf.format(overview.total_content)} مُعدّ</small></aside></header>
+
+		<section class="hub-metrics">
+			<article><span>المحتوى المهيأ</span><strong>{nf.format(overview.configured)}</strong><small>من {nf.format(overview.total_content)} صفحة</small></article>
+			<article class="is-green"><span>نتيجة جيدة</span><strong>{nf.format(overview.scores?.good || 0)}</strong><small>80/100 فأعلى</small></article>
+			<article class="is-orange"><span>يحتاج تحسينًا</span><strong>{nf.format((overview.scores?.needs_work || 0) + (overview.scores?.poor || 0))}</strong><small>أولوية تحريرية</small></article>
+			<article class="is-red"><span>أخطاء 404</span><strong>{nf.format(overview.unresolved_404 || 0)}</strong><small>غير معالجة</small></article>
+		</section>
+
+		<nav class="hub-tools" aria-label="أدوات ImanSEO">
+			<a href="/dashboard/seo/redirects"><strong>التحويلات و404</strong><span>{nf.format(overview.redirects || 0)} تحويل نشط أو محفوظ</span></a>
+			<a href="/dashboard/seo/search-console"><strong>Search Console</strong><span>النقرات والظهور وحالة الفهرسة</span></a>
+			<a href="/dashboard/seo/authors"><strong>المؤلفون E-E-A-T</strong><span>الخبرات والاعتمادات وPerson Schema</span></a>
+			<a href="/dashboard/sitemap"><strong>خرائط الموقع</strong><span>XML والصور والفيديو والأخبار</span></a>
+			<a href="/dashboard/content-audit"><strong>تدقيق المحتوى AI</strong><span>إعادة استخدام مركز الجودة الحالي</span></a>
+			<a href="/dashboard/settings?tab=seo"><strong>الإعدادات العامة</strong><span>القوالب وRobots وIndexNow وllms.txt</span></a>
+		</nav>
+
+		<section class="hub-workspace">
+			<main>
+				<header><div><span>المخزون</span><h2>حالة SEO للمحتوى</h2></div><form method="get"><select name="type"><option value="all" selected={type === 'all'}>الكل</option><option value="article" selected={type === 'article'}>المقالات</option><option value="post" selected={type === 'post'}>المنشورات</option></select><input name="q" value={q} placeholder="بحث بالعنوان" /><button>تصفية</button></form></header>
+				<div class="hub-table"><table><thead><tr><th>المحتوى</th><th>الحالة</th><th>العبارة الرئيسية</th><th>الدرجة</th><th></th></tr></thead><tbody>{content.map((item:any) => <tr><td><span>{typeLabel(item.content_type)} #{nf.format(item.content_id)}</span><strong>{item.title}</strong></td><td><i class:list={{'is-live':item.published}}></i>{item.published?'منشور':'مسودة'}{item.robots_index===false&&<b>noindex</b>}</td><td>{item.focus_keyword||'—'}</td><td><em class={scoreClass(item.seo_score)}>{nf.format(item.seo_score||0)}</em></td><td><a href={editorURL(item)}>تحرير</a><a href={`/dashboard/seo/content/${item.content_type}/${item.content_id}`}>التفاصيل</a></td></tr>)}</tbody></table>{!content.length&&<p class="hub-empty">لا توجد نتائج مطابقة.</p>}</div>
+				{contentResult.meta && contentResult.meta.last_page > 1 && <footer><a href={`?page=${Math.max(1,page-1)}&type=${type}&q=${encodeURIComponent(q)}`}>السابق</a><span>{nf.format(page)} / {nf.format(contentResult.meta.last_page)}</span><a href={`?page=${Math.min(contentResult.meta.last_page,page+1)}&type=${type}&q=${encodeURIComponent(q)}`}>التالي</a></footer>}
+			</main>
+			<aside class="audit-card"><header><span>تدقيق تقني</span><h2>فحص شامل</h2><p>يحلل كل صفحة منشورة بقواعد ImanSEO ويحتفظ بسجل المشكلات.</p></header><form method="post" action="/api/dashboard/seo/audits"><button>تشغيل تدقيق جديد</button></form><div>{audits.map((run:any)=><a href={`/dashboard/seo/audits/${run.id}`}><i class={`is-${run.status}`}></i><span><strong>تدقيق #{nf.format(run.id)}</strong><small>{run.status==='completed'?`${nf.format(run.errors)} أخطاء · ${nf.format(run.warnings)} تحذيرات`:run.status}</small></span></a>)}{!audits.length&&<p>لا توجد عمليات سابقة.</p>}</div></aside>
+		</section>
+	</div>
+	<style>
+		.seo-hub{--h-blue:#174b8b;--h-ink:#152c45;--h-muted:#718096;--h-line:#dce5ee;display:grid;gap:.8rem;direction:rtl}.hub-alert{border:1px solid;border-radius:.65rem;padding:.65rem;font-size:.7rem;font-weight:800}.hub-alert.is-success{border-color:#b9e2d4;background:#f0faf6;color:#08765a}.hub-alert.is-error{border-color:#edc7cc;background:#fff5f6;color:#a6333f}.hub-hero{display:flex;align-items:center;justify-content:space-between;gap:1rem;overflow:hidden;border:1px solid #cbd9e8;border-radius:1rem;background:linear-gradient(130deg,#fff 55%,#edf4fc);padding:1.1rem 1.25rem}.hub-hero>div>span,.hub-workspace main>header>div>span,.audit-card header>span{color:var(--h-blue);font-size:.64rem;font-weight:900}.hub-hero h1{margin:.15rem 0;color:var(--h-ink);font-size:1.5rem;font-weight:950}.hub-hero p{max-width:48rem;margin:0;color:var(--h-muted);font-size:.72rem;line-height:1.8}.hub-hero>aside{display:grid;min-width:10rem;justify-items:center;border:1px solid #d8e3ef;border-radius:.75rem;background:#fff;padding:.65rem}.hub-hero aside>span{font-size:1.6rem}.hub-hero aside strong{font-size:.7rem}.hub-hero aside small{color:var(--h-muted);font-size:.54rem}.hub-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.6rem}.hub-metrics article{border:1px solid var(--h-line);border-top:.2rem solid var(--h-blue);border-radius:.7rem;background:#fff;padding:.7rem}.hub-metrics article.is-green{border-top-color:#0f8464}.hub-metrics article.is-orange{border-top-color:#d58c27}.hub-metrics article.is-red{border-top-color:#c6434f}.hub-metrics span,.hub-metrics small{display:block;color:var(--h-muted);font-size:.57rem}.hub-metrics strong{display:block;margin:.15rem 0;color:var(--h-ink);font-size:1.1rem}.hub-tools{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.55rem}.hub-tools a{display:grid;border:1px solid var(--h-line);border-radius:.65rem;background:#fff;padding:.65rem;transition:.15s}.hub-tools a:hover{border-color:#8eafd4;transform:translateY(-1px)}.hub-tools strong{color:var(--h-blue);font-size:.67rem}.hub-tools span{margin-top:.1rem;color:var(--h-muted);font-size:.54rem}.hub-workspace{display:grid;grid-template-columns:minmax(0,1fr) 17rem;align-items:start;gap:.7rem}.hub-workspace>main,.audit-card{border:1px solid var(--h-line);border-radius:.75rem;background:#fff}.hub-workspace main>header{display:flex;align-items:center;justify-content:space-between;gap:.6rem;border-bottom:1px solid #e8edf3;padding:.75rem}.hub-workspace h2{margin:.1rem 0;color:var(--h-ink);font-size:.85rem}.hub-workspace main>header form{display:flex;gap:.35rem}.hub-workspace select,.hub-workspace input{min-height:2.2rem;border:1px solid #d8e2ec;border-radius:.4rem;padding:.35rem .5rem;font-family:inherit;font-size:.6rem}.hub-workspace button{border:0;border-radius:.4rem;background:var(--h-blue);padding:.35rem .65rem;color:#fff;font-family:inherit;font-size:.6rem;font-weight:850}.hub-table{overflow:auto}.hub-table table{width:100%;border-collapse:collapse}.hub-table th{background:#f8fafc;padding:.5rem;text-align:right;color:#708095;font-size:.55rem}.hub-table td{border-top:1px solid #edf1f5;padding:.55rem;color:#50657b;font-size:.58rem}.hub-table td:first-child span,.hub-table td:first-child strong{display:block}.hub-table td:first-child span{color:var(--h-blue);font-size:.5rem}.hub-table td:first-child strong{max-width:24rem;color:var(--h-ink);font-size:.61rem}.hub-table td:nth-child(2){white-space:nowrap}.hub-table td:nth-child(2)>i{display:inline-block;width:.4rem;height:.4rem;margin-left:.25rem;border-radius:50%;background:#a7b0bb}.hub-table td:nth-child(2)>i.is-live{background:#10a779}.hub-table td:nth-child(2)>b{margin-right:.25rem;border-radius:.25rem;background:#fee8ea;padding:.12rem .2rem;color:#aa3541;font-size:.46rem}.hub-table em{display:inline-grid;min-width:2rem;place-items:center;border-radius:.35rem;padding:.25rem;font-style:normal;font-weight:900}.hub-table em.is-good{background:#e4f5ef;color:#08765a}.hub-table em.is-mid{background:#fff2df;color:#a86718}.hub-table em.is-low{background:#fee9eb;color:#ad3541}.hub-table td:last-child{white-space:nowrap}.hub-table td:last-child a{margin-left:.35rem;color:var(--h-blue);font-weight:800}.hub-empty{text-align:center;color:var(--h-muted);font-size:.65rem}.hub-workspace main>footer{display:flex;justify-content:center;gap:.8rem;border-top:1px solid #edf1f5;padding:.6rem;font-size:.58rem}.hub-workspace main>footer a{color:var(--h-blue);font-weight:850}.audit-card{padding:.75rem}.audit-card header p{margin:.2rem 0 .65rem;color:var(--h-muted);font-size:.57rem;line-height:1.7}.audit-card form button{width:100%;min-height:2.4rem}.audit-card>div{display:grid;margin-top:.55rem}.audit-card>div>a{display:flex;align-items:center;gap:.4rem;border-top:1px solid #edf1f5;padding:.5rem 0}.audit-card a>i{width:.45rem;height:.45rem;border-radius:50%;background:#9aa5b1}.audit-card a>i.is-completed{background:#0f9e73}.audit-card a>i.is-running{background:#2f76c7}.audit-card a>i.is-failed{background:#c6434f}.audit-card a>span{display:grid}.audit-card a strong{font-size:.58rem}.audit-card a small,.audit-card>div>p{color:var(--h-muted);font-size:.5rem}:global(.dark) .seo-hub{--h-ink:#f0f5fa;--h-muted:#9dadbf;--h-line:#30455c}:global(.dark) .hub-hero,:global(.dark) .hub-metrics article,:global(.dark) .hub-tools a,:global(.dark) .hub-workspace>main,:global(.dark) .audit-card{border-color:#30455c;background:#102744}:global(.dark) .hub-hero{background:linear-gradient(130deg,#102744,#132d4e)}:global(.dark) .hub-hero>aside{border-color:#38516c;background:#0c2039}:global(.dark) .hub-table th{background:#132c49}:global(.dark) .hub-table td,:global(.dark) .hub-workspace main>header,:global(.dark) .audit-card>div>a{border-color:#2c4259}@media(max-width:1000px){.hub-workspace{grid-template-columns:1fr}.hub-tools{grid-template-columns:repeat(2,1fr)}}@media(max-width:700px){.hub-hero{align-items:flex-start;flex-direction:column}.hub-metrics{grid-template-columns:repeat(2,1fr)}.hub-tools{grid-template-columns:1fr}.hub-workspace main>header{align-items:stretch;flex-direction:column}.hub-workspace main>header form{flex-wrap:wrap}.hub-workspace main>header input{flex:1}}
+	</style>
+</DashboardLayout>

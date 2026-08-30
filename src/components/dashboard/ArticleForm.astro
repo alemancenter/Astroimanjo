@@ -2,13 +2,15 @@
 import 'quill/dist/quill.snow.css';
 import { SUBJECT_FILE_CATEGORIES, getSubjectFileCategory } from '../../lib/subject-categories';
 import { COUNTRIES, getCountryById } from '../../lib/countries';
+import ImanSeoPanel from './ImanSeoPanel.astro';
 
 interface Props {
 	article?: any;
 	classes: any[];
 	countryId: string;
+	seo?: any;
 }
-const { article, classes, countryId } = Astro.props;
+const { article, classes, countryId, seo } = Astro.props;
 const currentCountry = getCountryById(countryId);
 // Subject/semester options are fetched on demand client-side (see the script below) via
 // /filter/subjects/{classId} and /filter/semesters/{subjectId} — already-working, already
@@ -112,16 +114,7 @@ function formatSize(bytes: number): string {
 				<div><h2>تحسين محركات البحث</h2><p>بيانات مختصرة تساعد المقال في الظهور والوصول إلى جمهوره.</p></div>
 				<span>02</span>
 			</div>
-			<div class="article-seo-section">
-				<label for="meta_description" class={labelClass}>الوصف</label>
-				<textarea id="meta_description" name="meta_description" rows="3" class={inputClass} placeholder="وصف قصير يظهر في نتائج البحث...">{article?.meta_description ?? ''}</textarea>
-				<p class="form-hint">يفضل أن يكون الوصف بين 120 و160 حرفًا.</p>
-			</div>
-			<div class="article-keywords-section">
-				<label for="keywords" class={labelClass}>الكلمات المفتاحية</label>
-				<input id="keywords" type="text" name="keywords" value={keywordsValue} class={inputClass} placeholder="تعليم، قواعد، لغة عربية" />
-				<p class="form-hint">افصل بين الكلمات باستخدام الفاصلة العربية.</p>
-			</div>
+			<ImanSeoPanel seo={seo} contentType="article" contentId={article?.id} legacyDescription={article?.meta_description ?? ''} legacyKeywords={keywordsValue} />
 		</section>
 	</div>
 
@@ -1028,7 +1021,8 @@ function formatSize(bytes: number): string {
 						if (submitLabel) submitLabel.textContent = `جارِ رفع الملفات (${i + 1}/${stagedFiles.length})...`;
 					}
 
-					window.location.href = `/dashboard/articles/${json.id}/edit?success=1`;
+					const seoWarning = json.seo_warning ? `&seo_warning=${encodeURIComponent(json.seo_warning)}` : '';
+					window.location.href = `/dashboard/articles/${json.id}/edit?success=1${seoWarning}`;
 				} catch (err) {
 					if (submitBtn) submitBtn.disabled = false;
 					if (submitLabel) submitLabel.textContent = 'حفظ';

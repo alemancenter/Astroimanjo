@@ -31,6 +31,7 @@ export const DASHBOARD_NAV_ITEMS: DashboardNavItem[] = [
 	{ label: 'الإشعارات', href: '/dashboard/notifications', group: 'التواصل', icon: 'bell', permission: null },
 	{ label: 'الرسائل الداخلية', href: '/dashboard/messages', group: 'التواصل', icon: 'comments', permission: null },
 	{ label: 'الإعدادات', href: '/dashboard/settings', group: 'النظام والذكاء', icon: 'settings', permission: 'manage settings' },
+	{ label: 'ImanSEO', href: '/dashboard/seo', group: 'النظام والذكاء', icon: 'seo', permission: 'manage seo' },
 	{ label: 'خريطة الموقع', href: '/dashboard/sitemap', group: 'النظام والذكاء', icon: 'sitemap', permission: 'manage sitemap' },
 	{ label: 'الأمان', href: '/dashboard/security', group: 'النظام والذكاء', icon: 'security', permission: 'manage security' },
 	{ label: 'الشاتبوت', href: '/dashboard/chatbot', group: 'النظام والذكاء', icon: 'bot', permission: 'manage settings' },

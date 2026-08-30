@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { apiRawFetch } from '../../../../lib/api';
 import { generateMetaDescription, generateKeywords } from '../../../../lib/seo-autofill';
+import { seoPayloadFromForm } from '../../../../lib/iman-seo';
 
 export const prerender = false;
 
@@ -69,6 +70,21 @@ export const POST: APIRoute = async ({ request, cookies, locals, redirect, cache
 		}).catch(() => null);
 	}
 
+	let seoWarning = '';
+	if (postId) {
+		const seoRes = await apiRawFetch(`/dashboard/seo/metadata/post/${postId}`, {
+			method: 'PUT',
+			countryId: locals.countryId,
+			cookieHeader: `token=${token}`,
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(seoPayloadFromForm(incoming)),
+		});
+		if (!seoRes.ok) {
+			const seoJson: any = await seoRes.json().catch(() => null);
+			seoWarning = seoJson?.message || 'حُفظ المنشور، لكن تعذّر حفظ إعدادات SEO';
+		}
+	}
+
 	await cache.invalidate({ tags: ['posts'] });
-	return redirect('/dashboard/posts?success=1');
+	return redirect(seoWarning ? `/dashboard/posts?success=1&seo_warning=${encodeURIComponent(seoWarning)}` : '/dashboard/posts?success=1');
 };

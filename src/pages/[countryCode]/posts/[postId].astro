@@ -16,16 +16,20 @@ const params = Astro.url.searchParams;
 const formError = params.get('error');
 const commentSent = params.get('comment_sent') === '1';
 
-const [result, settingsResult, adStatusResult] = await Promise.all([
+const [result, settingsResult, adStatusResult, seoResult] = await Promise.all([
 	apiFetch<any>(`/posts/${postId}`, { countryId }),
 	apiFetch<Record<string, string>>('/front/settings', { countryId }),
-	apiFetch<{ eligible: boolean; ads_eligible?: boolean; adsense_risk: string }>(`/posts/${postId}/ad-status`, { countryId, params: { country: countryCode } }),
+	apiFetch<{ eligible: boolean; ads_eligible?: boolean; indexable: boolean; adsense_risk: string }>(`/posts/${postId}/ad-status`, { countryId, params: { country: countryCode } }),
+	apiFetch<any>(`/seo/post/${postId}`, { countryId }),
 ]);
 const post = result.data;
+const seo = seoResult.ok ? seoResult.data : null;
 if (!result.ok || !post) applyNotFoundStatus(Astro, result);
 
 const settings = settingsResult.data ?? {};
 const imageSrc = assetUrl(post?.image, 1200);
+const seoOGImage = assetUrl(seo?.og_image?.trim(), 1200) || imageSrc || undefined;
+const seoTwitterImage = assetUrl(seo?.twitter_image?.trim(), 1200) || seoOGImage;
 const keywords: any[] = Array.isArray(post?.keywords_rel) ? post.keywords_rel.filter((keyword: any) => keyword?.keyword) : [];
 const files: any[] = Array.isArray(post?.files) ? post.files : [];
 const currentUrl = Astro.url.pathname;
@@ -38,7 +42,7 @@ const stripHtml = (html = '') => html
 	.replace(/\s+/g, ' ')
 	.trim();
 const plainContent = stripHtml(post?.content || '');
-const description = post?.meta_description?.trim() || (plainContent ? `${plainContent.slice(0, 170)}${plainContent.length > 170 ? '…' : ''}` : undefined);
+const description = seo?.description?.trim() || post?.meta_description?.trim() || (plainContent ? `${plainContent.slice(0, 170)}${plainContent.length > 170 ? '…' : ''}` : undefined);
 const wordCount = plainContent ? plainContent.split(/\s+/).filter(Boolean).length : 0;
 const readingMinutes = Math.max(1, Math.ceil(wordCount / 200));
 
@@ -55,13 +59,19 @@ const gateAdsEligible = adStatusResult.data?.ads_eligible ?? adStatusResult.data
 const adsEligible = Boolean(post && adStatusResult.ok && gateAdsEligible && adsenseClient);
 
 const siteOrigin = Astro.site ? Astro.site.origin : Astro.url.origin;
-const canonicalUrl = new URL(Astro.url.pathname, siteOrigin).toString();
+const canonicalUrl = seo?.canonical_url?.trim() || new URL(Astro.url.pathname, siteOrigin).toString();
 const siteName = settings.site_name?.trim() || 'موقع الإيمان التعليمي';
+const authorResult = post?.author_id ? await apiFetch<any>(`/seo/authors/${post.author_id}`, { countryId }) : null;
+const authorProfile = authorResult?.ok ? authorResult.data : null;
+const authorSchema = authorProfile ? { '@type':'Person', name:authorProfile.public_name, description:authorProfile.biography||undefined, url:authorProfile.profile_url||undefined, image:authorProfile.image_url||undefined, jobTitle:authorProfile.headline||undefined, worksFor:authorProfile.employer?{'@type':'Organization',name:authorProfile.employer}:undefined, alumniOf:authorProfile.education?{'@type':'EducationalOrganization',name:authorProfile.education}:undefined, hasCredential:authorProfile.credentials?{'@type':'EducationalOccupationalCredential',name:authorProfile.credentials}:undefined, award:authorProfile.awards||undefined, knowsAbout:(()=>{try{return JSON.parse(authorProfile.knows_about_json||'[]')}catch{return undefined}})(), sameAs:(()=>{try{return Object.values(JSON.parse(authorProfile.social_links_json||'{}'))}catch{return undefined}})() } : post?.author?.name ? { '@type': 'Person', name: post.author.name } : { '@type': 'Organization', name: siteName };
+const automaticSchemaType = ['Article', 'NewsArticle', 'BlogPosting'].includes(seo?.schema_type)
+	? seo.schema_type
+	: 'Article';
 const jsonLd = post ? [
 	{
-		'@context': 'https://schema.org', '@type': 'Article', headline: post.title, description,
+		'@context': 'https://schema.org', '@type': automaticSchemaType, headline: post.title, description,
 		image: imageSrc || undefined, datePublished: publishedAt, dateModified: updatedAt || publishedAt,
-		author: post.author?.name ? { '@type': 'Person', name: post.author.name } : { '@type': 'Organization', name: siteName },
+		author: authorSchema,
 		publisher: { '@type': 'Organization', name: siteName }, mainEntityOfPage: canonicalUrl,
 		wordCount, articleSection: post.category?.name || undefined, inLanguage: 'ar',
 	},
@@ -74,9 +84,10 @@ const jsonLd = post ? [
 		],
 	},
 ] : undefined;
+const effectiveJsonLd = seo?.schema_json && jsonLd ? [seo.schema_json, jsonLd[1]] : jsonLd;
 ---
 
-<Layout title={post?.title || 'المنشور'} description={description} canonical={canonicalUrl} image={imageSrc || undefined} jsonLd={jsonLd} enableAds={adsEligible}>
+<Layout title={seo?.title || post?.title || 'المنشور'} description={description} canonical={canonicalUrl} image={seoOGImage} jsonLd={effectiveJsonLd} settings={settings} robots={seo?.robots} ogTitle={seo?.og_title} ogDescription={seo?.og_description} ogImage={seoOGImage} ogType="article" twitterTitle={seo?.twitter_title} twitterDescription={seo?.twitter_description} twitterImage={seoTwitterImage} qualityIndexable={adStatusResult.ok ? adStatusResult.data?.indexable : undefined} enableAds={adsEligible}>
 	<div id="reading-progress" class="fixed inset-x-0 top-0 z-[70] h-0.5 origin-right scale-x-0 bg-gradient-to-l from-royal-600 via-emerald-brand-600 to-sunset-400" aria-hidden="true"></div>
 
 	{!result.ok || !post ? (

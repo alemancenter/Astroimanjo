@@ -7,6 +7,7 @@ import AdSensePlacement from '../../../../components/AdSensePlacement.astro';
 import Breadcrumbs from '../../../../components/ui/Breadcrumbs.astro';
 import ErrorState from '../../../../components/ui/ErrorState.astro';
 import { apiFetch, applyNotFoundStatus } from '../../../../lib/api';
+import { assetUrl } from '../../../../lib/assets';
 
 const { id } = Astro.params;
 const countryCode = Astro.locals.countryCode!;
@@ -16,12 +17,14 @@ const params = Astro.url.searchParams;
 const formError = params.get('error');
 const commentSent = params.get('comment_sent') === '1';
 
-const [articleResult, settingsResult, adStatusResult] = await Promise.all([
+const [articleResult, settingsResult, adStatusResult, seoResult] = await Promise.all([
 	apiFetch<any>(`/articles/${id}`, { countryId }),
 	apiFetch<Record<string, string>>('/front/settings', { countryId }),
-	apiFetch<{ eligible: boolean; ads_eligible?: boolean; adsense_risk: string }>(`/articles/${id}/ad-status`, { countryId, params: { country: countryCode } }),
+	apiFetch<{ eligible: boolean; ads_eligible?: boolean; indexable: boolean; adsense_risk: string }>(`/articles/${id}/ad-status`, { countryId, params: { country: countryCode } }),
+	apiFetch<any>(`/seo/article/${id}`, { countryId }),
 ]);
 const article = articleResult.data;
+const seo = seoResult.ok ? seoResult.data : null;
 if (!articleResult.ok || !article) applyNotFoundStatus(Astro, articleResult);
 
 const classResult = article?.grade_level || article?.subject?.grade_level
@@ -40,7 +43,7 @@ const keywords: any[] = Array.from(
 
 const stripHtml = (html = '') => html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
 const plainContent = stripHtml(article?.content || '');
-const description = article?.meta_description?.trim() || (plainContent ? `${plainContent.slice(0, 170)}${plainContent.length > 170 ? '…' : ''}` : undefined);
+const description = seo?.description?.trim() || article?.meta_description?.trim() || (plainContent ? `${plainContent.slice(0, 170)}${plainContent.length > 170 ? '…' : ''}` : undefined);
 const wordCount = plainContent ? plainContent.split(/\s+/).filter(Boolean).length : 0;
 const readingMinutes = Math.max(1, Math.ceil(wordCount / 200));
 const settings = settingsResult.data ?? {};
@@ -58,18 +61,35 @@ const viewCount = Number(article?.visit_count || 0);
 
 const currentUrl = Astro.url.pathname + Astro.url.search;
 const siteOrigin = Astro.site ? Astro.site.origin : Astro.url.origin;
-const canonicalUrl = new URL(Astro.url.pathname, siteOrigin).toString();
+const canonicalUrl = seo?.canonical_url?.trim() || new URL(Astro.url.pathname, siteOrigin).toString();
 // Matches Layout.astro's own fallback so JSON-LD stays in sync with the visible title/branding
 // even when settings hasn't loaded a custom name.
 const siteName = settings.site_name?.trim() || 'موقع الإيمان التعليمي';
 
 // Articles have no image field on the backend (unlike posts, which have Image/Alt — see
-// article.go vs post.go) — fall back to the first embedded content image, same as what
-// actually renders when the article body displays. Only used if it's already an absolute
-// URL (Google's structured-data guidelines expect image to be fully qualified); a relative
-// path in article HTML would need assetUrl() resolution the CMS doesn't guarantee here.
+// article.go vs post.go) — fall back to the first absolute embedded content image. SEO
+// images may be storage-relative, so normalize them through the same public asset proxy
+// used by the rest of the site before exposing them to crawlers and social networks.
 const contentImageMatch = article?.content?.match(/<img[^>]+src=["']([^"']+)["']/i);
-const contentImage = contentImageMatch?.[1]?.startsWith('http') ? contentImageMatch[1] : undefined;
+const seoOGImage = assetUrl(seo?.og_image?.trim(), 1200) || undefined;
+const contentImage = seoOGImage || (contentImageMatch?.[1]?.startsWith('http') ? contentImageMatch[1] : undefined);
+const seoTwitterImage = assetUrl(seo?.twitter_image?.trim(), 1200) || contentImage;
+
+const authorResult = article?.author_id ? await apiFetch<any>(`/seo/authors/${article.author_id}`, { countryId }) : null;
+const authorProfile = authorResult?.ok ? authorResult.data : null;
+const authorSchema = authorProfile ? {
+	'@type': 'Person', name: authorProfile.public_name, description: authorProfile.biography || undefined,
+	url: authorProfile.profile_url || undefined, image: authorProfile.image_url || undefined,
+	jobTitle: authorProfile.headline || undefined, worksFor: authorProfile.employer ? { '@type': 'Organization', name: authorProfile.employer } : undefined,
+	alumniOf: authorProfile.education ? { '@type': 'EducationalOrganization', name: authorProfile.education } : undefined,
+	hasCredential: authorProfile.credentials ? { '@type': 'EducationalOccupationalCredential', name: authorProfile.credentials } : undefined,
+	award: authorProfile.awards || undefined,
+	knowsAbout: (() => { try { return JSON.parse(authorProfile.knows_about_json || '[]'); } catch { return undefined; } })(),
+	sameAs: (() => { try { return Object.values(JSON.parse(authorProfile.social_links_json || '{}')); } catch { return undefined; } })(),
+} : { '@type': 'Organization', name: siteName };
+const automaticSchemaType = ['Article', 'NewsArticle', 'BlogPosting'].includes(seo?.schema_type)
+	? seo.schema_type
+	: 'Article';
 
 // Articles also have no queryable author name (AuthorID is a raw FK, never joined server-side
 // — see article_repository.go), so this always falls back to Organization, same as posts do
@@ -79,13 +99,13 @@ const jsonLd = article
 	? [
 			{
 				'@context': 'https://schema.org',
-				'@type': 'Article',
+				'@type': automaticSchemaType,
 				headline: article.title,
 				description,
 				image: contentImage,
 				datePublished: publishedAt,
 				dateModified: updatedAt || publishedAt,
-				author: { '@type': 'Organization', name: siteName },
+				author: authorSchema,
 				publisher: { '@type': 'Organization', name: siteName },
 				mainEntityOfPage: canonicalUrl,
 				wordCount,
@@ -105,9 +125,10 @@ const jsonLd = article
 			},
 		]
 	: undefined;
+const effectiveJsonLd = seo?.schema_json && jsonLd ? [seo.schema_json, jsonLd[1]] : jsonLd;
 ---
 
-<Layout title={article?.title || 'المقال'} description={description} canonical={canonicalUrl} image={contentImage} jsonLd={jsonLd} enableAds={adsEligible}>
+<Layout title={seo?.title || article?.title || 'المقال'} description={description} canonical={canonicalUrl} image={contentImage} jsonLd={effectiveJsonLd} settings={settings} robots={seo?.robots} ogTitle={seo?.og_title} ogDescription={seo?.og_description} ogImage={seoOGImage} ogType="article" twitterTitle={seo?.twitter_title} twitterDescription={seo?.twitter_description} twitterImage={seoTwitterImage} qualityIndexable={adStatusResult.ok ? adStatusResult.data?.indexable : undefined} enableAds={adsEligible}>
 	<div id="reading-progress" class="fixed inset-x-0 top-0 z-[70] h-0.5 origin-right scale-x-0 bg-gradient-to-l from-royal-600 via-emerald-brand-600 to-sunset-400" aria-hidden="true"></div>
 
 	{
