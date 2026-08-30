@@ -112,15 +112,34 @@ function formatSize(bytes: number): string {
 				<div><h2>تحسين محركات البحث</h2><p>بيانات مختصرة تساعد المقال في الظهور والوصول إلى جمهوره.</p></div>
 				<span>02</span>
 			</div>
+			<div class="article-quality-signal" id="article-quality-signal">
+				<span class="article-quality-badge" id="quality-badge-length" data-state="thin">طول المحتوى: —</span>
+				<span class="article-quality-badge" id="quality-badge-meta" data-state="missing">الوصف التعريفي: —</span>
+				<span class="article-quality-badge" id="quality-badge-keywords" data-state="missing">الكلمات الدلالية: —</span>
+			</div>
 			<div class="article-seo-section">
-				<label for="meta_description" class={labelClass}>الوصف</label>
+				<div class="article-content-label">
+					<label for="meta_description" class={labelClass}>الوصف</label>
+					<button type="button" id="suggest-meta-btn" class="article-ai-button article-ai-button-sm">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m12 3 1.1 4.1L17 8.3l-3.9 1.1L12 13.5l-1.1-4.1L7 8.3l3.9-1.2L12 3Zm6 11 .6 2.2 2.2.6-2.2.6L18 20l-.6-2.6-2.2-.6 2.2-.6L18 14Z" /></svg>
+						<span id="suggest-meta-label">اقترح وصفًا</span>
+					</button>
+				</div>
 				<textarea id="meta_description" name="meta_description" rows="3" class={inputClass} placeholder="وصف قصير يظهر في نتائج البحث...">{article?.meta_description ?? ''}</textarea>
 				<p class="form-hint">يفضل أن يكون الوصف بين 120 و160 حرفًا.</p>
+				<p id="suggest-meta-error" class="form-hint hidden text-red-600 dark:text-red-400"></p>
 			</div>
 			<div class="article-keywords-section">
-				<label for="keywords" class={labelClass}>الكلمات المفتاحية</label>
+				<div class="article-content-label">
+					<label for="keywords" class={labelClass}>الكلمات الدلالية</label>
+					<button type="button" id="suggest-keywords-btn" class="article-ai-button article-ai-button-sm">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m12 3 1.1 4.1L17 8.3l-3.9 1.1L12 13.5l-1.1-4.1L7 8.3l3.9-1.2L12 3Zm6 11 .6 2.2 2.2.6-2.2.6L18 20l-.6-2.6-2.2-.6 2.2-.6L18 14Z" /></svg>
+						<span id="suggest-keywords-label">اقترح كلمات دلالية</span>
+					</button>
+				</div>
 				<input id="keywords" type="text" name="keywords" value={keywordsValue} class={inputClass} placeholder="تعليم، قواعد، لغة عربية" />
-				<p class="form-hint">افصل بين الكلمات باستخدام الفاصلة العربية.</p>
+				<p class="form-hint">كلمات دلالية داخلية لتحسين الربط والبحث الداخلي في الموقع — لا تؤثر في ترتيب نتائج Google. افصل بين الكلمات بفاصلة.</p>
+				<p id="suggest-keywords-error" class="form-hint hidden text-red-600 dark:text-red-400"></p>
 			</div>
 		</section>
 	</div>
@@ -505,6 +524,60 @@ function formatSize(bytes: number): string {
 		padding-bottom: 1rem;
 	}
 
+	.article-quality-signal {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+		padding: 0.9rem 1.15rem 0;
+	}
+
+	.article-quality-badge {
+		display: inline-flex;
+		align-items: center;
+		border-radius: 999px;
+		padding: 0.28rem 0.65rem;
+		font-size: 0.62rem;
+		font-weight: 800;
+		border: 1px solid transparent;
+	}
+
+	.article-quality-badge[data-state='ok'],
+	.article-quality-badge[data-state='adequate'] {
+		border-color: #a7e0c2;
+		background: #edfbf3;
+		color: #0f7a4a;
+	}
+
+	.article-quality-badge[data-state='too_short'],
+	.article-quality-badge[data-state='needs_enrichment'] {
+		border-color: #fbdba0;
+		background: #fff8ec;
+		color: #93650b;
+	}
+
+	.article-quality-badge[data-state='missing'],
+	.article-quality-badge[data-state='thin'] {
+		border-color: #f3b8b8;
+		background: #fef2f2;
+		color: #b91c1c;
+	}
+
+	.article-ai-button-sm {
+		min-height: 1.6rem;
+		padding: 0.2rem 0.5rem;
+		font-size: 0.6rem;
+	}
+
+	.article-ai-button-sm svg {
+		width: 0.75rem;
+		height: 0.75rem;
+	}
+
+	.article-ai-button:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+
 	.article-seo-section,
 	.article-keywords-section {
 		padding: 0.9rem 1.15rem 0;
@@ -706,6 +779,27 @@ function formatSize(bytes: number): string {
 	:global(.dark) #quill-toolbar {
 		border-color: #334155;
 		background: #0b1e38;
+	}
+
+	:global(.dark) .article-quality-badge[data-state='ok'],
+	:global(.dark) .article-quality-badge[data-state='adequate'] {
+		border-color: #1f6b47;
+		background: #0f2b1e;
+		color: #6fe3a5;
+	}
+
+	:global(.dark) .article-quality-badge[data-state='too_short'],
+	:global(.dark) .article-quality-badge[data-state='needs_enrichment'] {
+		border-color: #6b4f14;
+		background: #2b220c;
+		color: #f2c265;
+	}
+
+	:global(.dark) .article-quality-badge[data-state='missing'],
+	:global(.dark) .article-quality-badge[data-state='thin'] {
+		border-color: #6b2626;
+		background: #2b1212;
+		color: #f3a1a1;
 	}
 
 	:global(.dark) .article-card-title {
@@ -1061,6 +1155,135 @@ function formatSize(bytes: number): string {
 			aiIcon?.classList.toggle('animate-spin', busy);
 			if (aiLabel) aiLabel.textContent = busy ? 'جارِ التوليد... (قد يستغرق دقائق)' : 'توليد بالذكاء الاصطناعي';
 		};
+
+		// Editor-time SEO/quality signal — computed live from the current draft, no
+		// save round-trip needed, using the same thresholds as the backend's
+		// contentquality.Diagnostics so this view can never silently disagree with
+		// the audit engine. See CONTENT_QUALITY_GOVERNANCE_CENTER_PLAN.md §0.2.
+		const DIAGNOSTIC_REVIEW_MIN_WORDS = 120;
+		const DIAGNOSTIC_STRONG_MIN_WORDS = 300;
+		const DIAGNOSTIC_META_MIN_CHARS = 80;
+
+		const qualityBadgeLength = document.getElementById('quality-badge-length');
+		const qualityBadgeMeta = document.getElementById('quality-badge-meta');
+		const qualityBadgeKeywords = document.getElementById('quality-badge-keywords');
+
+		function setQualityBadge(el: HTMLElement | null, state: string, label: string) {
+			if (!el) return;
+			el.dataset.state = state;
+			el.textContent = label;
+		}
+
+		function updateQualitySignal() {
+			const wordCount = quill.getText().trim().length === 0 ? 0 : quill.getText().trim().split(/\s+/).length;
+			if (wordCount < DIAGNOSTIC_REVIEW_MIN_WORDS) {
+				setQualityBadge(qualityBadgeLength, 'thin', `طول المحتوى: قصير جدًا (${wordCount} كلمة)`);
+			} else if (wordCount < DIAGNOSTIC_STRONG_MIN_WORDS) {
+				setQualityBadge(qualityBadgeLength, 'needs_enrichment', `طول المحتوى: يحتاج إثراء (${wordCount} كلمة)`);
+			} else {
+				setQualityBadge(qualityBadgeLength, 'adequate', `طول المحتوى: مناسب (${wordCount} كلمة)`);
+			}
+
+			const metaLength = (metaDescriptionInput?.value ?? '').trim().length;
+			if (metaLength === 0) {
+				setQualityBadge(qualityBadgeMeta, 'missing', 'الوصف التعريفي: مفقود');
+			} else if (metaLength < DIAGNOSTIC_META_MIN_CHARS) {
+				setQualityBadge(qualityBadgeMeta, 'too_short', `الوصف التعريفي: قصير (${metaLength} حرفًا)`);
+			} else {
+				setQualityBadge(qualityBadgeMeta, 'ok', `الوصف التعريفي: جيد (${metaLength} حرفًا)`);
+			}
+
+			const hasKeywords = (keywordsInput?.value ?? '').trim().length > 0;
+			setQualityBadge(qualityBadgeKeywords, hasKeywords ? 'ok' : 'missing', hasKeywords ? 'الكلمات الدلالية: موجودة' : 'الكلمات الدلالية: مفقودة');
+		}
+
+		quill.on('text-change', updateQualitySignal);
+		metaDescriptionInput?.addEventListener('input', updateQualitySignal);
+		keywordsInput?.addEventListener('input', updateQualitySignal);
+		updateQualitySignal();
+
+		// Draft-time AI assist: suggest a meta description / keywords from the
+		// current title + content directly, without needing to save first — see
+		// CONTENT_QUALITY_GOVERNANCE_CENTER_PLAN.md §0.3.
+		const suggestMetaBtn = document.getElementById('suggest-meta-btn') as HTMLButtonElement | null;
+		const suggestMetaLabel = document.getElementById('suggest-meta-label');
+		const suggestMetaError = document.getElementById('suggest-meta-error');
+		suggestMetaBtn?.addEventListener('click', async () => {
+			suggestMetaError?.classList.add('hidden');
+			const title = titleInput?.value.trim() ?? '';
+			if (!title && quill.getText().trim().length === 0) {
+				if (suggestMetaError) {
+					suggestMetaError.textContent = 'أدخل عنوانًا أو محتوى أولًا.';
+					suggestMetaError.classList.remove('hidden');
+				}
+				return;
+			}
+			if (suggestMetaBtn) suggestMetaBtn.disabled = true;
+			if (suggestMetaLabel) suggestMetaLabel.textContent = 'جارِ الاقتراح...';
+			try {
+				const res = await fetch('/api/dashboard/ai/suggest-meta-description', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ title, content: quill.root.innerHTML }),
+				});
+				const json = await res.json();
+				if (!res.ok || !json?.success || !json?.data?.suggestion) {
+					throw new Error(json?.message || 'تعذر اقتراح وصف تعريفي');
+				}
+				if (metaDescriptionInput) {
+					metaDescriptionInput.value = json.data.suggestion;
+					updateQualitySignal();
+				}
+			} catch (err) {
+				if (suggestMetaError) {
+					suggestMetaError.textContent = err instanceof Error ? err.message : 'تعذر اقتراح وصف تعريفي';
+					suggestMetaError.classList.remove('hidden');
+				}
+			} finally {
+				if (suggestMetaBtn) suggestMetaBtn.disabled = false;
+				if (suggestMetaLabel) suggestMetaLabel.textContent = 'اقترح وصفًا';
+			}
+		});
+
+		const suggestKeywordsBtn = document.getElementById('suggest-keywords-btn') as HTMLButtonElement | null;
+		const suggestKeywordsLabel = document.getElementById('suggest-keywords-label');
+		const suggestKeywordsError = document.getElementById('suggest-keywords-error');
+		suggestKeywordsBtn?.addEventListener('click', async () => {
+			suggestKeywordsError?.classList.add('hidden');
+			const title = titleInput?.value.trim() ?? '';
+			if (!title && quill.getText().trim().length === 0) {
+				if (suggestKeywordsError) {
+					suggestKeywordsError.textContent = 'أدخل عنوانًا أو محتوى أولًا.';
+					suggestKeywordsError.classList.remove('hidden');
+				}
+				return;
+			}
+			if (suggestKeywordsBtn) suggestKeywordsBtn.disabled = true;
+			if (suggestKeywordsLabel) suggestKeywordsLabel.textContent = 'جارِ الاقتراح...';
+			try {
+				const res = await fetch('/api/dashboard/ai/suggest-keywords', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ title, content: quill.root.innerHTML }),
+				});
+				const json = await res.json();
+				if (!res.ok || !json?.success || !json?.data?.keywords) {
+					throw new Error(json?.message || 'تعذر اقتراح كلمات دلالية');
+				}
+				if (keywordsInput) {
+					keywordsInput.value = json.data.keywords;
+					updateQualitySignal();
+				}
+			} catch (err) {
+				if (suggestKeywordsError) {
+					suggestKeywordsError.textContent = err instanceof Error ? err.message : 'تعذر اقتراح كلمات دلالية';
+					suggestKeywordsError.classList.remove('hidden');
+				}
+			} finally {
+				if (suggestKeywordsBtn) suggestKeywordsBtn.disabled = false;
+				if (suggestKeywordsLabel) suggestKeywordsLabel.textContent = 'اقترح كلمات دلالية';
+			}
+		});
 
 		aiButton?.addEventListener('click', async () => {
 			aiError?.classList.add('hidden');

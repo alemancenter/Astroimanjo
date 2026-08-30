@@ -1,0 +1,285 @@
+---
+import DashboardLayout from '../../../layouts/DashboardLayout.astro';
+import DashboardAlert from '../../../components/ui/DashboardAlert.astro';
+import { requireDashboard } from '../../../lib/auth';
+import { apiFetch } from '../../../lib/api';
+import { COUNTRIES } from '../../../lib/countries';
+
+const guard = await requireDashboard(Astro, 'manage content audit');
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+
+interface GSCProperty {
+	country_code: string;
+	site_url: string;
+	active: boolean;
+	verified_at: string | null;
+}
+
+const result = await apiFetch<GSCProperty[]>('/dashboard/gsc/properties', {
+	countryId: Astro.locals.countryId,
+	cookieHeader: `token=${Astro.cookies.get('token')?.value}`,
+});
+const properties = Array.isArray(result.data) ? result.data : [];
+const byCountry = new Map(properties.map((p) => [p.country_code, p]));
+---
+
+<DashboardLayout title="ربط Google Search Console" user={user}>
+	<DashboardAlert />
+
+	<div class="gsc-page surface-card p-5 sm:p-8">
+		<div class="border-b border-graphite-200 pb-6 dark:border-graphite-700">
+			<span class="page-eyebrow">تحسين محركات البحث</span>
+			<h1 class="text-xl font-extrabold text-graphite-950 dark:text-white">ربط Google Search Console</h1>
+			<p class="mt-2 max-w-2xl text-sm text-graphite-500 dark:text-graphite-400">
+				هذا يفعّل شارة حالة الفهرسة الفعلية في Google — منفصلة تمامًا عن الجاهزية الداخلية ولا تؤثر فيها. الموقع يخدم كل
+				الدول تحت نطاق واحد بمسارات <code>/jo</code>، <code>/sa</code>، <code>/eg</code>، <code>/ps</code> — لذلك
+				القيمة المتوقعة هي نفسها لكل الدول (مثال: <code>sc-domain:imanjo.com</code>).
+			</p>
+		</div>
+
+		<div class="mt-6 space-y-4">
+			{COUNTRIES.map((country) => {
+				const existing = byCountry.get(country.code);
+				return (
+					<form method="post" action="/api/dashboard/gsc/properties/save" class="gsc-property-row">
+						<input type="hidden" name="country_code" value={country.code} />
+						<span class="gsc-property-flag">{country.flag}</span>
+						<span class="gsc-property-name">{country.name}</span>
+						<input
+							type="text"
+							name="site_url"
+							class="form-control"
+							placeholder="sc-domain:imanjo.com"
+							value={existing?.site_url ?? ''}
+						/>
+						<button type="submit" class="btn-outline">حفظ</button>
+						{existing?.active && <span class="gsc-property-status">مُفعّلة</span>}
+					</form>
+				);
+			})}
+		</div>
+
+		<p class="mt-6 text-xs font-bold text-graphite-500 dark:text-graphite-400">
+			لتفعيل الربط فعليًا: أنشئ Service Account في Google Cloud، فعّل Search Console API، أضف بريد الحساب الخدمي
+			كمستخدم على الخاصية في Search Console، ثم ضع محتوى مفتاح JSON في <code>GSC_SERVICE_ACCOUNT_JSON</code> و
+			<code>GSC_ENABLED=true</code> على الخادم مباشرة — لا تُشارك هذا المفتاح هنا أو في أي محادثة.
+		</p>
+
+		<div class="gsc-test-panel">
+			<h2>اختبار الاتصال</h2>
+			<p>
+				يرسل طلب فحص حقيقي إلى Google للتأكد أن الربط يعمل فعليًا — لا يُخزَّن شيء، مجرد استدعاء مباشر. النتيجة
+				هنا هي الدليل الفعلي على أن المفتاح والخاصية والصلاحية كلها صحيحة.
+			</p>
+			<div class="gsc-test-form">
+				<select id="gsc-test-country">
+					{COUNTRIES.map((c) => <option value={c.code}>{c.flag} {c.name}</option>)}
+				</select>
+				<input id="gsc-test-url" type="text" class="form-control" placeholder="https://imanjo.com/jo/lesson/articles/1" />
+				<button type="button" id="gsc-test-btn" class="btn-outline">اختبار الاتصال</button>
+			</div>
+			<div id="gsc-test-result" class="gsc-test-result" hidden></div>
+		</div>
+	</div>
+</DashboardLayout>
+
+<script>
+	const testBtn = document.getElementById('gsc-test-btn') as HTMLButtonElement | null;
+	const testCountry = document.getElementById('gsc-test-country') as HTMLSelectElement | null;
+	const testUrlInput = document.getElementById('gsc-test-url') as HTMLInputElement | null;
+	const testResult = document.getElementById('gsc-test-result');
+
+	testBtn?.addEventListener('click', async () => {
+		if (!testResult) return;
+		const countryCode = testCountry?.value ?? '';
+		const url = testUrlInput?.value.trim() ?? '';
+		if (!url) {
+			testResult.hidden = false;
+			testResult.className = 'gsc-test-result is-error';
+			testResult.textContent = 'أدخل رابطًا حقيقيًا من الموقع أولًا.';
+			return;
+		}
+		testBtn.disabled = true;
+		testBtn.textContent = 'جارِ الاختبار...';
+		testResult.hidden = false;
+		testResult.className = 'gsc-test-result';
+		testResult.textContent = 'جارِ الاتصال بـ Google...';
+		try {
+			const res = await fetch(`/api/dashboard/gsc/test?country_code=${encodeURIComponent(countryCode)}&url=${encodeURIComponent(url)}`);
+			const json = await res.json();
+			if (!res.ok || !json?.success) throw new Error(json?.message || 'فشل الاتصال');
+			const data = json.data || {};
+			const statusLabels: Record<string, string> = {
+				indexed: 'مفهرسة',
+				not_indexed: 'غير مفهرسة',
+				crawled_not_indexed: 'تم الزحف ولم تتم الفهرسة',
+				discovered_not_crawled: 'مكتشفة ولم يتم الزحف',
+				unknown_not_synced: 'غير معروفة',
+			};
+			testResult.className = 'gsc-test-result is-success';
+			testResult.innerHTML = `<strong>تم الاتصال بنجاح ✓</strong><span>حالة الفهرسة: ${statusLabels[data.index_status] || data.index_status || '—'} · حالة Google الخام: ${data.coverage_state || '—'}</span>`;
+		} catch (err) {
+			testResult.className = 'gsc-test-result is-error';
+			testResult.textContent = err instanceof Error ? err.message : 'فشل الاتصال بـ Google — تحقق من المفتاح وصلاحية الحساب الخدمي وقيمة site_url.';
+		} finally {
+			testBtn.disabled = false;
+			testBtn.textContent = 'اختبار الاتصال';
+		}
+	});
+</script>
+
+<style>
+	.gsc-page {
+		max-width: 860px;
+		margin-inline: auto;
+	}
+
+	.gsc-property-row {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		border: 1px solid #dfe6ee;
+		border-radius: 0.65rem;
+		padding: 0.75rem 0.9rem;
+	}
+
+	.gsc-property-flag {
+		font-size: 1.35rem;
+	}
+
+	.gsc-property-name {
+		min-width: 5.5rem;
+		font-size: 0.78rem;
+		font-weight: 800;
+		color: #102a43;
+	}
+
+	.gsc-property-row .form-control {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.gsc-property-status {
+		border-radius: 999px;
+		background: #edfbf3;
+		padding: 0.2rem 0.6rem;
+		color: #0f7a4a;
+		font-size: 0.62rem;
+		font-weight: 800;
+		white-space: nowrap;
+	}
+
+	:global(.dark) .gsc-property-row {
+		border-color: #334155;
+	}
+
+	:global(.dark) .gsc-property-name {
+		color: #f8fafc;
+	}
+
+	:global(.dark) .gsc-property-status {
+		background: #0f2b1e;
+		color: #6fe3a5;
+	}
+
+	@media (max-width: 640px) {
+		.gsc-property-row {
+			flex-wrap: wrap;
+		}
+	}
+
+	.gsc-test-panel {
+		margin-top: 1.5rem;
+		border: 1px solid #dfe6ee;
+		border-radius: 0.65rem;
+		padding: 0.9rem 1rem;
+	}
+
+	.gsc-test-panel h2 {
+		margin: 0;
+		font-size: 0.85rem;
+		font-weight: 800;
+		color: #102a43;
+	}
+
+	.gsc-test-panel > p {
+		margin: 0.35rem 0 0.85rem;
+		font-size: 0.7rem;
+		color: #68788d;
+		line-height: 1.7;
+	}
+
+	.gsc-test-form {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
+
+	.gsc-test-form select {
+		min-height: 2.4rem;
+		border: 1px solid #d9e2ec;
+		border-radius: 0.5rem;
+		background: #fff;
+		padding: 0 0.5rem;
+		font-size: 0.72rem;
+	}
+
+	.gsc-test-form .form-control {
+		flex: 1;
+		min-width: 14rem;
+	}
+
+	.gsc-test-result {
+		margin-top: 0.75rem;
+		border-radius: 0.5rem;
+		padding: 0.6rem 0.75rem;
+		font-size: 0.72rem;
+		background: #f8fafc;
+		color: #45566b;
+	}
+
+	.gsc-test-result.is-success {
+		background: #edfbf3;
+		color: #0f7a4a;
+	}
+
+	.gsc-test-result.is-success strong {
+		display: block;
+		margin-bottom: 0.15rem;
+	}
+
+	.gsc-test-result.is-error {
+		background: #fef2f2;
+		color: #b91c1c;
+	}
+
+	:global(.dark) .gsc-test-panel {
+		border-color: #334155;
+	}
+
+	:global(.dark) .gsc-test-panel h2 {
+		color: #f8fafc;
+	}
+
+	:global(.dark) .gsc-test-form select {
+		border-color: #334155;
+		background: #172033;
+		color: #e6edf5;
+	}
+
+	:global(.dark) .gsc-test-result {
+		background: #172033;
+		color: #cbd5e1;
+	}
+
+	:global(.dark) .gsc-test-result.is-success {
+		background: #0f2b1e;
+		color: #6fe3a5;
+	}
+
+	:global(.dark) .gsc-test-result.is-error {
+		background: #2b1212;
+		color: #f3a1a1;
+	}
+</style>

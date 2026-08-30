@@ -1,0 +1,187 @@
+---
+import DashboardLayout from '../../../layouts/DashboardLayout.astro';
+import ReadinessRepairCenter from '../../../components/dashboard/content-audit/ReadinessRepairCenter.astro';
+import ReadinessTable from '../../../components/dashboard/content-audit/ReadinessTable.astro';
+import type { ReadinessItem, ReadinessRepairCenter as ReadinessRepairCenterData } from '../../../features/content-audit/readiness-types';
+import { requireDashboard } from '../../../lib/auth';
+import { apiFetch } from '../../../lib/api';
+import { getCountryById, COUNTRIES } from '../../../lib/countries';
+
+// One entry point replacing the readiness/ai-operations/GSC page sprawl — see
+// back/docs/reports/CONTENT_QUALITY_GOVERNANCE_CENTER_PLAN.md §6. Two tabs:
+// site-wide status (governance-state counts + GSC link health) and content
+// work (the existing readiness table + its per-row detail dialog, which
+// already serves as the "side drawer" the plan calls for). Deterministic
+// tools (corruption/similarity/inventory) and AI batch/cost operations keep
+// their own pages, linked from here rather than re-implemented.
+const guard = await requireDashboard(Astro, 'manage content audit');
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+const token = Astro.cookies.get('token')?.value;
+const currentCountry = getCountryById(Astro.locals.countryId);
+const auth = { countryId: Astro.locals.countryId, cookieHeader: `token=${token}` };
+
+const tab = Astro.url.searchParams.get('tab') === 'content' ? 'content' : 'site';
+const page = Math.max(1, Number(Astro.url.searchParams.get('page') || 1));
+const contentType = String(Astro.url.searchParams.get('type') || 'all');
+const level = String(Astro.url.searchParams.get('level') || '');
+const problem = String(Astro.url.searchParams.get('problem') || '');
+const search = String(Astro.url.searchParams.get('q') || '').trim();
+
+const [readinessResult, propertiesResult] = await Promise.all([
+	apiFetch<any>('/dashboard/content-audit/adsense-readiness', {
+		...auth,
+		params: { country: currentCountry.code, type: contentType, level, problem, q: search, page, per_page: 20 },
+	}),
+	apiFetch<any[]>('/dashboard/gsc/properties', auth),
+]);
+
+const readinessData = readinessResult.data ?? {};
+const summary = readinessData.summary ?? {};
+const readinessItems: ReadinessItem[] = Array.isArray(readinessData.items) ? readinessData.items : [];
+const repairCenter: ReadinessRepairCenterData = readinessData.repair_center ?? {
+	affected_items: 0,
+	actionable_items: 0,
+	manual_items: 0,
+	total_findings: 0,
+	batch_size: 20,
+	problems: [],
+};
+const readinessMeta = readinessData.meta ?? {};
+const total = Number(summary.total || 0);
+const properties: any[] = Array.isArray(propertiesResult.data) ? propertiesResult.data : [];
+const propertyByCountry = new Map(properties.map((p) => [p.country_code, p]));
+const configuredCount = COUNTRIES.filter((c) => propertyByCountry.get(c.code)?.site_url).length;
+
+const criticalBlocker = Number(summary.critical_blocker || 0);
+const needsImprovement = Number(summary.needs_improvement || 0);
+const humanPending = Number(summary.human_decision_pending || 0);
+const internallyReady = Number(summary.internally_ready || 0);
+
+const nf = new Intl.NumberFormat('ar-EG');
+const tabHref = (target: string) => {
+	const u = new URL(Astro.url);
+	u.searchParams.set('tab', target);
+	if (target === 'site') {
+		for (const key of ['page', 'type', 'level', 'problem', 'q']) u.searchParams.delete(key);
+	}
+	return `${u.pathname}?${u.searchParams.toString()}`;
+};
+const pageHref = (targetPage: number) => {
+	const u = new URL(Astro.url);
+	u.searchParams.set('tab', 'content');
+	u.searchParams.set('page', String(targetPage));
+	return `${u.pathname}?${u.searchParams.toString()}`;
+};
+const cleanRedirect = new URL(Astro.url);
+for (const key of ['success', 'error', 'batch_id']) cleanRedirect.searchParams.delete(key);
+const redirectTo = `${cleanRedirect.pathname}${cleanRedirect.searchParams.size ? `?${cleanRedirect.searchParams.toString()}` : ''}`;
+const success = Astro.url.searchParams.get('success');
+const error = Astro.url.searchParams.get('error');
+const batchId = String(Astro.url.searchParams.get('batch_id') || '');
+---
+
+<DashboardLayout title="مركز جودة النشر" user={user}>
+	<div class="audit-page">
+		<header class="audit-hero">
+			<div class="audit-hero-copy">
+				<span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 3 4 6v5c0 5 3.4 8.2 8 10 4.6-1.8 8-5 8-10V6Z" /><path d="m9 12 2 2 4-5" /></svg>حوكمة النشر والجودة</span>
+				<h1>مركز جودة النشر</h1>
+				<p>حالة الموقع ككل (موانع، ربط Google، حالة الجاهزية) والعمل على المحتوى الذي يحتاج إجراءً — في مكان واحد. الأدوات الحتمية (فساد، تشابه، جرد) ودفعات الذكاء الاصطناعي وتكاليفها تبقى في صفحاتها الخاصة، مرتبطة من هنا.</p>
+			</div>
+			<div class="audit-hero-actions">
+				<a href="/dashboard/gsc" class="is-secondary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14Z" /><path d="m20 20-4.35-4.35" /></svg>ربط Google Search Console</a>
+				<a href="/dashboard/content-audit/ai-operations" class="is-secondary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 3v18M5 8h14M5 16h14" /></svg>عمليات الذكاء الاصطناعي</a>
+			</div>
+		</header>
+
+		<nav class="quality-tabs">
+			<a href={tabHref('site')} class:list={{ 'is-active': tab === 'site' }}>حالة الموقع</a>
+			<a href={tabHref('content')} class:list={{ 'is-active': tab === 'content' }}>العمل على المحتوى</a>
+		</nav>
+
+		{success === 'batch_started' && <section class="audit-flash is-success"><div><strong>تم إنشاء دفعة المعالجة بنجاح</strong><span>بدأت المعالجة في الخلفية، وستظهر النتائج كمعاينات تحتاج اعتمادك.</span></div>{batchId ? <a href={`/dashboard/content-audit/ai-operations/batch-jobs/${batchId}`}>متابعة الدفعة</a> : <a href="/dashboard/content-audit/ai-operations">فتح العمليات</a>}</section>}
+		{success === 'auto_repair_started' && <section class="audit-flash is-success"><div><strong>بدأ إصلاح الوصف التعريفي الآمن</strong><span>سيولّد النظام الوصف ويطبّقه على الحقل الوصفي فقط، ثم يعيد تدقيق الفهرسة وأهلية الإعلانات تلقائيًا.</span></div>{batchId ? <a href={`/dashboard/content-audit/ai-operations/batch-jobs/${batchId}`}>متابعة الإصلاح</a> : <a href="/dashboard/content-audit/ai-operations">فتح العمليات</a>}</section>}
+		{error && <section class="audit-flash is-error"><div><strong>تعذّر بدء المعالجة</strong><span>{error}</span></div><button type="button" data-dismiss-flash>إغلاق</button></section>}
+
+		{!readinessResult.ok ? <section class="audit-empty is-error"><i>!</i><h2>تعذّر تحميل بيانات الجودة</h2><p>تحقق من اتصال الخادم ثم أعد المحاولة.</p><a href={Astro.url.pathname}>إعادة المحاولة</a></section> : tab === 'site' ? (
+			<section class="site-status">
+				<div class="status-headline">
+					<strong>
+						{criticalBlocker > 0
+							? `أمامك ${nf.format(criticalBlocker)} ${criticalBlocker === 1 ? 'مانع حرج' : 'موانع حرجة'} قبل طلب مراجعة AdSense`
+							: 'لا توجد موانع حرجة معروفة حاليًا'}
+					</strong>
+					<span>القرار النهائي دائمًا لِـ Google — هذا فقط ما نستطيع التحقق منه آليًا.</span>
+				</div>
+
+				<div class="state-kpis">
+					<article class="is-critical"><span>مانع حرج</span><strong>{nf.format(criticalBlocker)}</strong><small>يمنع الجاهزية بغض النظر عن نوع المحتوى</small></article>
+					<article class="is-improve"><span>يحتاج تحسينًا</span><strong>{nf.format(needsImprovement)}</strong><small>معيار تحريري داخلي، ليس شرط Google</small></article>
+					<article class="is-human"><span>قرار بشري معلّق</span><strong>{nf.format(humanPending)}</strong><small>عنوان/دمج/حقوق يحتاج مراجعة يدوية</small></article>
+					<article class="is-ready"><span>جاهز داخليًا</span><strong>{nf.format(internallyReady)}</strong><small>من أصل {nf.format(total)} عنصر</small></article>
+				</div>
+
+				<div class="gsc-status-card">
+					<header>
+						<div><span>حالة Google — منفصلة عن الجاهزية الداخلية</span><h2>ربط Search Console</h2></div>
+						<a href="/dashboard/gsc">إدارة الخصائص</a>
+					</header>
+					{configuredCount === 0 ? (
+						<p class="gsc-empty">لم تُسجَّل أي خاصية Search Console بعد. بدون هذا الربط، شارة "حالة الفهرسة الفعلية في Google" غير متاحة — راجع <a href="/dashboard/gsc">صفحة الربط</a>.</p>
+					) : (
+						<div class="gsc-country-list">
+							{COUNTRIES.map((c) => {
+								const configured = Boolean(propertyByCountry.get(c.code)?.site_url);
+								return (
+									<span class:list={['gsc-country-chip', configured && 'is-configured']}>
+										{c.flag} {c.name} <i>{configured ? 'مُهيّأة' : 'غير مُهيّأة'}</i>
+									</span>
+								);
+							})}
+						</div>
+					)}
+				</div>
+
+				<div class="site-links">
+					<a href="/dashboard/content-audit/scan">الأدوات الحتمية (فساد، تشابه، جرد)</a>
+					<a href="/dashboard/content-audit/ai-operations">طابور المراجعة وتكاليف النماذج</a>
+					<a href={tabHref('content')}>فتح العمل على المحتوى ←</a>
+				</div>
+			</section>
+		) : (
+			<section class="readiness-section">
+				<ReadinessRepairCenter repair={repairCenter} countryCode={currentCountry.code} contentType={contentType} redirectTo={redirectTo} />
+				<header class="section-heading"><div><span>النتائج</span><h2>{nf.format(total)} عنصر في التقرير</h2><p>{nf.format(Number(summary.ads_eligible || 0))} جاهز مبدئيًا للإعلانات · {nf.format(Number(summary.unaudited || 0))} لم يُفحص بعد</p></div><span class="results-count">{nf.format(readinessMeta.filtered_total ?? readinessItems.length)} نتيجة</span></header>
+				<form class="audit-filters" method="get" action="/dashboard/quality">
+					<input type="hidden" name="tab" value="content" />
+					<label><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg><input type="search" name="q" value={search} placeholder="ابحث بعنوان المحتوى..." /></label>
+					<select name="type"><option value="all">كل المحتوى</option><option value="article" selected={contentType === 'article'}>المقالات</option><option value="post" selected={contentType === 'post'}>المنشورات</option></select>
+					<select name="level"><option value="">كل المستويات</option><option value="weak" selected={level === 'weak'}>ضعيف</option><option value="review" selected={level === 'review'}>يحتاج مراجعة</option><option value="ready" selected={level === 'ready'}>جاهز</option></select>
+					<select name="problem"><option value="">كل المشكلات</option>{(repairCenter.problems || []).map((entry) => <option value={entry.code} selected={problem === entry.code}>{entry.label} ({nf.format(Number(entry.count || 0))})</option>)}</select>
+					<button type="submit">تطبيق</button>
+					{(search || level || problem || contentType !== 'all') && <a href={tabHref('content')}>مسح</a>}
+				</form>
+				{readinessItems.length ? <ReadinessTable items={readinessItems} countryCode={currentCountry.code} redirectTo={redirectTo} /> : <section class="audit-empty"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 4h14v16H5zM8 8h8m-8 4h8" /></svg></i><h2>لا توجد نتائج مطابقة</h2><p>غيّر الفلاتر أو شغّل تدقيقًا جديدًا.</p></section>}
+				{readinessMeta.last_page > 1 && <nav class="audit-pagination"><a href={pageHref(Math.max(1, readinessMeta.current_page - 1))} class:list={{ 'is-disabled': readinessMeta.current_page <= 1 }}>السابق</a><span>صفحة <strong>{nf.format(readinessMeta.current_page)}</strong> من {nf.format(readinessMeta.last_page)}</span><a href={pageHref(Math.min(readinessMeta.last_page, readinessMeta.current_page + 1))} class:list={{ 'is-disabled': readinessMeta.current_page >= readinessMeta.last_page }}>التالي</a></nav>}
+			</section>
+		)}
+	</div>
+	<script>document.querySelectorAll('[data-dismiss-flash]').forEach((button) => button.addEventListener('click', () => button.parentElement?.remove()));</script>
+
+	<style>
+		.audit-page{--au-blue:#1a4d8f;--au-green:#0f8464;--au-orange:#e8a244;--au-red:#c43d49;--au-ink:#18283d;--au-muted:#68788d;--au-line:#dce4ed;direction:rtl}.audit-page *{box-sizing:border-box}
+		.audit-hero{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:.75rem;border:1px solid var(--au-line);border-radius:1rem;background:#fff;padding:1.15rem 1.25rem;box-shadow:0 3px 12px rgb(23 43 77/.05)}.audit-hero-copy>span{display:flex;align-items:center;gap:.35rem;color:var(--au-blue);font-size:.72rem;font-weight:850}.audit-hero-copy>span svg{width:1rem;height:1rem}.audit-hero h1{margin:.22rem 0 .15rem;color:var(--au-ink);font-size:1.48rem;font-weight:950}.audit-hero p{max-width:47rem;margin:0;color:var(--au-muted);font-size:.8rem;line-height:1.75}.audit-hero-actions{display:flex;flex:none;flex-direction:column;gap:.4rem}.audit-hero-actions>a{display:flex;min-height:2.4rem;align-items:center;justify-content:center;gap:.35rem;border:1px solid #ccd8e6;border-radius:.52rem;background:#fff;padding:.4rem .7rem;color:var(--au-blue);font-family:inherit;font-size:.66rem;font-weight:900;white-space:nowrap}.audit-hero-actions svg{width:.9rem;height:.9rem;stroke-width:2}
+		.quality-tabs{display:flex;gap:.4rem;margin-bottom:.75rem;border-bottom:1px solid var(--au-line)}.quality-tabs a{display:inline-flex;min-height:2.4rem;align-items:center;border-bottom:2px solid transparent;padding:.4rem .3rem;color:var(--au-muted);font-size:.72rem;font-weight:850}.quality-tabs a.is-active{border-color:var(--au-blue);color:var(--au-blue)}
+		.audit-flash{display:flex;align-items:center;gap:.7rem;margin-bottom:.7rem;border:1px solid #b9dfcf;border-radius:.65rem;background:#f0faf6;padding:.65rem .75rem}.audit-flash>div{display:grid;flex:1;gap:.08rem}.audit-flash strong{color:#0d7258;font-size:.65rem}.audit-flash span{color:#557969;font-size:.56rem}.audit-flash a,.audit-flash button{border:1px solid #9bcdb8;border-radius:.4rem;background:#fff;padding:.38rem .55rem;color:#0d7258;font-family:inherit;font-size:.54rem;font-weight:900;cursor:pointer}.audit-flash.is-error{border-color:#efbcc2;background:#fff3f4}.audit-flash.is-error strong,.audit-flash.is-error span,.audit-flash.is-error button{color:#a83240}.audit-flash.is-error button{border-color:#e4adb4}
+		.site-status{display:grid;gap:.7rem}.status-headline{border:1px solid var(--au-line);border-radius:.82rem;background:#fff;padding:.9rem 1rem;box-shadow:0 3px 10px rgb(23 43 77/.04)}.status-headline strong{display:block;color:var(--au-ink);font-size:.95rem;font-weight:950}.status-headline span{color:var(--au-muted);font-size:.62rem}
+		.state-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.55rem}.state-kpis article{border:1px solid var(--au-line);border-radius:.72rem;background:#fff;padding:.75rem;box-shadow:0 2px 8px rgb(23 43 77/.035)}.state-kpis span{display:block;color:var(--au-muted);font-size:.6rem;font-weight:850}.state-kpis strong{display:block;margin:.15rem 0;color:var(--au-ink);font-size:1.3rem;font-weight:950}.state-kpis small{color:#8a96a5;font-size:.53rem}.state-kpis .is-critical strong{color:var(--au-red)}.state-kpis .is-improve strong{color:var(--au-orange)}.state-kpis .is-human strong{color:#6e42bd}.state-kpis .is-ready strong{color:var(--au-green)}
+		.gsc-status-card{border:1px solid var(--au-line);border-radius:.82rem;background:#fff;padding:.9rem 1rem;box-shadow:0 3px 10px rgb(23 43 77/.04)}.gsc-status-card>header{display:flex;align-items:center;justify-content:space-between;gap:.7rem}.gsc-status-card>header span{color:var(--au-blue);font-size:.6rem;font-weight:850}.gsc-status-card h2{margin:.1rem 0 0;color:var(--au-ink);font-size:.86rem}.gsc-status-card>header>a{color:var(--au-blue);font-size:.6rem;font-weight:850}.gsc-empty{margin:.7rem 0 0;color:var(--au-muted);font-size:.65rem;line-height:1.7}.gsc-empty a{color:var(--au-blue);font-weight:850}.gsc-country-list{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.7rem}.gsc-country-chip{display:inline-flex;align-items:center;gap:.3rem;border:1px solid #e3e9f0;border-radius:999px;padding:.3rem .65rem;color:#8a96a5;font-size:.62rem;font-weight:800}.gsc-country-chip i{font-style:normal;color:#b23340}.gsc-country-chip.is-configured{border-color:#a7e0c2;background:#f2fbf7;color:#0f7a4a}.gsc-country-chip.is-configured i{color:#0f7a4a}
+		.site-links{display:flex;flex-wrap:wrap;gap:.6rem}.site-links a{border:1px solid var(--au-line);border-radius:.5rem;background:#fff;padding:.5rem .75rem;color:var(--au-blue);font-size:.62rem;font-weight:850}
+		.readiness-section{border:1px solid var(--au-line);border-radius:.82rem;background:#fff;box-shadow:0 3px 10px rgb(23 43 77/.04);padding:.9rem}.section-heading{display:flex;align-items:center;justify-content:space-between;gap:.7rem;margin-bottom:.7rem}.section-heading span:first-child{color:var(--au-blue);font-size:.62rem;font-weight:850}.section-heading h2{margin:.08rem 0 0;color:var(--au-ink);font-size:.9rem;font-weight:950}.section-heading p{margin:.1rem 0 0;color:var(--au-muted);font-size:.55rem}.results-count{border:1px solid #dce4ed;border-radius:.42rem;background:#f8fafc;padding:.35rem .5rem;color:#5b6f86;font-size:.62rem;font-weight:850}.audit-filters{display:flex;align-items:center;gap:.4rem;margin-bottom:.7rem;border:1px solid #e0e7ee;border-radius:.6rem;background:#f8fafc;padding:.5rem}.audit-filters label{display:flex;min-width:14rem;flex:1;align-items:center;gap:.35rem;border:1px solid #d9e2ec;border-radius:.42rem;background:#fff;padding:0 .5rem}.audit-filters label svg{width:.85rem;height:.85rem;color:#8794a5}.audit-filters input,.audit-filters select{height:2.2rem;border:0;background:transparent;color:var(--au-ink);font-family:inherit;font-size:.65rem;outline:0}.audit-filters input{width:100%}.audit-filters select{min-width:7.5rem;border:1px solid #d9e2ec;border-radius:.42rem;background:#fff;padding:0 .45rem}.audit-filters select[name="problem"]{max-width:13rem}.audit-filters>button,.audit-filters>a{display:grid;min-height:2.2rem;place-items:center;border-radius:.42rem;padding:.25rem .65rem;font-family:inherit;font-size:.62rem;font-weight:850}.audit-filters>button{border:1px solid var(--au-blue);background:var(--au-blue);color:#fff}.audit-filters>a{border:1px solid #d9e2ec;background:#fff;color:#63758a}.audit-pagination{display:flex;align-items:center;justify-content:center;gap:.65rem;margin-top:.7rem}.audit-pagination a{display:grid;min-width:4rem;min-height:2.15rem;place-items:center;border:1px solid #d8e2ec;border-radius:.42rem;background:#fff;color:var(--au-blue);font-size:.6rem;font-weight:850}.audit-pagination a.is-disabled{pointer-events:none;opacity:.4}.audit-pagination span{color:var(--au-muted);font-size:.59rem}.audit-pagination strong{color:var(--au-ink)}
+		.audit-empty{display:grid;min-height:18rem;place-items:center;align-content:center;border:1px dashed #d8e1eb;border-radius:.72rem;background:#fafbfd;text-align:center}.audit-empty>i{display:grid;width:3rem;height:3rem;place-items:center;border-radius:50%;background:#eaf1fa;color:var(--au-blue);font-style:normal;font-weight:950}.audit-empty svg{width:1.3rem;height:1.3rem}.audit-empty h2{margin:.55rem 0 .12rem;color:var(--au-ink);font-size:.86rem}.audit-empty p{margin:0;color:var(--au-muted);font-size:.65rem}.audit-empty a{margin-top:.5rem;color:var(--au-blue);font-size:.6rem;font-weight:850}.audit-empty.is-error>i{background:#ffeaec;color:var(--au-red)}
+		.dark .audit-page{--au-ink:#f4f7fb;--au-muted:#9eacc0;--au-line:#30445d}.dark .audit-hero,.dark .readiness-section,.dark .status-headline,.dark .state-kpis article,.dark .gsc-status-card,.dark .site-links a,.dark .audit-filters input,.dark .audit-filters select{border-color:#30445d;background:#0f2547;color:#cbd5e1}.dark .audit-filters{background:#122b4b}.dark .gsc-country-chip{border-color:#30445d;background:#122b4b}.dark .gsc-country-chip.is-configured{border-color:#1f6b47;background:#0f2b1e;color:#6fe3a5}
+		@media(max-width:980px){.audit-filters{align-items:stretch;flex-wrap:wrap}.audit-filters label{min-width:100%}.audit-filters select{flex:1;max-width:none!important}.state-kpis{grid-template-columns:repeat(2,1fr)}}
+		@media(max-width:780px){.audit-hero{align-items:stretch;flex-direction:column}.audit-hero-actions{flex-direction:row}.audit-hero-actions>a{flex:1}.section-heading{align-items:flex-start;flex-direction:column}.audit-flash{align-items:stretch;flex-direction:column}.state-kpis{grid-template-columns:1fr}}
+	</style>
+</DashboardLayout>

@@ -34,7 +34,9 @@ export const DASHBOARD_NAV_ITEMS: DashboardNavItem[] = [
 	{ label: 'خريطة الموقع', href: '/dashboard/sitemap', group: 'النظام والذكاء', icon: 'sitemap', permission: 'manage sitemap' },
 	{ label: 'الأمان', href: '/dashboard/security', group: 'النظام والذكاء', icon: 'security', permission: 'manage security' },
 	{ label: 'الشاتبوت', href: '/dashboard/chatbot', group: 'النظام والذكاء', icon: 'bot', permission: 'manage settings' },
+	{ label: 'مركز جودة النشر', href: '/dashboard/quality', group: 'النظام والذكاء', icon: 'audit', permission: 'manage content audit' },
 	{ label: 'تدقيق المحتوى AI', href: '/dashboard/content-audit', group: 'النظام والذكاء', icon: 'audit', permission: 'manage content audit' },
+	{ label: 'Google Search Console', href: '/dashboard/gsc', group: 'النظام والذكاء', icon: 'search', permission: 'manage content audit' },
 	// Deterministic tools (legacy scan, corruption, similarity, inventory) are a separate
 	// area from the AI hub above — see ContentAuditScanNav.astro. All four of its pages are
 	// AdminOnly, mirrored here the same way the Redis entry below mirrors its own page check.

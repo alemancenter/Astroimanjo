@@ -32,6 +32,10 @@ export interface ReadinessItem {
 	issues: string[];
 	problems: ReadinessProblem[];
 	primary_problem?: string;
+	/** Governance status derived server-side (see rulesregistry.DeriveReadinessState) —
+	 * critical_blocker | needs_improvement | human_decision_pending | internally_ready.
+	 * Separate from `level` (ready/review/weak), which stays for existing consumers. */
+	readiness_state?: string;
 	url: string;
 }
 
