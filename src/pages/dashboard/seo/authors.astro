@@ -1,0 +1,26 @@
+---
+import DashboardLayout from '../../../layouts/DashboardLayout.astro';
+import AuthorForm from '../../../components/dashboard/AuthorSeoForm.astro';
+import { requireDashboard } from '../../../lib/auth';
+import { apiFetch } from '../../../lib/api';
+
+const guard = await requireDashboard(Astro, 'manage seo');
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+const auth = { countryId: Astro.locals.countryId, cookieHeader: `token=${Astro.cookies.get('token')?.value}` };
+const result = await apiFetch<any[]>('/dashboard/seo/authors', auth);
+const authors = result.data || [];
+const success = Astro.url.searchParams.get('success');
+const error = Astro.url.searchParams.get('error');
+---
+<DashboardLayout title="ملفات المؤلفين" user={user}>
+	<div class="authors-page">
+		{success && <div class="author-note is-ok">تم حفظ ملف المؤلف.</div>}{error && <div class="author-note is-error">{error}</div>}
+		<header><div><a href="/dashboard/seo">ImanSEO</a><h1>المؤلفون وإشارات E-E-A-T</h1><p>سيرة وخبرات واعتمادات عامة تُستخدم في Person Schema وصفحات المحتوى دون كشف أي بيانات حساب خاصة.</p></div><strong>{authors.length} ملف</strong></header>
+		<section class="author-layout">
+			<main>{authors.map((author:any) => <details><summary><span>{author.image_url ? <img src={author.image_url} alt="" /> : <i>{author.public_name?.charAt(0)}</i>}</span><div><strong>{author.public_name}</strong><small>{author.headline || `المستخدم #${author.user_id}`}</small></div><b>{author.active ? 'نشط' : 'موقوف'}</b></summary><AuthorForm author={author} /></details>)}{!authors.length && <p class="empty">لم تُنشأ ملفات مؤلفين بعد.</p>}</main>
+			<aside><span>ملف جديد</span><h2>إضافة مؤلف</h2><p>استخدم رقم المستخدم الصحيح من إدارة المستخدمين. تُحفظ الهوية عالميًا في قاعدة المستخدمين الرئيسية.</p><AuthorForm /></aside>
+		</section>
+	</div>
+	<style>.authors-page{--u-line:#dce5ee;--u-ink:#17314b;--u-blue:#1a4d8f;display:grid;gap:.7rem;direction:rtl}.author-note{border:1px solid;border-radius:.55rem;padding:.55rem;font-size:.62rem}.author-note.is-ok{border-color:#b9e3d4;background:#f1faf7;color:#08765a}.author-note.is-error{border-color:#ecc8cc;background:#fff5f6;color:#a93440}.authors-page>header{display:flex;align-items:center;justify-content:space-between;border:1px solid var(--u-line);border-radius:.8rem;background:#fff;padding:.9rem}.authors-page>header a,.author-layout>aside>span{color:var(--u-blue);font-size:.57rem;font-weight:850}.authors-page h1{margin:.12rem 0;color:var(--u-ink);font-size:1.15rem}.authors-page>header p,.author-layout>aside>p{margin:0;color:#718096;font-size:.61rem}.authors-page>header>strong{border-radius:.4rem;background:#edf4fc;padding:.3rem .5rem;color:var(--u-blue);font-size:.62rem}.author-layout{display:grid;grid-template-columns:minmax(0,1fr) 22rem;align-items:start;gap:.65rem}.author-layout>main,.author-layout>aside{border:1px solid var(--u-line);border-radius:.7rem;background:#fff;padding:.7rem}.author-layout main>details{border-top:1px solid #edf1f5}.author-layout main>details:first-child{border:0}.author-layout summary{display:grid;cursor:pointer;grid-template-columns:auto 1fr auto;align-items:center;gap:.5rem;padding:.55rem;list-style:none}.author-layout summary>span{display:grid;width:2.2rem;height:2.2rem;overflow:hidden;place-items:center;border-radius:.5rem;background:#edf4fc}.author-layout summary img{width:100%;height:100%;object-fit:cover}.author-layout summary i{color:var(--u-blue);font-size:.8rem;font-style:normal;font-weight:900}.author-layout summary>div{display:grid}.author-layout summary strong{color:var(--u-ink);font-size:.63rem}.author-layout summary small{color:#7d8b9b;font-size:.52rem}.author-layout summary>b{border-radius:99rem;background:#e5f5ef;padding:.2rem .35rem;color:#08765a;font-size:.48rem}.author-layout>aside h2{margin:.1rem 0;color:var(--u-ink);font-size:.8rem}.empty{text-align:center;color:#718096;font-size:.6rem}:global(.dark) .authors-page{--u-line:#30465e;--u-ink:#edf4fa}:global(.dark) .authors-page>header,:global(.dark) .author-layout>main,:global(.dark) .author-layout>aside{background:#102744}@media(max-width:900px){.author-layout{grid-template-columns:1fr}}</style>
+</DashboardLayout>

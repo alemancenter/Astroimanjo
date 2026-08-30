@@ -358,13 +358,16 @@ export function clearSessionCookies(cookies: CookieJar): void {
  */
 export async function requireDashboard(
 	Astro: { redirect(path: string): Response; url: URL } & AuthContext,
-	permission?: string
+	permission?: string | string[]
 ): Promise<{ user: AuthUser } | { redirect: Response }> {
 	const user = await getCurrentUser(Astro);
 	if (!user) {
 		return { redirect: Astro.redirect(`/login?redirect_to=${encodeURIComponent(Astro.url.pathname)}`) };
 	}
-	if (!hasPermission(user, permission ?? 'access dashboard')) {
+	const allowed = Array.isArray(permission)
+		? permission.some((name) => hasPermission(user, name))
+		: hasPermission(user, permission ?? 'access dashboard');
+	if (!allowed) {
 		return { redirect: Astro.redirect(`/dashboard?error=${encodeURIComponent('ليست لديك الصلاحية اللازمة للوصول إلى هذه الصفحة.')}`) };
 	}
 	return { user };

@@ -1,0 +1,32 @@
+---
+import DashboardLayout from '../../../../layouts/DashboardLayout.astro';
+import { requireDashboard } from '../../../../lib/auth';
+import { apiFetch } from '../../../../lib/api';
+
+const guard = await requireDashboard(Astro, 'manage seo');
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+const { id } = Astro.params;
+if (!/^\d+$/.test(id || '')) return Astro.redirect('/dashboard/seo');
+const page = Math.max(1, Number(Astro.url.searchParams.get('page') || 1));
+const severity = ['error','warning','notice'].includes(Astro.url.searchParams.get('severity') || '') ? Astro.url.searchParams.get('severity')! : '';
+const auth = { countryId: Astro.locals.countryId, cookieHeader: `token=${Astro.cookies.get('token')?.value}` };
+const [runResult, issuesResult] = await Promise.all([
+	apiFetch<any>(`/dashboard/seo/audits/${id}`, auth),
+	apiFetch<any[]>(`/dashboard/seo/audits/${id}/issues`, { ...auth, params: { page, per_page: 50, severity } }),
+]);
+const run = runResult.data;
+const issues = issuesResult.data || [];
+const nf = new Intl.NumberFormat('ar-EG');
+const label = (value:string) => ({error:'خطأ',warning:'تحذير',notice:'ملاحظة'}[value] || value);
+---
+<DashboardLayout title={`تدقيق SEO #${id}`} user={user}>
+	<div class="seo-audit-detail">
+		<header><div><a href="/dashboard/seo">ImanSEO</a><h1>نتيجة التدقيق #{id}</h1><p>{run?.status === 'running' ? 'يعمل الفحص الآن، وستتحدث الصفحة تلقائيًا.' : run?.status === 'completed' ? 'اكتمل فحص المحتوى وحُفظت المشكلات للمراجعة.' : run?.error_message || 'تعذّر تحميل العملية.'}</p></div>{run?.status === 'running' && <span class="is-running">قيد التشغيل</span>}</header>
+		{run && <section class="audit-stats"><article><span>تم فحصه</span><strong>{nf.format(run.checked_urls || 0)} / {nf.format(run.total_urls || 0)}</strong></article><article class="is-error"><span>أخطاء</span><strong>{nf.format(run.errors || 0)}</strong></article><article class="is-warning"><span>تحذيرات</span><strong>{nf.format(run.warnings || 0)}</strong></article><article><span>ملاحظات</span><strong>{nf.format(run.notices || 0)}</strong></article></section>}
+		<nav><a href={`?severity=`} class:list={{active:!severity}}>الكل</a><a href="?severity=error" class:list={{active:severity==='error'}}>الأخطاء</a><a href="?severity=warning" class:list={{active:severity==='warning'}}>التحذيرات</a><a href="?severity=notice" class:list={{active:severity==='notice'}}>الملاحظات</a></nav>
+		<main>{issues.map((issue:any)=><article><i class={`is-${issue.severity}`}>{issue.severity==='error'?'!':issue.severity==='warning'?'△':'i'}</i><div><span>{label(issue.severity)} · {issue.content_type} #{nf.format(issue.content_id)}</span><strong>{issue.message}</strong><small>{issue.code}</small></div><a href={issue.content_type==='article'?`/dashboard/articles/${issue.content_id}/edit`:`/dashboard/posts/${issue.content_id}/edit`}>إصلاح</a></article>)}{!issues.length&&<p class="empty">لا توجد مشكلات في هذا العرض.</p>}</main>
+	</div>
+	{run?.status === 'running' && <script is:inline>setTimeout(() => location.reload(), 5000);</script>}
+	<style>.seo-audit-detail{--a-line:#dce5ee;--a-ink:#16304a;display:grid;gap:.7rem;direction:rtl}.seo-audit-detail>header{display:flex;align-items:center;justify-content:space-between;border:1px solid var(--a-line);border-radius:.8rem;background:#fff;padding:1rem}.seo-audit-detail header a{color:#1a4d8f;font-size:.62rem;font-weight:850}.seo-audit-detail h1{margin:.12rem 0;color:var(--a-ink);font-size:1.25rem}.seo-audit-detail header p{margin:0;color:#718096;font-size:.66rem}.seo-audit-detail header>span{border-radius:99rem;background:#e9f2fc;padding:.35rem .6rem;color:#1a4d8f;font-size:.6rem;font-weight:850}.audit-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:.55rem}.audit-stats article{border:1px solid var(--a-line);border-radius:.65rem;background:#fff;padding:.65rem}.audit-stats span{display:block;color:#718096;font-size:.56rem}.audit-stats strong{color:var(--a-ink);font-size:.9rem}.audit-stats .is-error{border-top:3px solid #c6434f}.audit-stats .is-warning{border-top:3px solid #d58c27}.seo-audit-detail>nav{display:flex;gap:.3rem}.seo-audit-detail>nav a{border:1px solid var(--a-line);border-radius:.4rem;background:#fff;padding:.35rem .6rem;color:#60758b;font-size:.58rem;font-weight:800}.seo-audit-detail>nav a.active{border-color:#1a4d8f;background:#1a4d8f;color:#fff}.seo-audit-detail>main{border:1px solid var(--a-line);border-radius:.75rem;background:#fff;padding:.7rem}.seo-audit-detail main>article{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:.55rem;border-top:1px solid #edf1f5;padding:.6rem}.seo-audit-detail main>article:first-child{border:0}.seo-audit-detail main i{display:grid;width:1.6rem;height:1.6rem;place-items:center;border-radius:50%;background:#eef2f6;color:#66778a;font-size:.6rem;font-style:normal;font-weight:900}.seo-audit-detail main i.is-error{background:#fee8ea;color:#ac3541}.seo-audit-detail main i.is-warning{background:#fff1df;color:#a66616}.seo-audit-detail main article>div{display:grid}.seo-audit-detail main span{color:#1a4d8f;font-size:.5rem}.seo-audit-detail main strong{color:var(--a-ink);font-size:.61rem}.seo-audit-detail main small{color:#8a97a6;font-size:.48rem}.seo-audit-detail main article>a{color:#1a4d8f;font-size:.56rem;font-weight:850}.empty{text-align:center;color:#718096;font-size:.65rem}:global(.dark) .seo-audit-detail{--a-line:#30455d;--a-ink:#eef4fa}:global(.dark) .seo-audit-detail>header,:global(.dark) .audit-stats article,:global(.dark) .seo-audit-detail>nav a,:global(.dark) .seo-audit-detail>main{background:#102744}@media(max-width:650px){.audit-stats{grid-template-columns:repeat(2,1fr)}} </style>
+</DashboardLayout>

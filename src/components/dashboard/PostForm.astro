@@ -2,14 +2,16 @@
 import 'quill/dist/quill.snow.css';
 import { COUNTRIES, getCountryById } from '../../lib/countries';
 import { assetUrl } from '../../lib/assets';
+import ImanSeoPanel from './ImanSeoPanel.astro';
 
 interface Props {
 	post?: any;
 	categories: any[];
 	countryId: string;
+	seo?: any;
 }
 
-const { post, categories, countryId } = Astro.props;
+const { post, categories, countryId, seo } = Astro.props;
 const currentCountry = getCountryById(countryId);
 const imageUrl = assetUrl(post?.image_url || post?.image, 480) || '';
 const keywordsValue = typeof post?.keywords === 'string'
@@ -85,21 +87,7 @@ const files: any[] = Array.isArray(post?.files) ? post.files : [];
 					<div><span class="post-step">02</span><h2>تحسين محركات البحث</h2><p>بيانات مختصرة تساعد المنشور على الظهور بصورة أفضل.</p></div>
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M4 18V9m5 9V5m5 13v-6m5 6V3M3 21h18" /></svg>
 				</div>
-				<div class="post-field">
-					<div class="post-label-row"><label for="meta_description">الوصف التعريفي</label><span id="post-meta-count">0 / 160</span></div>
-					<textarea id="meta_description" name="meta_description" maxlength="500" rows="3" placeholder="وصف قصير يظهر في نتائج البحث...">{post?.meta_description ?? ''}</textarea>
-					<small>عند تركه فارغًا سيتم توليده تلقائيًا من المحتوى.</small>
-				</div>
-				<div class="post-field">
-					<label for="keywords">الكلمات المفتاحية</label>
-					<input id="keywords" type="text" name="keywords" value={keywordsValue} placeholder="تعليم، أخبار، امتحانات" />
-					<small>افصل بين الكلمات باستخدام الفاصلة العربية.</small>
-				</div>
-				<div class="post-field">
-					<label for="alt">النص البديل للصورة</label>
-					<input id="alt" type="text" name="alt" maxlength="255" value={post?.alt ?? ''} placeholder="وصف واضح ومختصر للصورة" />
-					<small>عند تركه فارغًا سيُستخدم عنوان المنشور تلقائيًا.</small>
-				</div>
+				<ImanSeoPanel seo={seo} contentType="post" contentId={post?.id} legacyDescription={post?.meta_description ?? ''} legacyKeywords={keywordsValue} imageAlt={post?.alt ?? ''} includeImageAlt />
 			</section>
 		</main>
 
