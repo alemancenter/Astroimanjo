@@ -58,7 +58,9 @@ const integer = (form: FormData, name: string, fallback: number) => {
 export function seoPayloadFromForm(form: FormData) {
 	return {
 		seo_title: text(form, 'seo_title'),
-		meta_description: text(form, 'seo_meta_description'),
+		// The editor now has a single meta-description field (name="meta_description")
+		// that feeds both the content row and the SEO row, so they can never drift.
+		meta_description: text(form, 'meta_description'),
 		focus_keyword: text(form, 'seo_focus_keyword'),
 		additional_keywords: text(form, 'seo_additional_keywords'),
 		canonical_url: text(form, 'seo_canonical_url'),

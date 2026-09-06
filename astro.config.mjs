@@ -92,6 +92,18 @@ export default defineConfig({
   cache: {
     provider: memoryCache(),
   },
+
+  // The ImanSEO + content-audit page sprawl (16 routes) was replaced by one page,
+  // /dashboard/content-quality. These 301s keep every old bookmark / inbound link
+  // working. Only applies where no page file matches — the old .astro files are
+  // deleted.
+  redirects: {
+    '/dashboard/seo/search-console': { status: 301, destination: '/dashboard/content-quality?tab=search' },
+    '/dashboard/seo': { status: 301, destination: '/dashboard/content-quality' },
+    '/dashboard/seo/[...slug]': { status: 301, destination: '/dashboard/content-quality' },
+    '/dashboard/content-audit': { status: 301, destination: '/dashboard/content-quality' },
+    '/dashboard/content-audit/[...slug]': { status: 301, destination: '/dashboard/content-quality' },
+  },
   routeRules: {
     '/[countryCode]/classes': { maxAge: 300, swr: 3600, tags: ['classes'] },
     '/[countryCode]/categories': { maxAge: 300, swr: 3600, tags: ['categories'] },

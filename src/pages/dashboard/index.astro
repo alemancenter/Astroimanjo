@@ -95,7 +95,7 @@ const topItems = [
 const quickActions = [
 	{ label: 'إضافة مقال', note: 'محتوى تعليمي جديد', href: '/dashboard/articles/new', icon: 'article', tone: 'blue', permission: 'manage articles' },
 	{ label: 'إضافة منشور', note: 'خبر أو إعلان عام', href: '/dashboard/posts/new', icon: 'post', tone: 'green', permission: 'manage posts' },
-	{ label: 'تدقيق المحتوى', note: 'الجودة وجاهزية AdSense', href: '/dashboard/content-audit', icon: 'audit', tone: 'orange', permission: 'manage content audit' },
+	{ label: 'صحة المحتوى', note: 'حالة كل مقال ومنشور', href: '/dashboard/content-quality', icon: 'audit', tone: 'orange', permission: 'manage content audit' },
 	{ label: 'إدارة الملفات', note: 'المرفقات والتنزيلات', href: '/dashboard/files', icon: 'files', tone: 'violet', permission: 'manage files' },
 	{ label: 'مركز الأمان', note: 'التنبيهات والعناوين', href: '/dashboard/security', icon: 'security', tone: 'red', permission: 'manage security' },
 	{ label: 'إعدادات المنصة', note: 'البريد والتكاملات', href: '/dashboard/settings', icon: 'settings', tone: 'dark', permission: 'manage settings' },
@@ -148,7 +148,7 @@ const activityIcon = (type: unknown) => String(type || '').toLowerCase().include
 
 		<div class="insights-grid">
 			<section class="panel content-health">
-				<header class="panel-heading"><div><span>جاهزية النشر</span><h2>حالة المحتوى</h2><p>نسبة المقالات المنشورة إلى المسودات.</p></div><a href="/dashboard/content-audit">فتح التدقيق</a></header>
+				<header class="panel-heading"><div><span>جاهزية النشر</span><h2>حالة المحتوى</h2><p>نسبة المقالات المنشورة إلى المسودات.</p></div><a href="/dashboard/content-quality">فتح التدقيق</a></header>
 				<div class="content-health-body"><div class="content-donut" style={`--publish:${publishRatio * 3.6}deg`}><span><strong>{formatNumber(publishRatio)}%</strong><small>منشور</small></span></div><div class="content-counts"><div><i class="published"></i><span>المقالات المنشورة</span><strong>{formatNumber(publishedArticles)}</strong></div><div><i class="draft"></i><span>المسودات</span><strong>{formatNumber(draftArticles)}</strong></div><div><i class="total"></i><span>إجمالي المحتوى</span><strong>{formatNumber(contentTotal)}</strong></div></div></div>
 				<footer><span>{publishRatio >= 80 ? 'نسبة النشر جيدة، حافظ على مراجعة الجودة.' : 'توجد مسودات تحتاج إلى مراجعة واستكمال.'}</span><b class:list={{ good: publishRatio >= 80 }}>{publishRatio >= 80 ? 'مستقر' : 'يحتاج متابعة'}</b></footer>
 			</section>

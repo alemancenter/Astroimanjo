@@ -84,7 +84,10 @@ const jsonLd = post ? [
 		],
 	},
 ] : undefined;
-const effectiveJsonLd = seo?.schema_json && jsonLd ? [seo.schema_json, jsonLd[1]] : jsonLd;
+// Admin-authored JSON-LD is added alongside the automatic Article + Breadcrumb
+// nodes, not in place of them — replacing the Article node would silently drop
+// headline/author/datePublished/publisher.
+const effectiveJsonLd = seo?.schema_json && jsonLd ? [...jsonLd, seo.schema_json] : jsonLd;
 ---
 
 <Layout title={seo?.title || post?.title || 'المنشور'} description={description} canonical={canonicalUrl} image={seoOGImage} jsonLd={effectiveJsonLd} settings={settings} robots={seo?.robots} ogTitle={seo?.og_title} ogDescription={seo?.og_description} ogImage={seoOGImage} ogType="article" twitterTitle={seo?.twitter_title} twitterDescription={seo?.twitter_description} twitterImage={seoTwitterImage} qualityIndexable={adStatusResult.ok ? adStatusResult.data?.indexable : undefined} enableAds={adsEligible}>
