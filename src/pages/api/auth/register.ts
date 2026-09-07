@@ -6,13 +6,25 @@ export const prerender = false;
 
 export const POST: APIRoute = async ({ request, cookies, locals, redirect }) => {
 	const form = await request.formData();
-	const name = String(form.get('name') || '').trim();
+	const name = String(form.get('name') || '').replace(/\s+/g, ' ').trim();
 	const email = String(form.get('email') || '').trim();
 	const password = String(form.get('password') || '');
 	const passwordConfirmation = String(form.get('password_confirmation') || '');
+	const honeypot = String(form.get('website') || '').trim();
+
+	// Honeypot filled → automated client. Bounce without hitting the backend.
+	if (honeypot) {
+		return redirect(`/register?error=${encodeURIComponent('تعذّر إنشاء الحساب')}`);
+	}
 
 	if (!name || !email || !password) {
 		return redirect(`/register?error=${encodeURIComponent('يرجى تعبئة جميع الحقول المطلوبة')}`);
+	}
+
+	// Fast client-facing reject for the spam pattern (links / over-long name); the
+	// backend enforces the full rule set.
+	if (name.length > 60 || /(https?:\/\/|www\.|\bt\.me\b|tinyurl|bit\.ly|@)/i.test(name)) {
+		return redirect(`/register?error=${encodeURIComponent('الاسم غير صالح — اكتب اسمك فقط بدون روابط')}`);
 	}
 
 	const res = await apiRawFetch('/auth/register', {
@@ -24,6 +36,7 @@ export const POST: APIRoute = async ({ request, cookies, locals, redirect }) => 
 			email,
 			password,
 			password_confirmation: passwordConfirmation,
+			website: honeypot,
 		}),
 	});
 	const json: any = await res.json().catch(() => null);

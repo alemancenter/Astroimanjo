@@ -1,3 +1,4 @@
+import { sessionMaxAge, hasSessionCredential } from "./session-policy";
 import { createHash } from 'node:crypto';
 import { apiFetch } from './api';
 
@@ -180,10 +181,10 @@ async function resolveCurrentUser(
 	countryId: string,
 	canPersistCookies: boolean,
 ): Promise<UserResolution> {
-	const result = await apiFetch<AuthUser>('/auth/user', {
+	const result = token ? await apiFetch<AuthUser>('/auth/user', {
 		countryId,
 		cookieHeader: `token=${token}`,
-	});
+	}) : { ok: false, data: null, status: 401 };
 
 	if (result.ok) {
 		return { user: result.data };
@@ -251,11 +252,11 @@ async function resolveCurrentUser(
 export async function getCurrentUser(
 	context: AuthContext,
 ): Promise<AuthUser | null> {
-	const token = context.cookies.get('token')?.value;
-	if (!token) return null;
+	const token = context.cookies.get('token')?.value ?? "";
 
 	const refreshToken =
 		context.cookies.get('refresh_token')?.value;
+ if (!hasSessionCredential(token, refreshToken)) return null;
 
 	const countryId = context.locals?.countryId ?? '';
 	const canPersistCookies = Boolean(context.cookies.set);
@@ -329,7 +330,7 @@ const isProd = import.meta.env.PROD;
 /** Mirrors the backend's own cookie lifetimes (JWT_EXPIRE_HOURS=24, JWT_REFRESH_HOURS=168) — see back/.env. */
 export function setSessionCookies(cookies: CookieJar, token: string | null, refreshToken: string | null): void {
 	if (token) {
-		cookies.set('token', token, { httpOnly: true, secure: isProd, sameSite: 'lax', path: '/', maxAge: 60 * 60 * 24 });
+		cookies.set('token', token, { httpOnly: true, secure: isProd, sameSite: 'lax', path: '/', maxAge: sessionMaxAge(token, 60 * 60 * 24) });
 	}
 	if (refreshToken) {
 		cookies.set('refresh_token', refreshToken, {
@@ -337,7 +338,7 @@ export function setSessionCookies(cookies: CookieJar, token: string | null, refr
 			secure: isProd,
 			sameSite: 'lax',
 			path: '/',
-			maxAge: 60 * 60 * 24 * 7,
+			maxAge: sessionMaxAge(refreshToken, 60 * 60 * 24 * 7),
 		});
 	}
 }
@@ -358,13 +359,16 @@ export function clearSessionCookies(cookies: CookieJar): void {
  */
 export async function requireDashboard(
 	Astro: { redirect(path: string): Response; url: URL } & AuthContext,
-	permission?: string
+	permission?: string | string[]
 ): Promise<{ user: AuthUser } | { redirect: Response }> {
 	const user = await getCurrentUser(Astro);
 	if (!user) {
 		return { redirect: Astro.redirect(`/login?redirect_to=${encodeURIComponent(Astro.url.pathname)}`) };
 	}
-	if (!hasPermission(user, permission ?? 'access dashboard')) {
+	const allowed = Array.isArray(permission)
+		? permission.some((name) => hasPermission(user, name))
+		: hasPermission(user, permission ?? 'access dashboard');
+	if (!allowed) {
 		return { redirect: Astro.redirect(`/dashboard?error=${encodeURIComponent('ليست لديك الصلاحية اللازمة للوصول إلى هذه الصفحة.')}`) };
 	}
 	return { user };

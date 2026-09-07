@@ -47,9 +47,18 @@ interface Props {
 	 * Layout fetches normally.
 	 */
 	settings?: Record<string, string>;
+	robots?: string;
+	ogTitle?: string;
+	ogDescription?: string;
+	ogImage?: string;
+	ogType?: 'website' | 'article';
+	twitterTitle?: string;
+	twitterDescription?: string;
+	twitterImage?: string;
+	qualityIndexable?: boolean;
 }
 
-const { title, description, canonical, image, noindex, jsonLd, hreflangSafe, enableAds = false, settings: prefetchedSettings } = Astro.props;
+const { title, description, canonical, image, noindex, jsonLd, hreflangSafe, enableAds = false, settings: prefetchedSettings, robots, ogTitle, ogDescription, ogImage, ogType, twitterTitle, twitterDescription, twitterImage, qualityIndexable } = Astro.props;
 const settings = prefetchedSettings ?? (await apiFetch<Record<string, string>>('/front/settings', { countryId: Astro.locals.countryId })).data ?? {};
 const siteName = settings.site_name?.trim() || 'موقع الإيمان التعليمي';
 const siteLogo = assetUrl(settings.site_logo?.trim(), 96);
@@ -182,7 +191,13 @@ const socialLinks = {
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=20260815" />
 		<meta name="theme-color" content="#1D4ED8" />
 		<meta name="generator" content={Astro.generator} />
-		<SeoHead title={effectiveTitle} description={effectiveDescription} canonical={canonical} image={effectiveImage} noindex={noindex} jsonLd={jsonLd} siteName={siteName} hreflangSafe={hreflangSafe} />
+		<SeoHead title={effectiveTitle} description={effectiveDescription} canonical={canonical} image={effectiveImage} noindex={noindex} jsonLd={jsonLd} siteName={siteName} hreflangSafe={hreflangSafe} robots={robots} ogTitle={ogTitle} ogDescription={ogDescription} ogImage={ogImage} ogType={ogType} twitterTitle={twitterTitle} twitterDescription={twitterDescription} twitterImage={twitterImage} twitterSite={settings.twitter_handle?.trim()} qualityIndexable={qualityIndexable} />
+		{settings.google_site_verification?.trim() && <meta name="google-site-verification" content={settings.google_site_verification.trim()} />}
+		{settings.bing_site_verification?.trim() && <meta name="msvalidate.01" content={settings.bing_site_verification.trim()} />}
+		{settings.yandex_verification?.trim() && <meta name="yandex-verification" content={settings.yandex_verification.trim()} />}
+		{settings.pinterest_verification?.trim() && <meta name="p:domain_verify" content={settings.pinterest_verification.trim()} />}
+		{settings.baidu_site_verification?.trim() && <meta name="baidu-site-verification" content={settings.baidu_site_verification.trim()} />}
+		{settings.rss_enabled !== 'false' && <link rel="alternate" type="application/rss+xml" title={`${siteName} RSS`} href={`/${Astro.locals.countryCode || 'jo'}/rss.xml`} />}
 
 		{/* Admin-configured brand colors (Dashboard → الإعدادات → الشعار والألوان). Placed after
 		   global.css so these :root overrides win the cascade; a full 11-step shade ramp is

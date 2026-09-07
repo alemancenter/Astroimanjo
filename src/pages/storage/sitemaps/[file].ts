@@ -8,18 +8,12 @@ const INTERNAL_API_URL =
 const INTERNAL_ORIGIN =
   new URL(INTERNAL_API_URL).origin;
 
-const ALLOWED_FILES = new Set([
-  'sitemap_index_jo.xml',
-  'sitemap_articles_jo.xml',
-  'sitemap_post_jo.xml',
-  'sitemap_static_jo.xml',
-  'sitemap_download_jo.xml',
-]);
+const ALLOWED_FILE = /^sitemap_(?:index|articles|post|static|images|videos|news)_(?:jo|sa|eg|ps)\.xml$/;
 
 export const GET: APIRoute = async ({ params }) => {
   const file = params.file || '';
 
-  if (!ALLOWED_FILES.has(file)) {
+  if (!ALLOWED_FILE.test(file)) {
     return new Response(
       'Not found',
       {

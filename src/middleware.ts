@@ -1,6 +1,7 @@
+import { isAllowedMutation } from "./lib/request-security";
 import { defineMiddleware } from 'astro:middleware';
 import type { APIContext, MiddlewareNext } from 'astro';
-import { DEFAULT_COUNTRY_ID, getCountryByCode, isValidCountryId, isValidCountryCode } from './lib/countries';
+import { DEFAULT_COUNTRY_ID, getCountryByCode, getCountryById, isValidCountryId, isValidCountryCode } from './lib/countries';
 import { apiFetch } from './lib/api';
 import { getCurrentUser, isAdmin } from './lib/auth';
 import { runWithRequestContext } from './lib/request-context';
@@ -50,6 +51,13 @@ export const onRequest = defineMiddleware(async (context, next) => {
 });
 
 async function handleRequest(context: APIContext, next: MiddlewareNext) {
+ if (!context.isPrerendered && !isAllowedMutation(context.request, import.meta.env.PROD ? import.meta.env.PUBLIC_SITE_URL : context.url.origin)) {
+  return new Response('الطلب صادر من مصدر غير مسموح', {status: 403, headers: {'Cache-Control':'no-store'}});
+ }
+ // Refresh once before BFF handlers read the cookie jar. Public guest traffic is untouched.
+ if (!context.isPrerendered && context.url.pathname.startsWith('/api/') && !context.url.pathname.startsWith('/api/auth/') && context.cookies.get('refresh_token')) {
+  await getCurrentUser(context);
+ }
         if (!context.isPrerendered && !context.url.pathname.startsWith('/dashboard') && !context.url.pathname.startsWith('/api')) {
                 const pageParam = context.url.searchParams.get('page');
                 if (pageParam === '1' && !/^\/[a-z]{2}\/posts\/category\/\d+\/?$/.test(context.url.pathname)) {
@@ -104,6 +112,7 @@ async function handleRequest(context: APIContext, next: MiddlewareNext) {
 		}
 
 		context.locals.countryId = countryId;
+		context.locals.countryCode = getCountryById(countryId).code;
 	}
 
 	if (!context.isPrerendered && !isMaintenanceExempt(context.url.pathname)) {
@@ -111,5 +120,33 @@ async function handleRequest(context: APIContext, next: MiddlewareNext) {
 		if (maintenanceResponse) return maintenanceResponse;
 	}
 
-	return next();
+	const response = await next();
+	if (!context.isPrerendered && response.status === 404 && ['GET', 'HEAD'].includes(context.request.method) && shouldTrackSEO404(context.url.pathname)) {
+		const resolved = await apiFetch<{ target_url: string; status_code: number }>('/seo/redirect', {
+			countryId: context.locals.countryId,
+			params: { path: context.url.pathname, query: context.url.searchParams.toString() },
+			timeoutMs: 2_000,
+		});
+		if (resolved.ok && resolved.data?.status_code === 410) {
+			return new Response(response.body, { status: 410, headers: response.headers });
+		}
+		if (resolved.ok && resolved.data?.target_url) {
+			const target = new URL(resolved.data.target_url, context.url.origin);
+			const location = target.origin === context.url.origin ? `${target.pathname}${target.search}${target.hash}` : target.toString();
+			const status = [301, 302, 307, 308].includes(resolved.data.status_code) ? resolved.data.status_code as 301 | 302 | 307 | 308 : 301;
+			// URL serialisation percent-encodes Arabic path bytes before they enter the
+			// Location header, avoiding Node's ByteString header exception.
+			return context.redirect(location, status);
+		}
+		void apiFetch('/seo/404', {
+			method: 'POST', countryId: context.locals.countryId, timeoutMs: 2_000,
+			body: { path: context.url.pathname, query: context.url.searchParams.toString(), referrer: context.request.headers.get('referer') || '' },
+		}).catch(() => undefined);
+	}
+	return response;
+}
+
+function shouldTrackSEO404(pathname: string): boolean {
+	if (['/favicon.ico', '/robots.txt', '/sitemap.xml'].includes(pathname)) return false;
+	return !['/api', '/dashboard', '/_astro', '/storage', '/indexnow'].some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }

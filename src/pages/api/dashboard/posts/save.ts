@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { apiRawFetch } from '../../../../lib/api';
 import { generateMetaDescription, generateKeywords } from '../../../../lib/seo-autofill';
+import { seoPayloadFromForm } from '../../../../lib/iman-seo';
 
 export const prerender = false;
 
@@ -57,18 +58,35 @@ export const POST: APIRoute = async ({ request, cookies, locals, redirect, cache
 	// The AI-source file (if any) was uploaded immediately, before the post existed, via
 	// files/upload.ts with no post_id set — see PostForm.astro. Now that a real post id
 	// exists, associate it so it shows up as a normal attachment too, not just AI input.
+ let seoWarning = '';
 	const sourceFileId = String(incoming.get('ai_source_file_id') || '').trim();
 	const postId = isEdit ? id : json?.data?.id;
 	if (sourceFileId && postId) {
-		await apiRawFetch(`/dashboard/files/${sourceFileId}`, {
+		const linked = await apiRawFetch(`/dashboard/files/${sourceFileId}`, {
 			method: 'PUT',
 			countryId: locals.countryId,
 			cookieHeader: `token=${token}`,
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ post_id: Number(postId) }),
 		}).catch(() => null);
+ if (!linked?.ok) seoWarning = 'حُفظ المحتوى، لكن تعذّر ربط الملف المصدر؛ يمكنك ربطه من صفحة التعديل.';
 	}
 
-	await cache.invalidate({ tags: ['posts'] });
-	return redirect('/dashboard/posts?success=1');
+	
+	if (postId) {
+		const seoRes = await apiRawFetch(`/dashboard/seo/metadata/post/${postId}`, {
+			method: 'PUT',
+			countryId: locals.countryId,
+			cookieHeader: `token=${token}`,
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(seoPayloadFromForm(incoming)),
+		}).catch(() => null);
+		if (!seoRes?.ok) {
+			const seoJson: any = await seoRes?.json().catch(() => null);
+			seoWarning += (seoWarning ? ' ' : '') + (seoJson?.message || 'حُفظ المنشور، لكن تعذّر حفظ إعدادات SEO');
+		}
+	}
+
+	await cache.invalidate({ tags: ['posts'] }).catch(() => undefined);
+	return redirect(seoWarning ? `/dashboard/posts?success=1&seo_warning=${encodeURIComponent(seoWarning)}` : '/dashboard/posts?success=1');
 };

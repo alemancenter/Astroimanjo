@@ -82,36 +82,7 @@ export async function proxyDownload(
 		}
 		if (signedResponse.ok && signedResponse.body) return { ok: true, response: proxiedFileResponse(signedResponse) };
 
-		// Production still contains Laravel-era files under the public site's storage root.
-		// Fall back only after the signed API validates the file/token but cannot read its disk path.
-		if (signedResponse.status !== 404) {
-			return { ok: false, status: signedResponse.status, message: 'تعذّر قراءة الملف من الخادم.' };
-		}
-
-		const infoResponse = await apiRawFetch(`/files/${encodeURIComponent(fileId)}/info`, { countryId });
-		const infoPayload: any = await infoResponse.json().catch(() => null);
-		const file = infoPayload?.data?.file;
-		const actualKind = infoPayload?.data?.type;
-		if (!infoResponse.ok || !file || (actualKind && actualKind !== kind)) {
-			return { ok: false, status: 404, message: 'الملف المطلوب غير موجود.' };
-		}
-
-		const legacyUrl = safeLegacyStorageUrl(file.file_path);
-		if (!legacyUrl) return { ok: false, status: 404, message: 'مسار الملف غير صالح.' };
-
-		const legacyResponse = await fetch(legacyUrl, {
-			headers: { Accept: 'application/octet-stream,*/*' },
-			redirect: 'error',
-			signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
-		});
-		if (!legacyResponse.ok || !legacyResponse.body) {
-			return { ok: false, status: legacyResponse.status, message: 'الملف مسجل لكن نسخته غير متوفرة في التخزين.' };
-		}
-
-		return {
-			ok: true,
-			response: proxiedFileResponse(legacyResponse, file.file_name, file.mime_type),
-		};
+        return { ok: false, status: signedResponse.status, message: 'الملف غير متوفر في التخزين، يرجى التواصل مع الإدارة.' };
 	} catch (error) {
 		console.error(`[download-proxy] ${kind} file ${fileId} failed:`, error);
 		return { ok: false, status: 502, message: 'تعذّر الاتصال بخادم الملفات، حاول مرة أخرى.' };

@@ -10,10 +10,11 @@ if ('redirect' in guard) return guard.redirect;
 const { user } = guard;
 
 const { id } = Astro.params;
-const result = await apiFetch<any>(`/dashboard/articles/${id}/edit`, {
-	countryId: Astro.locals.countryId,
-	cookieHeader: `token=${Astro.cookies.get('token')?.value}`,
-});
+const auth = { countryId: Astro.locals.countryId, cookieHeader: `token=${Astro.cookies.get('token')?.value}` };
+const [result, seoResult] = await Promise.all([
+	apiFetch<any>(`/dashboard/articles/${id}/edit`, auth),
+	apiFetch<any>(`/dashboard/seo/metadata/article/${id}`, auth),
+]);
 const data = result.data;
 const article = data?.data;
 ---
@@ -24,7 +25,7 @@ const article = data?.data;
 		!result.ok || !article ? (
 			<p class="text-red-600 dark:text-red-400">{result.ok ? 'المقال غير موجود.' : result.message}</p>
 		) : (
-			<ArticleForm article={article} classes={data?.classes ?? []} countryId={Astro.locals.countryId} />
+			<ArticleForm article={article} seo={seoResult.data} classes={data?.classes ?? []} countryId={Astro.locals.countryId} />
 		)
 	}
 </DashboardLayout>

@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { apiRawFetch } from '../../../../lib/api';
 import { generateMetaDescription, generateKeywords } from '../../../../lib/seo-autofill';
+import { seoPayloadFromForm } from '../../../../lib/iman-seo';
 
 export const prerender = false;
 
@@ -67,26 +68,44 @@ export const POST: APIRoute = async ({ request, cookies, locals, redirect, cache
 	// The AI-source file (if any) was uploaded immediately, before the article existed, via
 	// files/upload.ts with no article_id set — see ArticleForm.astro. Now that a real article
 	// id exists, associate it so it shows up as a normal attachment too, not just AI input.
+ let seoWarning = '';
 	const sourceFileId = String(form.get('ai_source_file_id') || '').trim();
 	const articleId = isEdit ? id : json?.data?.id;
 	if (sourceFileId && articleId) {
-		await apiRawFetch(`/dashboard/files/${sourceFileId}`, {
+		const linked = await apiRawFetch(`/dashboard/files/${sourceFileId}`, {
 			method: 'PUT',
 			countryId: locals.countryId,
 			cookieHeader: `token=${token}`,
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ article_id: Number(articleId) }),
 		}).catch(() => null);
+ if (!linked?.ok) seoWarning = 'حُفظ المحتوى، لكن تعذّر ربط الملف المصدر؛ يمكنك ربطه من صفحة التعديل.';
+	}
+
+	
+	if (articleId) {
+		const seoRes = await apiRawFetch(`/dashboard/seo/metadata/article/${articleId}`, {
+			method: 'PUT',
+			countryId: locals.countryId,
+			cookieHeader: `token=${token}`,
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(seoPayloadFromForm(form)),
+		}).catch(() => null);
+		if (!seoRes?.ok) {
+			const seoJson: any = await seoRes?.json().catch(() => null);
+			seoWarning += (seoWarning ? ' ' : '') + (seoJson?.message || 'حُفظ المقال، لكن تعذّر حفظ إعدادات SEO');
+		}
 	}
 
 	// Article/file counts roll up into the parent class and subject pages too.
-	await cache.invalidate({ tags: ['articles', 'classes', 'subjects'] });
+	await cache.invalidate({ tags: ['articles', 'classes', 'subjects'] }).catch(() => undefined);
 
-	if (isAjax) return jsonResponse({ success: true, id: json?.data?.id }, 200);
+	if (isAjax) return jsonResponse({ success: true, id: json?.data?.id, seo_warning: seoWarning || undefined }, 200);
 
 	// New articles land on their own edit page (not the list) — that's where file
 	// attachments can actually be added, and there's no reason to make the admin
 	// navigate there manually right after creating it.
 	const newId = json?.data?.id;
-	return redirect(isEdit || !newId ? '/dashboard/articles?success=1' : `/dashboard/articles/${newId}/edit?success=1`);
+	const destination = isEdit || !newId ? '/dashboard/articles?success=1' : `/dashboard/articles/${newId}/edit?success=1`;
+	return redirect(seoWarning ? `${destination}&seo_warning=${encodeURIComponent(seoWarning)}` : destination);
 };

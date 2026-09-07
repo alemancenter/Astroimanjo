@@ -1,283 +1,50 @@
 import type { APIRoute } from 'astro';
 import sharp from 'sharp';
-
+import { readBoundedBody } from '../../lib/bounded-body';
+import { safeInternalStorageUrl } from '../../lib/image-source';
 export const prerender = false;
-
-/*
- * Images are stored by the Go backend and exposed through /storage.
- *
- * Astro and Go run on the same server, so the image proxy must fetch the
- * source through the private loopback connection rather than making an
- * unnecessary public HTTPS round trip through api.imanjo.com/Nginx.
- */
-const INTERNAL_API_URL =
-  import.meta.env.INTERNAL_API_URL || 'http://127.0.0.1:8187/api';
-
-let INTERNAL_STORAGE_ORIGIN = 'http://127.0.0.1:8187';
-
-try {
-  INTERNAL_STORAGE_ORIGIN = new URL(INTERNAL_API_URL).origin;
-} catch {
-  // Safe production fallback remains loopback-only.
+const origin = new URL(import.meta.env.INTERNAL_API_URL || 'http://127.0.0.1:8082/api').origin;
+const widths = [96, 160, 320, 480, 640, 960, 1200, 1600, 2000];
+const cache = new Map<string, {body: Buffer; expires: number}>();
+let bytes = 0;
+const flights = new Map<string, Promise<Buffer>>();
+const MAX_CACHE_BYTES = 32 * 1024 * 1024;
+function remember(key: string, body: Buffer) {
+ if (body.length > MAX_CACHE_BYTES) return;
+ const old = cache.get(key); if (old) { bytes -= old.body.length; cache.delete(key); }
+ for (const [k, entry] of cache) {
+  if (bytes + body.length <= MAX_CACHE_BYTES && cache.size < 256) break;
+  bytes -= entry.body.length; cache.delete(k);
+ }
+ cache.set(key, {body, expires: Date.now() + 3600_000}); bytes += body.length;
 }
-
-const FETCH_TIMEOUT_MS = 10_000;
-const MAX_WIDTH = 2000;
-const MAX_UNREQUESTED_WIDTH = 4000;
-
-
-/**
- * Build a storage URL without permitting traversal or arbitrary URL fetching.
- *
- * Accepted examples:
- *   settings/image.png
- *   images/posts/image.jpg
- *   posts/legacy-image.jpg
- *   storage/images/posts/image.jpg
- */
-function safeInternalStorageUrl(rawPath: string | null): string | null {
-  if (!rawPath || rawPath.length > 4096) return null;
-
-  let path = rawPath.trim();
-
-  if (!path) return null;
-
-  // Reject absolute/external protocols:
-  // http:, https:, file:, data:, javascript:, etc.
-  if (/^[a-z][a-z0-9+.-]*:/i.test(path)) return null;
-
-  // Normalize an optional leading /storage/.
-  path = path
-    .replace(/^\/?storage\//, '')
-    .replace(/^\/+/, '');
-
-  if (
-    !path ||
-    path.includes('\0') ||
-    path.includes('\\')
-  ) {
-    return null;
-  }
-
-  const segments = path.split('/');
-
-  if (
-    segments.some(
-      (segment) =>
-        !segment ||
-        segment === '.' ||
-        segment === '..'
-    )
-  ) {
-    return null;
-  }
-
-  /*
-   * Decode each segment twice to catch encoded and double-encoded traversal:
-   * %2e%2e
-   * %252e%252e
-   * %2f
-   * %255c
-   */
-  for (const segment of segments) {
-    let decoded = segment;
-
-    for (let i = 0; i < 2; i++) {
-      try {
-        decoded = decodeURIComponent(decoded);
-      } catch {
-        return null;
-      }
-
-      if (
-        decoded === '.' ||
-        decoded === '..' ||
-        decoded.includes('/') ||
-        decoded.includes('\\') ||
-        decoded.includes('\0')
-      ) {
-        return null;
-      }
-    }
-  }
-
-  const encodedPath = segments
-    .map((segment) => encodeURIComponent(segment))
-    .join('/');
-
-  return `${INTERNAL_STORAGE_ORIGIN}/storage/${encodedPath}`;
+async function transform(source: string, width: number): Promise<Buffer> {
+ const response = await fetch(source, {signal: AbortSignal.timeout(10_000), redirect:'error', headers:{Accept:'image/*'}});
+ if (!response.ok || !response.headers.get('content-type')?.startsWith('image/')) {
+  await response.body?.cancel(); throw new Error('Image unavailable');
+ }
+ const input = await readBoundedBody(response, 10 * 1024 * 1024);
+ return sharp(input, {limitInputPixels: 40_000_000}).rotate().resize({width, withoutEnlargement:true}).webp({quality:82}).timeout({seconds:10}).toBuffer();
 }
-
-
-export const GET: APIRoute = async ({ url }) => {
-  const sourceUrl = safeInternalStorageUrl(
-    url.searchParams.get('src')
-  );
-
-  if (!sourceUrl) {
-    return new Response('Not found', {
-      status: 404,
-    });
-  }
-
-
-  // -------------------------------------------------------
-  // Width validation
-  // -------------------------------------------------------
-
-  const rawWidth = url.searchParams.get('w');
-
-  let requestedWidth: number | undefined;
-
-  if (rawWidth) {
-    const parsed = Number.parseInt(rawWidth, 10);
-
-    if (
-      !Number.isFinite(parsed) ||
-      parsed <= 0
-    ) {
-      return new Response('Invalid width', {
-        status: 400,
-      });
-    }
-
-    requestedWidth = Math.min(
-      parsed,
-      MAX_WIDTH
-    );
-  }
-
-
-  // -------------------------------------------------------
-  // Fetch original image from private Go storage endpoint
-  // -------------------------------------------------------
-
-  const controller = new AbortController();
-
-  const timeout = setTimeout(
-    () => controller.abort(),
-    FETCH_TIMEOUT_MS
-  );
-
-  let upstream: Response;
-
-  try {
-    upstream = await fetch(sourceUrl, {
-      signal: controller.signal,
-      headers: {
-        Accept: 'image/*',
-      },
-    });
-  } catch {
-    clearTimeout(timeout);
-
-    return new Response(
-      'Image source unavailable',
-      {
-        status: 502,
-      }
-    );
-  }
-
-  clearTimeout(timeout);
-
-
-  if (!upstream.ok) {
-    return new Response(
-      'Not found',
-      {
-        status:
-          upstream.status === 404
-            ? 404
-            : 502,
-      }
-    );
-  }
-
-
-  // Never process arbitrary non-image data through Sharp.
-  const contentType =
-    upstream.headers.get('content-type') || '';
-
-  if (
-    !contentType
-      .toLowerCase()
-      .startsWith('image/')
-  ) {
-    return new Response(
-      'Not found',
-      {
-        status: 404,
-      }
-    );
-  }
-
-
-  // -------------------------------------------------------
-  // Read source
-  // -------------------------------------------------------
-
-  let buffer: Buffer;
-
-  try {
-    buffer = Buffer.from(
-      await upstream.arrayBuffer()
-    );
-  } catch {
-    return new Response(
-      'Image source unavailable',
-      {
-        status: 502,
-      }
-    );
-  }
-
-
-  // -------------------------------------------------------
-  // Optimize image
-  // -------------------------------------------------------
-
-  try {
-    let pipeline = sharp(buffer).rotate();
-
-    if (requestedWidth) {
-      pipeline = pipeline.resize({
-        width: requestedWidth,
-        withoutEnlargement: true,
-      });
-    } else {
-      pipeline = pipeline.resize({
-        width: MAX_UNREQUESTED_WIDTH,
-        withoutEnlargement: true,
-      });
-    }
-
-    const output = await pipeline
-      .webp({
-        quality: 82,
-      })
-      .toBuffer();
-
-    return new Response(output, {
-      status: 200,
-
-      headers: {
-        'Content-Type': 'image/webp',
-
-        /*
-         * src paths are immutable upload paths in normal use.
-         * Browser/CDN may therefore cache the optimized result.
-         */
-        'Cache-Control':
-          'public, max-age=31536000, immutable',
-      },
-    });
-  } catch {
-    return new Response(
-      'Image processing failed',
-      {
-        status: 500,
-      }
-    );
-  }
+export const GET: APIRoute = async ({url}) => {
+ const source = safeInternalStorageUrl(url.searchParams.get('src'), origin);
+ if (!source) return new Response('Not found', {status:404});
+ const raw = url.searchParams.get('w');
+ const parsed = raw === null ? 2000 : Number(raw);
+ if (!Number.isInteger(parsed) || parsed <= 0) return new Response('Invalid width', {status:400});
+ const width = widths.find(w => w >= parsed) ?? 2000;
+ const key = `${source}:${width}`;
+ const headers = {'Content-Type':'image/webp','Cache-Control':'public, max-age=3600','X-Content-Type-Options':'nosniff'};
+ const entry = cache.get(key);
+ if (entry && entry.expires > Date.now()) return new Response(new Uint8Array(entry.body), {headers});
+ let flight = flights.get(key);
+ if (!flight) {
+  if (flights.size >= 4) return new Response('Image service busy', {status:503,headers:{'Retry-After':'2','Cache-Control':'no-store'}});
+  flight = transform(source, width); flights.set(key, flight);
+ }
+ try {
+  const output = await flight; remember(key, output);
+  return new Response(new Uint8Array(output), {headers});
+ } catch { return new Response('Image unavailable', {status:502,headers:{'Cache-Control':'no-store'}}); }
+ finally { if (flights.get(key) === flight) flights.delete(key); }
 };

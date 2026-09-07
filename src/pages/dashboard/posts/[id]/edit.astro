@@ -10,12 +10,13 @@ if ('redirect' in guard) return guard.redirect;
 const { user } = guard;
 
 const { id } = Astro.params;
-const [postResult, { items: categories }] = await Promise.all([
+const auth = { countryId: Astro.locals.countryId, cookieHeader: `token=${Astro.cookies.get('token')?.value}` };
+const [postResult, { items: categories }, seoResult] = await Promise.all([
 	apiFetch<any>(`/dashboard/posts/${id}`, {
-		countryId: Astro.locals.countryId,
-		cookieHeader: `token=${Astro.cookies.get('token')?.value}`,
+		...auth,
 	}),
 	apiFetchList<any>('/categories', { countryId: Astro.locals.countryId }),
+	apiFetch<any>(`/dashboard/seo/metadata/post/${id}`, auth),
 ]);
 const post = postResult.data;
 ---
@@ -26,7 +27,7 @@ const post = postResult.data;
 		!postResult.ok || !post ? (
 			<p class="text-red-600 dark:text-red-400">{postResult.ok ? 'المنشور غير موجود.' : postResult.message}</p>
 		) : (
-			<PostForm post={post} categories={categories} countryId={Astro.locals.countryId} />
+			<PostForm post={post} seo={seoResult.data} categories={categories} countryId={Astro.locals.countryId} />
 		)
 	}
 </DashboardLayout>

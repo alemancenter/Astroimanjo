@@ -18,7 +18,7 @@ const result = await apiFetch<any>('/dashboard/sitemap/status', {
 });
 
 const rawSitemaps: Record<string, any> = result.data?.sitemaps ?? {};
-const order = ['index', 'articles', 'post', 'static'];
+const order = ['index', 'articles', 'post', 'static', 'images', 'videos', 'news'];
 const sitemapItems = order.map((type) => ({ type, ...(rawSitemaps[type] ?? { exists: false }) }));
 const existingCount = sitemapItems.filter((item) => item.exists).length;
 const missingCount = sitemapItems.length - existingCount;
@@ -36,6 +36,9 @@ const labels: Record<string, { title: string; description: string; accent: strin
 	articles: { title: 'خريطة المقالات', description: 'روابط المقالات التعليمية المنشورة والقابلة للأرشفة.', accent: 'emerald' },
 	post: { title: 'خريطة المنشورات', description: 'المنشورات العامة والأخبار والمحتوى المتجدد في المنصة.', accent: 'orange' },
 	static: { title: 'الصفحات والتصنيفات', description: 'الرئيسية والتصنيفات والصفوف والصفحات الهيكلية المهمة.', accent: 'graphite' },
+	images: { title: 'خريطة الصور', description: 'الصور المرتبطة بالمحتوى القابل للفهرسة مع عناوينها.', accent: 'emerald' },
+	videos: { title: 'خريطة الفيديو', description: 'مرفقات الفيديو الفعلية دون اختلاق بيانات وسائط غير موجودة.', accent: 'royal' },
+	news: { title: 'خريطة الأخبار', description: 'المنشورات الحديثة خلال آخر 48 ساعة وفق متطلبات Google News.', accent: 'orange' },
 };
 
 const numberFormat = new Intl.NumberFormat('ar-EG');
@@ -94,7 +97,7 @@ const fileName = (type: string) => `sitemap_${type}_${database}.xml`;
 			<aside class="sitemap-sidebar">
 				<section class="generation-card">
 					<header><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 3v4m0 10v4M3 12h4m10 0h4M5.6 5.6l2.8 2.8m7.2 7.2 2.8 2.8m0-12.8-2.8 2.8m-7.2 7.2-2.8 2.8"/></svg></i><div><span>إجراء رئيسي</span><h2>تحديث جميع الخرائط</h2></div></header>
-					<p>يعيد النظام قراءة المحتوى المنشور وإنشاء الملفات الأربعة الخاصة بقاعدة <strong>{currentCountry.name}</strong>.</p>
+					<p>يعيد النظام قراءة المحتوى المنشور وإنشاء الخرائط المتخصصة الخاصة بقاعدة <strong>{currentCountry.name}</strong>.</p>
 					<ul><li><i></i>المقالات والمنشورات المنشورة فقط</li><li><i></i>الصفوف والتصنيفات النشطة</li><li><i></i>تحديث الفهرس الرئيسي تلقائيًا</li></ul>
 					<form method="post" action="/api/dashboard/sitemap/generate" data-generate-form><input type="hidden" name="database" value={database}/><input type="hidden" name="redirect_to" value={redirectTo}/><button type="submit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 9a7 7 0 0 1 11.7-2L20 9M4 15l2.2 2a7 7 0 0 0 11.7-2"/></svg>{existingCount ? 'إعادة توليد الخرائط' : 'توليد الخرائط الآن'}</button></form>
 					<small><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 8v4m0 4h.01"/></svg>لن يؤثر التوليد في المحتوى أو روابط الموقع الحالية.</small>

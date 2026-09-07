@@ -38,9 +38,15 @@ const facebookAppId = settings.facebook_app_id?.trim() || '';
 		)}
 
 		<form method="post" action="/api/auth/register" class="space-y-5">
+			{/* Honeypot: hidden from real users; bots that fill every field are rejected. */}
+			<div class="hp-field" aria-hidden="true">
+				<label for="website">Website</label>
+				<input id="website" type="text" name="website" tabindex="-1" autocomplete="off" />
+			</div>
 			<div>
 				<label for="name" class="form-label">الاسم الكامل</label>
-				<input id="name" type="text" name="name" required autocomplete="name" class="form-control" placeholder="اكتب اسمك الكامل" />
+				<input id="name" type="text" name="name" required autocomplete="name" maxlength="60" pattern="[^\n\r]{2,60}" class="form-control" placeholder="اكتب اسمك الكامل" />
+				<p class="form-hint">اكتب اسمك فقط — لا تُدرج روابط أو رسائل.</p>
 			</div>
 			<div>
 				<label for="email" class="form-label">البريد الإلكتروني</label>
@@ -60,3 +66,17 @@ const facebookAppId = settings.facebook_app_id?.trim() || '';
 		</form>
 	</AuthShell>
 </Layout>
+
+<style>
+	.hp-field {
+		position: absolute !important;
+		width: 1px;
+		height: 1px;
+		padding: 0;
+		margin: -1px;
+		overflow: hidden;
+		clip: rect(0 0 0 0);
+		white-space: nowrap;
+		border: 0;
+	}
+</style>
