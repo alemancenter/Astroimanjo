@@ -1,0 +1,99 @@
+package contact_messages
+
+import (
+	"strconv"
+
+	"github.com/imanjo/fiber-api/internal/models"
+	"github.com/imanjo/fiber-api/internal/services"
+	"github.com/imanjo/fiber-api/internal/utils"
+	"github.com/gofiber/fiber/v2"
+)
+
+type Handler struct {
+	svc services.ContactMessageService
+}
+
+func New(svc services.ContactMessageService) *Handler {
+	return &Handler{svc: svc}
+}
+
+func getUser(c *fiber.Ctx) *models.User {
+	user, _ := c.Locals("user").(*models.User)
+	return user
+}
+
+func (h *Handler) requirePermission(c *fiber.Ctx) bool {
+	user := getUser(c)
+	return user != nil && (user.HasPermission("manage settings") || user.IsAdmin())
+}
+
+func (h *Handler) List(c *fiber.Ctx) error {
+	if !h.requirePermission(c) {
+		return utils.Forbidden(c)
+	}
+	pag := utils.GetPagination(c)
+	msgs, total, err := h.svc.List(c.Query("q"), c.Query("status"), pag.Offset, pag.PerPage)
+	if err != nil {
+		return utils.InternalError(c)
+	}
+	return utils.Paginated(c, "success", msgs, pag.BuildMeta(total))
+}
+
+func (h *Handler) Stats(c *fiber.Ctx) error {
+	if !h.requirePermission(c) {
+		return utils.Forbidden(c)
+	}
+	stats, err := h.svc.Stats()
+	if err != nil {
+		return utils.InternalError(c)
+	}
+	return utils.Success(c, "success", stats)
+}
+
+func (h *Handler) Get(c *fiber.Ctx) error {
+	if !h.requirePermission(c) {
+		return utils.Forbidden(c)
+	}
+	id, err := strconv.ParseUint(c.Params("id"), 10, 64)
+	if err != nil {
+		return utils.BadRequest(c, "معرف غير صحيح")
+	}
+	msg, err := h.svc.Get(uint(id))
+	if err != nil {
+		return utils.NotFound(c)
+	}
+	// Auto-mark as read on open
+	if !msg.Read {
+		_ = h.svc.MarkAsRead(msg.ID)
+		msg.Read = true
+	}
+	return utils.Success(c, "success", msg)
+}
+
+func (h *Handler) MarkAsRead(c *fiber.Ctx) error {
+	if !h.requirePermission(c) {
+		return utils.Forbidden(c)
+	}
+	id, err := strconv.ParseUint(c.Params("id"), 10, 64)
+	if err != nil {
+		return utils.BadRequest(c, "معرف غير صحيح")
+	}
+	if err := h.svc.MarkAsRead(uint(id)); err != nil {
+		return utils.InternalError(c)
+	}
+	return utils.Success(c, "تم تعليم الرسالة كمقروءة", nil)
+}
+
+func (h *Handler) Delete(c *fiber.Ctx) error {
+	if !h.requirePermission(c) {
+		return utils.Forbidden(c)
+	}
+	id, err := strconv.ParseUint(c.Params("id"), 10, 64)
+	if err != nil {
+		return utils.BadRequest(c, "معرف غير صحيح")
+	}
+	if err := h.svc.Delete(uint(id)); err != nil {
+		return utils.InternalError(c)
+	}
+	return utils.Success(c, "تم حذف الرسالة", nil)
+}

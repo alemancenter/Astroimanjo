@@ -1,0 +1,99 @@
+package routes
+
+import (
+	"time"
+
+	"github.com/gofiber/fiber/v2"
+	fiberCompress "github.com/gofiber/fiber/v2/middleware/compress"
+	"github.com/gofiber/fiber/v2/middleware/etag"
+	"github.com/imanjo/fiber-api/internal/middleware"
+)
+
+// Setup registers all API routes on the given Fiber app and returns the
+// initialized handler dependencies so callers can access shared instances
+// (e.g. BounceReader for the IMAP scheduler).
+func Setup(app *fiber.App) *Handlers {
+	// Initialize Dependencies
+	deps := NewDependencies()
+
+	// Global middleware
+	app.Use(middleware.RequestID())
+	app.Use(middleware.SecurityHeaders())
+	app.Use(middleware.CORS())
+	app.Use(middleware.MethodOverride()) // must run before routing to rewrite _method in FormData
+	app.Use(middleware.Metrics())
+	app.Use(middleware.RequestLogger())
+	app.Use(middleware.AuthRateLimit())
+	app.Use(middleware.PrefixRateLimit(
+		// Batch job progress is intentionally polled by the dashboard while long AI jobs run.
+		// Keep GET polling permissive, while POST job creation remains limited.
+		middleware.RateLimitRule{Prefix: "/api/dashboard/content-audit/ai/batch-jobs", Methods: []string{fiber.MethodGet}, Max: 900, Window: 5 * time.Minute},
+		middleware.RateLimitRule{Prefix: "/backend-api/dashboard/content-audit/ai/batch-jobs", Methods: []string{fiber.MethodGet}, Max: 900, Window: 5 * time.Minute},
+		middleware.RateLimitRule{Prefix: "/api/dashboard/content-audit/ai/batch-jobs/", Methods: []string{fiber.MethodPost}, Max: 120, Window: 5 * time.Minute},
+		middleware.RateLimitRule{Prefix: "/backend-api/dashboard/content-audit/ai/batch-jobs/", Methods: []string{fiber.MethodPost}, Max: 120, Window: 5 * time.Minute},
+		middleware.RateLimitRule{Prefix: "/api/dashboard/content-audit/ai/batch-jobs", Methods: []string{fiber.MethodPost}, Max: 20, Window: 5 * time.Minute},
+		middleware.RateLimitRule{Prefix: "/backend-api/dashboard/content-audit/ai/batch-jobs", Methods: []string{fiber.MethodPost}, Max: 20, Window: 5 * time.Minute},
+		middleware.RateLimitRule{Prefix: "/api/dashboard/content-audit/ai/", Max: 60, Window: 5 * time.Minute},
+		middleware.RateLimitRule{Prefix: "/backend-api/dashboard/content-audit/ai/", Max: 60, Window: 5 * time.Minute},
+		middleware.RateLimitRule{Prefix: "/api/ai/status/", Max: 300, Window: 5 * time.Minute},
+		middleware.RateLimitRule{Prefix: "/backend-api/ai/status/", Max: 300, Window: 5 * time.Minute},
+		middleware.RateLimitRule{Prefix: "/api/ai/", Max: 60, Window: 5 * time.Minute},
+		middleware.RateLimitRule{Prefix: "/backend-api/ai/", Max: 60, Window: 5 * time.Minute},
+		middleware.RateLimitRule{Prefix: "/api/chatbot/message", Methods: []string{fiber.MethodPost}, Max: 30, Window: 10 * time.Minute},
+		middleware.RateLimitRule{Prefix: "/backend-api/chatbot/message", Methods: []string{fiber.MethodPost}, Max: 30, Window: 10 * time.Minute},
+		middleware.RateLimitRule{Prefix: "/api/chatbot/feedback", Methods: []string{fiber.MethodPost}, Max: 60, Window: 10 * time.Minute},
+		middleware.RateLimitRule{Prefix: "/backend-api/chatbot/feedback", Methods: []string{fiber.MethodPost}, Max: 60, Window: 10 * time.Minute},
+		middleware.RateLimitRule{Prefix: "/api/seo/404", Methods: []string{fiber.MethodPost}, Max: 30, Window: 10 * time.Minute},
+		middleware.RateLimitRule{Prefix: "/backend-api/seo/404", Methods: []string{fiber.MethodPost}, Max: 30, Window: 10 * time.Minute},
+		middleware.RateLimitRule{Prefix: "/api/dashboard/seo/audits", Methods: []string{fiber.MethodPost}, Max: 4, Window: 10 * time.Minute},
+		middleware.RateLimitRule{Prefix: "/backend-api/dashboard/seo/audits", Methods: []string{fiber.MethodPost}, Max: 4, Window: 10 * time.Minute},
+		// AI-backed SEO field optimization — each call is a paid model request.
+		// The "/optimize" prefix also covers "/optimize-save" (drawer one-click fix).
+		middleware.RateLimitRule{Prefix: "/api/dashboard/seo/optimize", Methods: []string{fiber.MethodPost}, Max: 20, Window: 10 * time.Minute},
+		middleware.RateLimitRule{Prefix: "/backend-api/dashboard/seo/optimize", Methods: []string{fiber.MethodPost}, Max: 20, Window: 10 * time.Minute},
+		middleware.RateLimitRule{Prefix: "/api/dashboard/files", Max: 60, Window: time.Minute},
+		middleware.RateLimitRule{Prefix: "/backend-api/dashboard/files", Max: 60, Window: time.Minute},
+	))
+	app.Use(fiberCompress.New(fiberCompress.Config{
+		Level: fiberCompress.LevelBestSpeed,
+	}))
+	app.Use(etag.New())
+
+	// Operational endpoints are not public. They are available to direct local
+	// checks and to callers that provide an internal monitor/frontend key.
+	internalEndpointGuard := middleware.InternalEndpointGuard()
+	app.Get("/api/ping", internalEndpointGuard, deps.Health.Ping)
+	app.Get("/api/health", internalEndpointGuard, deps.Health.Health)
+	app.Get("/metrics", internalEndpointGuard, middleware.PrometheusMetrics)
+
+	// Base API group with frontend guard and IP guard
+	api := app.Group("/api",
+		middleware.IPGuard(),
+		middleware.FrontendGuard(),
+		middleware.ResponseCache(0),
+		middleware.RequireCountryDatabase(),
+	)
+
+	// Public Group
+	public := api.Group("", middleware.OptionalAuth(), middleware.TrackVisitor())
+
+	// Dashboard Group
+	dash := api.Group("/dashboard",
+		middleware.Auth(),
+		middleware.RequireVerifiedEmail(),
+		middleware.UpdateLastActivity(),
+		middleware.DashboardSecurityHeaders(),
+		middleware.InvalidateContentAfterWrite(),
+	)
+
+	// Register Domain Modules
+	registerAuthRoutes(api, dash, deps)
+	registerContentRoutes(api, public, dash, deps)
+	registerAcademicRoutes(public, dash, deps)
+	registerCommunicationRoutes(public, dash, deps)
+	registerSystemRoutes(api, public, dash, deps)
+	registerAnalyticsRoutes(public, dash, deps)
+	registerTeacherSubscriptionRoutes(api, dash, deps)
+
+	return deps
+}

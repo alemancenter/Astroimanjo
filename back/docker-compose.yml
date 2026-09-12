@@ -1,0 +1,96 @@
+version: '3.9'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: imanjo-fiber-api
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8082:8082"
+    env_file:
+      - .env
+    environment:
+      APP_HOST: 0.0.0.0
+      APP_PORT: 8082
+      DB_HOST_JO: mysql-jo
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD}
+    depends_on:
+      mysql-jo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - imanjo
+    volumes:
+      - ./storage:/app/storage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/api/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  mysql-jo:
+    image: mysql:8.0
+    container_name: imanjo-mysql-jo
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASS:?set DB_ROOT_PASS}
+      MYSQL_DATABASE: ${DB_NAME_JO:-alhurani_jo}
+      MYSQL_USER: ${DB_USER_JO:-dbuser}
+      MYSQL_PASSWORD: ${DB_PASS_JO:?set DB_PASS_JO}
+    ports:
+      - "127.0.0.1:3306:3306"
+    volumes:
+      - mysql_jo_data:/var/lib/mysql
+      - ./database/init:/docker-entrypoint-initdb.d
+    networks:
+      - imanjo
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+
+  redis:
+    image: redis:7-alpine
+    container_name: imanjo-redis
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - imanjo
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy noeviction --requirepass ${REDIS_PASSWORD:?set REDIS_PASSWORD}
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  nginx:
+    image: nginx:alpine
+    container_name: imanjo-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./storage/uploads:/var/www/uploads:ro
+    depends_on:
+      - api
+    networks:
+      - imanjo
+
+volumes:
+  mysql_jo_data:
+  redis_data:
+
+networks:
+  imanjo:
+    driver: bridge

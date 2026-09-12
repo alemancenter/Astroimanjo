@@ -1,0 +1,69 @@
+name: Phase 4 Grounded Content Repair CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      APP_ENV: test
+      DB_HOST_JO: 127.0.0.1
+      DB_PORT_JO: 3306
+      DB_NAME_JO: test_db
+      DB_USER_JO: test
+      DB_PASS_JO: test
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: test
+          MYSQL_DATABASE: test_db
+          MYSQL_USER: test
+          MYSQL_PASSWORD: test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h localhost -ptest"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Grounded repair tests
+        run: go test ./internal/services/contentaudit
+      - name: Content audit handler compile and tests
+        run: go test ./internal/handlers/contentaudit
+      - name: AI generation handler tests
+        run: go test ./internal/handlers/ai
+      - name: Routes compile and tests
+        run: go test ./internal/routes
+      - name: Server compile
+        run: go test ./cmd/server
+      - name: Full repository tests
+        run: go test ./...
+      - name: Go vet
+        run: go vet ./...
+      - name: Production container build
+        run: docker build --tag imanjo-backend-ci:${{ github.sha }} .
