@@ -65,7 +65,15 @@ func (s *Service) QualityGate(ctx context.Context, contentType, contentID, count
 		return ContentQualityGate{}, editorialErr
 	}
 	gate = contentquality.ApplyEditorialDecision(gate, editorialName)
-	gate = contentquality.ApplyAdReadinessRequirements(gate, source.Title, normalizePlainText(source.Content), source.MetaDescription)
+	checks, checkErr := contentquality.ResolveLanguageChecks(ctx, database.GetManager().GetByCode(cc), normalizedType, cc, []contentquality.LanguageCheckInput{{
+		ContentID: numericID,
+		Title:     source.Title,
+		Content:   source.Content,
+	}})
+	if checkErr != nil {
+		return ContentQualityGate{}, checkErr
+	}
+	gate = contentquality.ApplyAdReadinessRequirementsWithLanguage(gate, source.Title, normalizePlainText(source.Content), source.MetaDescription, checks[numericID])
 	return gate, nil
 }
 

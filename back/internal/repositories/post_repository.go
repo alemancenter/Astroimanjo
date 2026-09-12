@@ -125,7 +125,12 @@ func (r *postRepository) Update(countryID database.CountryID, post *models.Post)
 
 func (r *postRepository) Delete(countryID database.CountryID, id uint64) error {
 	db := r.getDB(countryID)
-	return db.Delete(&models.Post{}, id).Error
+	return db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Delete(&models.Post{}, id).Error; err != nil {
+			return err
+		}
+		return tx.Where("content_type = ? AND content_id = ?", "post", id).Delete(&models.ContentLanguageCheck{}).Error
+	})
 }
 
 func (r *postRepository) GetFileByID(countryID database.CountryID, id uint64) (*models.File, error) {

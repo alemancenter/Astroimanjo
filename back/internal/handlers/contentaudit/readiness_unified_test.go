@@ -83,7 +83,8 @@ func TestUnifiedReadinessPolicyBaselineNeverGrantsAds(t *testing.T) {
 
 func TestReadinessGateAppliesCurrentSourceCorruptionGuard(t *testing.T) {
 	decision := &models.ContentAIDecision{ID: 10, Decision: models.AIDecisionApproved, AdSenseRisk: "low", Score: 99}
-	gate := readinessGate(decision, "عنوان سليم", "نص فيه $1 رمز غير محلول", "", "")
+	language := contentquality.CheckArabicLanguage("عنوان سليم", "نص فيه $1 رمز غير محلول")
+	gate := readinessGate(decision, "عنوان سليم", "نص فيه $1 رمز غير محلول", "", "", language, nil)
 	if gate.Indexable || gate.AdsEligible {
 		t.Fatal("current source corruption must override saved approval")
 	}

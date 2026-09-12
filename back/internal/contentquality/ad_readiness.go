@@ -10,11 +10,22 @@ import (
 // It can revoke an approval that no longer matches the current page source, but
 // it can never grant ad eligibility or change the search-indexing decision.
 func ApplyAdReadinessRequirements(gate Gate, title, plainText, meta string) Gate {
+	return ApplyAdReadinessRequirementsWithLanguage(gate, title, plainText, meta, CheckArabicLanguage(title, plainText))
+}
+
+func ApplyAdReadinessRequirementsWithLanguage(gate Gate, title, plainText, meta string, language LanguageCheckResult) Gate {
 	if !gate.AdsEligible {
 		return gate
 	}
 
 	reasons := make([]string, 0, 4)
+	expectedFingerprint := LanguageFingerprint(title, plainText)
+	languageCurrent := language.Checked &&
+		language.EngineVersion == LanguageCheckEngineVersion &&
+		language.ContentFingerprint == expectedFingerprint
+	if !languageCurrent {
+		reasons = append(reasons, "نتيجة التدقيق اللغوي مفقودة أو قديمة؛ الإعلانات متوقفة حتى إعادة فحص النص الحالي.")
+	}
 	if utf8.RuneCountInString(strings.TrimSpace(title)) < DiagnosticTitleMinChars {
 		reasons = append(reasons, "العنوان الحالي أقصر من الحد التحريري الداخلي؛ الإعلانات متوقفة حتى مراجعته.")
 	}
@@ -24,8 +35,7 @@ func ApplyAdReadinessRequirements(gate Gate, title, plainText, meta string) Gate
 	if utf8.RuneCountInString(strings.TrimSpace(meta)) < DiagnosticMetaMinChars {
 		reasons = append(reasons, "الوصف التعريفي الحالي مفقود أو أقصر من 80 حرفًا؛ الإعلانات متوقفة حتى إصلاحه.")
 	}
-	language := CheckArabicLanguage(title, plainText)
-	if language.Blocking {
+	if languageCurrent && language.Blocking {
 		reason := fmt.Sprintf("اكتشف التدقيق اللغوي %d خطأً عالي الثقة؛ الإعلانات متوقفة حتى تصحيح النص.", language.ErrorCount)
 		if len(language.Findings) > 0 {
 			reason += " " + language.Findings[0].Message

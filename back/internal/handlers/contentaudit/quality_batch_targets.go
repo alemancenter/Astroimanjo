@@ -34,13 +34,22 @@ func (h *Handler) selectQualityBatchTargets(ctx context.Context, req contentQual
 		if err := q.Find(&articles).Error; err != nil {
 			return nil, err
 		}
+		languageInputs := make([]contentquality.LanguageCheckInput, 0, len(articles))
+		for _, article := range articles {
+			languageInputs = append(languageInputs, contentquality.LanguageCheckInput{ContentID: article.ID, Title: article.Title, Content: article.Content})
+		}
+		languageChecks, err := contentquality.ResolveLanguageChecks(ctx, db, "article", req.CountryCode, languageInputs)
+		if err != nil {
+			return nil, err
+		}
 		for _, a := range articles {
 			meta := ""
 			if a.MetaDescription != nil {
 				meta = *a.MetaDescription
 			}
-			gate := readinessGate(decisions[a.ID], a.Title, a.Content, meta, "")
-			item := buildUnifiedReadinessItem(a.Title, a.Content, meta, "", articleFileCounts[a.ID], a.Status == 1, "article", a.ID, req.CountryCode, gate, nil)
+			language := languageChecks[a.ID]
+			gate := readinessGate(decisions[a.ID], a.Title, a.Content, meta, "", language, nil)
+			item := buildUnifiedReadinessItem(a.Title, a.Content, meta, "", articleFileCounts[a.ID], a.Status == 1, "article", a.ID, req.CountryCode, gate, nil, language)
 			if shouldIncludeQualityTarget(item, req) {
 				rows = append(rows, unifiedReadinessRow{Item: item, CreatedAt: a.CreatedAt})
 			}
@@ -66,6 +75,14 @@ func (h *Handler) selectQualityBatchTargets(ctx context.Context, req contentQual
 		if err := q.Find(&posts).Error; err != nil {
 			return nil, err
 		}
+		languageInputs := make([]contentquality.LanguageCheckInput, 0, len(posts))
+		for _, post := range posts {
+			languageInputs = append(languageInputs, contentquality.LanguageCheckInput{ContentID: post.ID, Title: post.Title, Content: post.Content})
+		}
+		languageChecks, err := contentquality.ResolveLanguageChecks(ctx, db, "post", req.CountryCode, languageInputs)
+		if err != nil {
+			return nil, err
+		}
 		for _, p := range posts {
 			meta := ""
 			if p.MetaDescription != nil {
@@ -75,8 +92,9 @@ func (h *Handler) selectQualityBatchTargets(ctx context.Context, req contentQual
 			if p.Keywords != nil {
 				keywords = *p.Keywords
 			}
-			gate := readinessGate(decisions[p.ID], p.Title, p.Content, meta, keywords)
-			item := buildUnifiedReadinessItem(p.Title, p.Content, meta, keywords, postFileCounts[p.ID], p.IsActive, "post", p.ID, req.CountryCode, gate, nil)
+			language := languageChecks[p.ID]
+			gate := readinessGate(decisions[p.ID], p.Title, p.Content, meta, keywords, language, nil)
+			item := buildUnifiedReadinessItem(p.Title, p.Content, meta, keywords, postFileCounts[p.ID], p.IsActive, "post", p.ID, req.CountryCode, gate, nil, language)
 			if shouldIncludeQualityTarget(item, req) {
 				rows = append(rows, unifiedReadinessRow{Item: item, CreatedAt: p.CreatedAt})
 			}

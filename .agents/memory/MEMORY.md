@@ -1,0 +1,1 @@
+- [Go crypto firewall block](go-crypto-firewall.md) — Full Go tests cannot download the pinned x/crypto release because Replit blocks it for a critical CVE.

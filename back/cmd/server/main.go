@@ -123,6 +123,7 @@ func main() {
 			&models.PolicyAuditRun{},
 			&models.PolicyAuditFinding{},
 			&models.ContentPolicyReadiness{},
+			&models.ContentLanguageCheck{},
 			&models.ContentAIDecision{},
 			&models.ContentAIIssue{},
 			&models.ContentAISuggestion{},
@@ -209,7 +210,7 @@ func main() {
 			if err := db.Exec("CREATE TABLE IF NOT EXISTS imanjo_schema_revisions (version VARCHAR(64) PRIMARY KEY, applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)").Error; err != nil {
 				logger.Fatal("schema ledger failed", zap.Error(err))
 			}
-			if err := db.Exec("INSERT IGNORE INTO imanjo_schema_revisions (version) VALUES (?)", "20260906_hardening_v1").Error; err != nil {
+			if err := db.Exec("INSERT IGNORE INTO imanjo_schema_revisions (version) VALUES (?), (?)", "20260906_hardening_v1", "20260912_language_history_v1").Error; err != nil {
 				logger.Fatal("schema ledger failed", zap.Error(err))
 			}
 		}
@@ -220,9 +221,13 @@ func main() {
 		if dbManager.Get(id).Error != nil {
 			continue
 		}
+		db := dbManager.Get(id)
 		var count int64
-		if err := dbManager.Get(id).Table("imanjo_schema_revisions").Where("version = ?", "20260906_hardening_v1").Count(&count).Error; err != nil || count != 1 {
+		if err := db.Table("imanjo_schema_revisions").Where("version IN ?", []string{"20260906_hardening_v1", "20260912_language_history_v1"}).Count(&count).Error; err != nil || count != 2 {
 			logger.Fatal("Run the binary with --migrate-only before starting this release", zap.Error(err))
+		}
+		if !db.Migrator().HasTable(&models.ContentLanguageCheck{}) || !db.Migrator().HasIndex(&models.ContentLanguageCheck{}, "idx_language_check_version") {
+			logger.Fatal("Missing content language history schema; run --migrate-only before starting this release", zap.String("country", database.CountryCode(id)))
 		}
 	}
 	if !database.DB().Migrator().HasTable(&models.AccessTokenRevocation{}) {

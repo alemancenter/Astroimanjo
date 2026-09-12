@@ -200,7 +200,13 @@ func (r *articleRepository) Update(countryID database.CountryID, article *models
 }
 
 func (r *articleRepository) Delete(countryID database.CountryID, article *models.Article) error {
-	return r.GetDB(countryID).Delete(article).Error
+	db := r.GetDB(countryID)
+	return db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Delete(article).Error; err != nil {
+			return err
+		}
+		return tx.Where("content_type = ? AND content_id = ?", "article", article.ID).Delete(&models.ContentLanguageCheck{}).Error
+	})
 }
 
 func (r *articleRepository) GetFileByID(countryID database.CountryID, id uint64) (*models.File, error) {

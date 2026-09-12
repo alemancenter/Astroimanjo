@@ -31,6 +31,8 @@ const detailsPayload = (item: ReadinessItem) => JSON.stringify({
 	gateReasons: item.gate_reasons || [],
 	diagnostics: item.diagnostic_signals || [],
 	languageFindings: item.language_check?.findings || [],
+	languageCheckedAt: item.language_check?.checked_at || '',
+	languageVersion: item.language_check?.engine_version || '',
 	editUrl: editContentHref(item),
 	publicUrl: item.url,
 	target: itemTarget(item),
@@ -100,7 +102,7 @@ const detailsPayload = (item: ReadinessItem) => JSON.stringify({
 <script>
 	type ClientProblem = { code: string; label: string; message?: string; severity?: string; action_type: string; preset?: string; mode?: string; model_strategy?: string };
 	type LanguageFinding = { field: string; token: string; suggestion?: string; message: string };
-	type DetailPayload = { title: string; type: string; contentType: 'article' | 'post'; id: number; audited: boolean; indexable: boolean; adsEligible: boolean; decision: string; risk: string; problems: ClientProblem[]; gateReasons: string[]; diagnostics: string[]; languageFindings: LanguageFinding[]; editUrl: string; publicUrl: string; target: string; countryCode: string; redirectTo: string };
+	type DetailPayload = { title: string; type: string; contentType: 'article' | 'post'; id: number; audited: boolean; indexable: boolean; adsEligible: boolean; decision: string; risk: string; problems: ClientProblem[]; gateReasons: string[]; diagnostics: string[]; languageFindings: LanguageFinding[]; languageCheckedAt: string; languageVersion: string; editUrl: string; publicUrl: string; target: string; countryCode: string; redirectTo: string };
 
 	const clientMode = (problem: ClientProblem) => problem.mode || (problem.action_type === 'analyze' ? 'analyze_only' : problem.action_type === 'auto_repair' ? 'auto_apply' : problem.action_type === 'full_review' ? 'full_review' : 'fix_preview');
 	const clientModel = (problem: ClientProblem) => problem.model_strategy || (problem.action_type === 'full_review' ? 'final_review' : ['thin_content', 'needs_enrichment', 'ads_not_eligible'].includes(problem.code) ? 'quality' : 'balanced');
@@ -205,7 +207,8 @@ const detailsPayload = (item: ReadinessItem) => JSON.stringify({
 		try {
 			const data = JSON.parse(button.dataset.payload || '{}') as DetailPayload;
 			setText('[data-detail-title]', data.title);
-			setText('[data-detail-meta]', `${data.type} #${data.id} · القرار: ${data.decision || 'غير محدد'}`);
+			const languageDate = data.languageCheckedAt ? new Intl.DateTimeFormat('ar-EG', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(data.languageCheckedAt)) : 'غير محفوظ';
+			setText('[data-detail-meta]', `${data.type} #${data.id} · القرار: ${data.decision || 'غير محدد'} · آخر فحص لغوي: ${languageDate}${data.languageVersion ? ` (${data.languageVersion})` : ''}`);
 			setText('[data-detail-audited]', data.audited ? 'مكتمل' : 'لم يُفحص');
 			setText('[data-detail-index]', data.indexable ? 'مفهرس' : 'متوقف');
 			setText('[data-detail-ads]', data.adsEligible ? 'جاهز مبدئيًا' : 'غير مؤهل');

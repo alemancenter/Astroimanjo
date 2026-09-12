@@ -54,3 +54,32 @@ func TestApplyAdReadinessRequirementsRevokesAdsForLanguageErrorsOnly(t *testing.
 		t.Fatal("language findings must not change the saved audit state")
 	}
 }
+
+func TestApplyAdReadinessRequirementsRejectsMissingOrStaleLanguageResult(t *testing.T) {
+	title := "عنوان تعليمي واضح وطويل بما يكفي"
+	content := strings.Repeat("محتوى تعليمي واضح ومفيد للطالب. ", 80)
+	meta := strings.Repeat("وصف تعريفي واضح ودقيق. ", 4)
+	base := Gate{Indexable: true, AdsEligible: true, Audited: true}
+
+	for name, language := range map[string]LanguageCheckResult{
+		"missing": {},
+		"old_engine": {
+			Checked: true, EngineVersion: "arabic-v0",
+			ContentFingerprint: LanguageFingerprint(title, content),
+		},
+		"stale_fingerprint": {
+			Checked: true, EngineVersion: LanguageCheckEngineVersion,
+			ContentFingerprint: LanguageFingerprint(title, content+" تغير"),
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			guarded := ApplyAdReadinessRequirementsWithLanguage(base, title, content, meta, language)
+			if guarded.AdsEligible {
+				t.Fatal("missing or stale language result must revoke ad eligibility")
+			}
+			if !guarded.Indexable {
+				t.Fatal("language history state must not change indexing")
+			}
+		})
+	}
+}

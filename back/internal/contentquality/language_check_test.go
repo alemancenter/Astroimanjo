@@ -44,6 +44,50 @@ func TestCheckArabicLanguageCapsReturnedFindingsButCountsAll(t *testing.T) {
 	}
 }
 
+func TestLanguageFingerprintIgnoresFormattingOnlyHTMLChanges(t *testing.T) {
+	first := PlainTextFromHTML("<p>هذا نص <strong>تعليمي</strong>.</p>")
+	second := PlainTextFromHTML("<div>هذا نص <b>تعليمي</b>.</div>")
+	if first != second {
+		t.Fatalf("normalized text differs: %q != %q", first, second)
+	}
+	if LanguageFingerprint("عنوان", first) != LanguageFingerprint("عنوان", second) {
+		t.Fatal("formatting-only HTML changes must not create a new fingerprint")
+	}
+}
+
+func TestPlainTextFromHTMLPreservesInlineArabicWord(t *testing.T) {
+	got := PlainTextFromHTML("<p>هذه م<em>در</em>سة مفيدة.</p><script>الى</script>")
+	if got != "هذه مدرسة مفيدة." {
+		t.Fatalf("plain text = %q", got)
+	}
+}
+
+func TestLanguageFingerprintNormalizesEquivalentUnicode(t *testing.T) {
+	composed := LanguageFingerprint("عنوان", "\u0623")
+	decomposed := LanguageFingerprint("عنوان", "\u0627\u0654")
+	if composed != decomposed {
+		t.Fatal("canonically equivalent Unicode must share a fingerprint")
+	}
+}
+
+func TestLanguageFingerprintChangesWithVisibleText(t *testing.T) {
+	first := LanguageFingerprint("عنوان", PlainTextFromHTML("<p>النص الأول</p>"))
+	second := LanguageFingerprint("عنوان", PlainTextFromHTML("<p>النص الثاني</p>"))
+	if first == second {
+		t.Fatal("visible text changes must create a new fingerprint")
+	}
+}
+
+func TestCheckArabicLanguageIncludesEngineAndFingerprint(t *testing.T) {
+	result := CheckArabicLanguage("عنوان", "محتوى")
+	if result.EngineVersion != LanguageCheckEngineVersion {
+		t.Fatalf("engine version = %q", result.EngineVersion)
+	}
+	if len(result.ContentFingerprint) != 64 {
+		t.Fatalf("fingerprint length = %d, want 64", len(result.ContentFingerprint))
+	}
+}
+
 func assertSuggestion(t *testing.T, result LanguageCheckResult, token, suggestion string) {
 	t.Helper()
 	for _, finding := range result.Findings {

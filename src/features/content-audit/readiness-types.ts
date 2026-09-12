@@ -34,6 +34,9 @@ export interface ReadinessItem {
 		checked: boolean;
 		error_count: number;
 		blocking: boolean;
+		engine_version: string;
+		content_fingerprint: string;
+		checked_at?: string;
 		findings: Array<{
 			field: 'title' | 'content' | string;
 			offset: number;

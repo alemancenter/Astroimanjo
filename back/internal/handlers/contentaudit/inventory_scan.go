@@ -118,15 +118,41 @@ func buildInventoryItems(ctx context.Context, country, contentType string) ([]in
 	articleEditorial, postEditorial := map[uint]*models.ContentEditorialDecision{}, map[uint]*models.ContentEditorialDecision{}
 	if contentType == "all" || contentType == "article" {
 		articleDecisions, err = latestReadinessDecisions(ctx, "article", country)
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		articleEditorial, err = latestEditorialDecisionMap(ctx, country, "article")
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 	}
 	if contentType == "all" || contentType == "post" {
 		postDecisions, err = latestReadinessDecisions(ctx, "post", country)
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		postEditorial, err = latestEditorialDecisionMap(ctx, country, "post")
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	languageChecks := make(map[string]contentquality.LanguageCheckResult, len(sources))
+	db := database.GetManager().GetByCode(country)
+	for _, kind := range []string{"article", "post"} {
+		inputs := make([]contentquality.LanguageCheckInput, 0)
+		for _, source := range sources {
+			if source.Type == kind {
+				inputs = append(inputs, contentquality.LanguageCheckInput{ContentID: source.ID, Title: source.Title, Content: source.Content})
+			}
+		}
+		resolved, resolveErr := contentquality.ResolveLanguageChecks(ctx, db, kind, country, inputs)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		for id, result := range resolved {
+			languageChecks[fmt.Sprintf("%s:%d", kind, id)] = result
+		}
 	}
 
 	items := make([]inventoryItem, 0, len(sources))
@@ -139,18 +165,16 @@ func buildInventoryItems(ctx context.Context, country, contentType string) ([]in
 			auditDecision, editorial = postDecisions[source.ID], postEditorial[source.ID]
 		}
 
-		gate := readinessGate(auditDecision, source.Title, source.Content, source.MetaDescription, source.Keywords)
-		if editorial != nil {
-			gate = contentquality.ApplyEditorialDecision(gate, editorial.Decision)
-		}
+		key := fmt.Sprintf("%s:%d", source.Type, source.ID)
+		language := languageChecks[key]
+		gate := readinessGate(auditDecision, source.Title, source.Content, source.MetaDescription, source.Keywords, language, editorial)
 		artifacts := contentquality.DetectReplacementArtifacts(
 			contentquality.TextField{Name: "title", Value: source.Title},
 			contentquality.TextField{Name: "content", Value: source.Content},
 			contentquality.TextField{Name: "meta_description", Value: source.MetaDescription},
 			contentquality.TextField{Name: "keywords", Value: source.Keywords},
 		)
-		readiness := buildUnifiedReadinessItem(source.Title, source.Content, source.MetaDescription, source.Keywords, source.FilesCount, source.Published, source.Type, source.ID, country, gate, nil)
-		key := fmt.Sprintf("%s:%d", source.Type, source.ID)
+		readiness := buildUnifiedReadinessItem(source.Title, source.Content, source.MetaDescription, source.Keywords, source.FilesCount, source.Published, source.Type, source.ID, country, gate, nil, language)
 		item := inventoryItem{
 			ID: source.ID, Type: source.Type, Title: source.Title, Published: source.Published,
 			Visits: source.Visits, WordCount: readiness.WordCount, FilesCount: source.FilesCount,
@@ -170,10 +194,18 @@ func buildInventoryItems(ctx context.Context, country, contentType string) ([]in
 	}
 
 	sort.SliceStable(items, func(i, j int) bool {
-		if items[i].PriorityScore != items[j].PriorityScore { return items[i].PriorityScore > items[j].PriorityScore }
-		if items[i].Visits != items[j].Visits { return items[i].Visits > items[j].Visits }
-		if !items[i].UpdatedAt.Equal(items[j].UpdatedAt) { return items[i].UpdatedAt.After(items[j].UpdatedAt) }
-		if items[i].Type != items[j].Type { return items[i].Type < items[j].Type }
+		if items[i].PriorityScore != items[j].PriorityScore {
+			return items[i].PriorityScore > items[j].PriorityScore
+		}
+		if items[i].Visits != items[j].Visits {
+			return items[i].Visits > items[j].Visits
+		}
+		if !items[i].UpdatedAt.Equal(items[j].UpdatedAt) {
+			return items[i].UpdatedAt.After(items[j].UpdatedAt)
+		}
+		if items[i].Type != items[j].Type {
+			return items[i].Type < items[j].Type
+		}
 		return items[i].ID < items[j].ID
 	})
 	return items, nil
@@ -187,25 +219,41 @@ func inventoryDecisionName(item inventoryItem) string {
 }
 
 func inventoryMatches(item inventoryItem, decision, signal, search string) bool {
-	if decision != "all" && inventoryDecisionName(item) != decision { return false }
+	if decision != "all" && inventoryDecisionName(item) != decision {
+		return false
+	}
 	switch signal {
 	case "corruption":
-		if !item.Corrupted { return false }
+		if !item.Corrupted {
+			return false
+		}
 	case contentquality.SimilarityKindExact, contentquality.SimilarityKindNear, contentquality.SimilarityKindTemplate:
-		if item.Similarity.Kind != signal { return false }
+		if item.Similarity.Kind != signal {
+			return false
+		}
 	case "noindex":
-		if item.ShouldIndex { return false }
+		if item.ShouldIndex {
+			return false
+		}
 	case "unaudited":
-		if item.Audited { return false }
+		if item.Audited {
+			return false
+		}
 	case models.AIDecisionNeedsFix:
-		if item.AuditDecision != models.AIDecisionNeedsFix { return false }
+		if item.AuditDecision != models.AIDecisionNeedsFix {
+			return false
+		}
 	case "short_file":
-		if item.FilesCount == 0 || item.WordCount >= 180 { return false }
+		if item.FilesCount == 0 || item.WordCount >= 180 {
+			return false
+		}
 	}
 	if search != "" {
 		search = strings.ToLower(strings.TrimSpace(search))
 		id := strconv.FormatUint(uint64(item.ID), 10)
-		if !strings.Contains(strings.ToLower(item.Title), search) && !strings.Contains(id, search) { return false }
+		if !strings.Contains(strings.ToLower(item.Title), search) && !strings.Contains(id, search) {
+			return false
+		}
 	}
 	return true
 }
@@ -213,27 +261,42 @@ func inventoryMatches(item inventoryItem, decision, signal, search string) bool 
 func summarizeInventory(items []inventoryItem) inventorySummary {
 	summary := inventorySummary{TotalContent: len(items)}
 	for index, item := range items {
-		if index < 150 { summary.PriorityQueue++ }
+		if index < 150 {
+			summary.PriorityQueue++
+		}
 		switch inventoryDecisionName(item) {
 		case models.EditorialDecisionKeep:
-			summary.Classified++; summary.Keep++
+			summary.Classified++
+			summary.Keep++
 		case models.EditorialDecisionImprove:
-			summary.Classified++; summary.Improve++
+			summary.Classified++
+			summary.Improve++
 		case models.EditorialDecisionNoindex:
-			summary.Classified++; summary.Noindex++
+			summary.Classified++
+			summary.Noindex++
 		case models.EditorialDecisionMerge301:
-			summary.Classified++; summary.Merge301++
+			summary.Classified++
+			summary.Merge301++
 		default:
 			summary.Unclassified++
 		}
-		if item.Corrupted { summary.Corrupted++ }
-		switch item.Similarity.Kind {
-		case contentquality.SimilarityKindExact: summary.ExactDuplicate++
-		case contentquality.SimilarityKindNear: summary.NearDuplicate++
-		case contentquality.SimilarityKindTemplate: summary.TemplateSimilar++
+		if item.Corrupted {
+			summary.Corrupted++
 		}
-		if !item.ShouldIndex { summary.NonIndexable++ }
-		if item.AdsEligible { summary.AdsEligible++ }
+		switch item.Similarity.Kind {
+		case contentquality.SimilarityKindExact:
+			summary.ExactDuplicate++
+		case contentquality.SimilarityKindNear:
+			summary.NearDuplicate++
+		case contentquality.SimilarityKindTemplate:
+			summary.TemplateSimilar++
+		}
+		if !item.ShouldIndex {
+			summary.NonIndexable++
+		}
+		if item.AdsEligible {
+			summary.AdsEligible++
+		}
 	}
 	return summary
 }

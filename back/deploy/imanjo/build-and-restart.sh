@@ -17,10 +17,11 @@
 
 set -Eeuo pipefail
 
-APP_DIR="${IMANJO_APP_DIR:-/var/www/vhosts/imanjo.com/api.imanjo.com}"
+APP_DIR="${IMANJO_APP_DIR:-/var/www/vhosts/api.imanjo.com/httpdocs}"
 SERVICE="imanjo-api.service"
+MIGRATE_SERVICE="imanjo-api-migrate.service"
 PORT="${IMANJO_PORT:-8187}"
-BIN="bin/imanjo-api"
+BIN="fiber-api"
 SWAPFILE="/var/tmp/imanjo-build.swap"
 ADDED_SWAP=0
 
@@ -95,6 +96,14 @@ ls -1t "${BIN}".backup-* 2>/dev/null | tail -n +6 | xargs -r rm -f
 log "INSTALL NEW BINARY"
 mv -f "${BIN}.new" "$BIN"
 
+log "APPLY ADDITIVE DATABASE MIGRATIONS"
+if ! systemctl start "$MIGRATE_SERVICE"; then
+  fail "database migration failed — restoring previous binary"
+  mv -f "${BIN}.backup-${TS}" "$BIN"
+  journalctl -u "$MIGRATE_SERVICE" --since "-5 minutes" --no-pager -o short-iso | tail -80
+  exit 1
+fi
+
 log "RESTART SERVICE"
 systemctl restart "$SERVICE"
 sleep 3
@@ -130,7 +139,7 @@ log "DONE"
 # 2) Build off-box and copy just the binary up (no compiler on the server):
 #      # on your machine, inside back/:
 #      GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -o imanjo-api.new ./cmd/server
-#      scp imanjo-api.new root@SERVER:$APP_DIR/bin/
+#      scp imanjo-api.new root@SERVER:$APP_DIR/fiber-api.new
 #      # then on the server run only the "BACKUP / INSTALL / RESTART" steps above.
 #
 # 3) Run this script under tmux so an SSH drop can't kill the build:

@@ -2,8 +2,6 @@ package contentaudit
 
 import (
 	"context"
-	"html"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -78,17 +76,8 @@ type readinessFileCountRow struct {
 	Count int64
 }
 
-var (
-	readinessScriptStyleRe = regexp.MustCompile(`(?is)<script.*?</script>|<style.*?</style>`)
-	readinessHTMLTagRe     = regexp.MustCompile(`<[^>]+>`)
-	readinessWhitespaceRe  = regexp.MustCompile(`\s+`)
-)
-
 func readinessPlainText(value string) string {
-	value = readinessScriptStyleRe.ReplaceAllString(value, " ")
-	value = readinessHTMLTagRe.ReplaceAllString(value, " ")
-	value = html.UnescapeString(value)
-	return strings.TrimSpace(readinessWhitespaceRe.ReplaceAllString(value, " "))
+	return contentquality.PlainTextFromHTML(value)
 }
 
 func readinessFileCountMaps(ctx context.Context, db *gorm.DB) (map[uint]int, map[uint]int) {
@@ -170,7 +159,7 @@ func latestPolicyReadinessBaselines(ctx context.Context, contentType, countryCod
 	return baselines, nil
 }
 
-func readinessGate(decision *models.ContentAIDecision, title, content, meta, keywords string, editorial ...*models.ContentEditorialDecision) auditservice.ContentQualityGate {
+func readinessGate(decision *models.ContentAIDecision, title, content, meta, keywords string, language contentquality.LanguageCheckResult, editorial *models.ContentEditorialDecision) auditservice.ContentQualityGate {
 	gate := auditservice.EvaluateQualityGate(decision)
 	artifacts := contentquality.DetectReplacementArtifacts(
 		contentquality.TextField{Name: "title", Value: title},
@@ -179,19 +168,22 @@ func readinessGate(decision *models.ContentAIDecision, title, content, meta, key
 		contentquality.TextField{Name: "keywords", Value: keywords},
 	)
 	gate = contentquality.ApplyReplacementArtifactGuard(gate, artifacts)
-	if len(editorial) > 0 && editorial[0] != nil {
-		gate = contentquality.ApplyEditorialDecision(gate, editorial[0].Decision)
+	if editorial != nil {
+		gate = contentquality.ApplyEditorialDecision(gate, editorial.Decision)
 	}
-	gate = contentquality.ApplyAdReadinessRequirements(gate, title, readinessPlainText(content), meta)
+	gate = contentquality.ApplyAdReadinessRequirementsWithLanguage(gate, title, readinessPlainText(content), meta, language)
 	return gate
 }
 
-func buildUnifiedReadinessItem(title, content, meta, keywords string, filesCount int, published bool, contentType string, id uint, countryCode string, gate auditservice.ContentQualityGate, baseline *models.ContentPolicyReadiness) unifiedReadinessItem {
+func buildUnifiedReadinessItem(title, content, meta, keywords string, filesCount int, published bool, contentType string, id uint, countryCode string, gate auditservice.ContentQualityGate, baseline *models.ContentPolicyReadiness, languageCheck ...contentquality.LanguageCheckResult) unifiedReadinessItem {
 	plainText := readinessPlainText(content)
 	diagnostics := contentquality.EvaluateDiagnostics(title, plainText, meta, filesCount, published)
-	languageCheck := contentquality.CheckArabicLanguage(title, plainText)
-	gate = contentquality.ApplyAdReadinessRequirements(gate, title, plainText, meta)
-	problems := classifyReadinessProblems(title, meta, diagnostics, languageCheck, published, gate)
+	language := contentquality.CheckArabicLanguage(title, plainText)
+	if len(languageCheck) > 0 {
+		language = languageCheck[0]
+	}
+	gate = contentquality.ApplyAdReadinessRequirementsWithLanguage(gate, title, plainText, meta, language)
+	problems := classifyReadinessProblems(title, meta, diagnostics, language, published, gate)
 	shouldIndex := published && gate.Indexable
 	shouldShowAds := published && gate.AdsEligible
 
@@ -257,7 +249,7 @@ func buildUnifiedReadinessItem(title, content, meta, keywords string, filesCount
 		AdSenseRisk:       gate.Risk,
 		GateReasons:       append([]string(nil), reasons...),
 		DiagnosticSignals: append([]string(nil), diagnostics.Signals...),
-		LanguageCheck:     languageCheck,
+		LanguageCheck:     language,
 		Issues:            issues,
 		Problems:          problems,
 		PrimaryProblem:    primaryProblem,
@@ -330,13 +322,22 @@ func collectReadinessItems(ctx context.Context, db *gorm.DB, countryCode, conten
 		if err := q.Find(&articles).Error; err != nil {
 			return nil, err
 		}
+		languageInputs := make([]contentquality.LanguageCheckInput, 0, len(articles))
+		for _, article := range articles {
+			languageInputs = append(languageInputs, contentquality.LanguageCheckInput{ContentID: article.ID, Title: article.Title, Content: article.Content})
+		}
+		languageChecks, err := contentquality.ResolveLanguageChecks(ctx, db, "article", countryCode, languageInputs)
+		if err != nil {
+			return nil, err
+		}
 		for _, article := range articles {
 			meta := ""
 			if article.MetaDescription != nil {
 				meta = *article.MetaDescription
 			}
-			gate := readinessGate(decisions[article.ID], article.Title, article.Content, meta, "", editorial[article.ID])
-			item := buildUnifiedReadinessItem(article.Title, article.Content, meta, "", articleFileCounts[article.ID], article.Status == 1, "article", article.ID, countryCode, gate, policyBaselines[article.ID])
+			language := languageChecks[article.ID]
+			gate := readinessGate(decisions[article.ID], article.Title, article.Content, meta, "", language, editorial[article.ID])
+			item := buildUnifiedReadinessItem(article.Title, article.Content, meta, "", articleFileCounts[article.ID], article.Status == 1, "article", article.ID, countryCode, gate, policyBaselines[article.ID], language)
 			out = append(out, unifiedReadinessRow{Item: item, CreatedAt: article.CreatedAt, body: article.Content})
 		}
 	}
@@ -364,6 +365,14 @@ func collectReadinessItems(ctx context.Context, db *gorm.DB, countryCode, conten
 		if err := q.Find(&posts).Error; err != nil {
 			return nil, err
 		}
+		languageInputs := make([]contentquality.LanguageCheckInput, 0, len(posts))
+		for _, post := range posts {
+			languageInputs = append(languageInputs, contentquality.LanguageCheckInput{ContentID: post.ID, Title: post.Title, Content: post.Content})
+		}
+		languageChecks, err := contentquality.ResolveLanguageChecks(ctx, db, "post", countryCode, languageInputs)
+		if err != nil {
+			return nil, err
+		}
 		for _, post := range posts {
 			meta := ""
 			if post.MetaDescription != nil {
@@ -373,8 +382,9 @@ func collectReadinessItems(ctx context.Context, db *gorm.DB, countryCode, conten
 			if post.Keywords != nil {
 				keywords = *post.Keywords
 			}
-			gate := readinessGate(decisions[post.ID], post.Title, post.Content, meta, keywords, editorial[post.ID])
-			item := buildUnifiedReadinessItem(post.Title, post.Content, meta, keywords, postFileCounts[post.ID], post.IsActive, "post", post.ID, countryCode, gate, policyBaselines[post.ID])
+			language := languageChecks[post.ID]
+			gate := readinessGate(decisions[post.ID], post.Title, post.Content, meta, keywords, language, editorial[post.ID])
+			item := buildUnifiedReadinessItem(post.Title, post.Content, meta, keywords, postFileCounts[post.ID], post.IsActive, "post", post.ID, countryCode, gate, policyBaselines[post.ID], language)
 			out = append(out, unifiedReadinessRow{Item: item, CreatedAt: post.CreatedAt, body: post.Content})
 		}
 	}
