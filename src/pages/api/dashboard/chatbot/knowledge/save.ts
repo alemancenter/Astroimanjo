@@ -28,8 +28,14 @@ export const POST: APIRoute = async ({ request, cookies, locals, redirect }) => 
 		return redirect(`${redirectTo}${separator}error=${encodeURIComponent('يرجى تعبئة العنوان والسؤال والجواب')}`);
 	}
 
-	const res = await apiRawFetch(isEdit ? `/dashboard/chatbot/knowledge/${id}` : '/dashboard/chatbot/knowledge', {
-		method: isEdit ? 'PUT' : 'POST',
+	const operation: { path: string; method: 'PUT' | 'POST' } = isEdit
+		? { path: `/dashboard/chatbot/knowledge/${id}`, method: 'PUT' }
+		: { path: '/dashboard/chatbot/knowledge', method: 'POST' };
+
+	// @api-contract PUT /dashboard/chatbot/knowledge/:id
+	// @api-contract POST /dashboard/chatbot/knowledge
+	const res = await apiRawFetch(operation.path, {
+		method: operation.method,
 		countryId: locals.countryId,
 		cookieHeader: `token=${token}`,
 		headers: { 'Content-Type': 'application/json' },

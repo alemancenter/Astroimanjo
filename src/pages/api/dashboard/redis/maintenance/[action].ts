@@ -17,6 +17,9 @@ export const POST: APIRoute = async ({ params, request, cookies, locals, redirec
 	const redirectTo = safeRedirectPath(String(form.get('redirect_to') || ''), '/dashboard/redis?tab=maintenance');
 	const operation = actions[String(params.action || '')];
 	if (!operation) return new Response('Not found', { status: 404 });
+	// @api-contract POST /dashboard/redis/legacy-ip-location/expire
+	// @api-contract DELETE /dashboard/redis/legacy-ip-location/clean
+	// @api-contract DELETE /dashboard/redis/expired/clean
 	const res = await apiRawFetch(operation.path, {
 		method: operation.method, countryId: locals.countryId, cookieHeader: `token=${token}`,
 		headers: operation.body ? { 'Content-Type': 'application/json' } : undefined,

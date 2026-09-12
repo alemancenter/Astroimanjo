@@ -28,8 +28,14 @@ export const POST: APIRoute = async ({ request, cookies, locals, redirect, cache
 		return redirect(addNotice(redirectTo, 'error', 'يرجى إدخال اسم المادة واختيار الصف'));
 	}
 
-	const res = await apiRawFetch(isEdit ? `/dashboard/subjects/${id}` : '/dashboard/subjects', {
-		method: isEdit ? 'PUT' : 'POST',
+	const operation: { path: string; method: 'PUT' | 'POST' } = isEdit
+		? { path: `/dashboard/subjects/${id}`, method: 'PUT' }
+		: { path: '/dashboard/subjects', method: 'POST' };
+
+	// @api-contract PUT /dashboard/subjects/:id
+	// @api-contract POST /dashboard/subjects
+	const res = await apiRawFetch(operation.path, {
+		method: operation.method,
 		countryId: locals.countryId,
 		cookieHeader: `token=${token}`,
 		headers: { 'Content-Type': 'application/json' },

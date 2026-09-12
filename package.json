@@ -7,10 +7,13 @@
   },
   "scripts": {
     "dev": "astro dev",
+    "prebuild": "npm run contract",
     "build": "astro build",
+    "postbuild": "node scripts/assert-no-client-secret.mjs",
     "preview": "astro preview",
     "astro": "astro",
     "check": "astro check",
+    "contract": "node scripts/check-api-contract.mjs",
     "test": "node --test tests/*.test.mjs",
     "verify": "npm run test && npm run check && npm run build",
     "smoke": "node scripts/smoke.mjs"

@@ -11,11 +11,14 @@ export const POST: APIRoute = async ({ params, request, cookies, locals, redirec
 	const redirectTo = safeRedirectPath(String(form.get('redirect_to') || ''), '/account/notifications');
 	const url = new URL(redirectTo, 'http://local');
 	const action = params.action;
-	const method = action === 'delete' ? 'DELETE' : 'POST';
-	const path = action === 'read' || action === 'open' ? `/dashboard/notifications/${params.id}/read` : action === 'delete' ? `/dashboard/notifications/${params.id}` : '';
-	if (!path) return redirect(redirectTo);
+	let operation: { path: string; method: 'POST' | 'DELETE' };
+	if (action === 'read' || action === 'open') operation = { path: `/dashboard/notifications/${params.id}/read`, method: 'POST' };
+	else if (action === 'delete') operation = { path: `/dashboard/notifications/${params.id}`, method: 'DELETE' };
+	else return redirect(redirectTo);
 	try {
-		const response = await apiRawFetch(path, { method, countryId: locals.countryId, cookieHeader: `token=${token}` });
+		// @api-contract POST /dashboard/notifications/:id/read
+		// @api-contract DELETE /dashboard/notifications/:id
+		const response = await apiRawFetch(operation.path, { method: operation.method, countryId: locals.countryId, cookieHeader: `token=${token}` });
 		const json: any = await response.json().catch(() => null);
 		if (action === 'open' && response.ok && json?.success !== false) return redirect(redirectTo);
 		if (action === 'open') {

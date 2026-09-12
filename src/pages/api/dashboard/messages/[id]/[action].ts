@@ -12,16 +12,16 @@ export const POST: APIRoute = async ({ params, request, cookies, locals, redirec
 	const separator = redirectTo.includes('?') ? '&' : '?';
 	if (!token) return redirect(`/login?redirect_to=${encodeURIComponent('/dashboard/messages')}`);
 
-	let path = '';
-	let method: 'POST' | 'DELETE' = 'POST';
-	if (action === 'read') path = `/dashboard/messages/${id}/read`;
-	else if (action === 'important') path = `/dashboard/messages/${id}/important`;
-	else if (action === 'delete') {
-		path = `/dashboard/messages/${id}`;
-		method = 'DELETE';
-	} else return redirect(redirectTo);
+	let operation: { path: string; method: 'POST' | 'DELETE' };
+	if (action === 'read') operation = { path: `/dashboard/messages/${id}/read`, method: 'POST' };
+	else if (action === 'important') operation = { path: `/dashboard/messages/${id}/important`, method: 'POST' };
+	else if (action === 'delete') operation = { path: `/dashboard/messages/${id}`, method: 'DELETE' };
+	else return redirect(redirectTo);
 
-	const res = await apiRawFetch(path, { method, countryId: locals.countryId, cookieHeader: `token=${token}` });
+	// @api-contract POST /dashboard/messages/:id/read
+	// @api-contract POST /dashboard/messages/:id/important
+	// @api-contract DELETE /dashboard/messages/:id
+	const res = await apiRawFetch(operation.path, { method: operation.method, countryId: locals.countryId, cookieHeader: `token=${token}` });
 	const json: any = await res.json().catch(() => null);
 	if (!res.ok || json?.success === false) {
 		return redirect(`${redirectTo}${separator}error=${encodeURIComponent(json?.message || 'فشل تنفيذ العملية')}`);

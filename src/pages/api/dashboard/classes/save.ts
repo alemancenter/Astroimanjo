@@ -28,8 +28,14 @@ export const POST: APIRoute = async ({ request, cookies, locals, redirect, cache
 		return redirect(addNotice(redirectTo, 'error', 'يرجى إدخال اسم الصف وترتيب ظهور صحيح'));
 	}
 
-	const res = await apiRawFetch(isEdit ? `/dashboard/school-classes/${id}` : '/dashboard/school-classes', {
-		method: isEdit ? 'PUT' : 'POST',
+	const operation: { path: string; method: 'PUT' | 'POST' } = isEdit
+		? { path: `/dashboard/school-classes/${id}`, method: 'PUT' }
+		: { path: '/dashboard/school-classes', method: 'POST' };
+
+	// @api-contract PUT /dashboard/school-classes/:id
+	// @api-contract POST /dashboard/school-classes
+	const res = await apiRawFetch(operation.path, {
+		method: operation.method,
 		countryId: locals.countryId,
 		cookieHeader: `token=${token}`,
 		headers: { 'Content-Type': 'application/json' },

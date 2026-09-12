@@ -12,17 +12,17 @@ export const POST: APIRoute = async ({ params, request, cookies, locals, redirec
 	const redirectTo = safeRedirectPath(String(form.get('redirect_to') || ''), '/account/messages');
 	const url = new URL(redirectTo, 'http://local');
 	const id = String(params.id || '');
-	let path = '';
-	let method: 'POST' | 'DELETE' = 'POST';
-	if (params.action === 'read') path = `/dashboard/messages/${id}/read`;
-	else if (params.action === 'important') path = `/dashboard/messages/${id}/important`;
-	else if (params.action === 'delete') {
-		path = `/dashboard/messages/${id}`;
-		method = 'DELETE';
-	} else return redirect(redirectTo);
+	let operation: { path: string; method: 'POST' | 'DELETE' };
+	if (params.action === 'read') operation = { path: `/dashboard/messages/${id}/read`, method: 'POST' };
+	else if (params.action === 'important') operation = { path: `/dashboard/messages/${id}/important`, method: 'POST' };
+	else if (params.action === 'delete') operation = { path: `/dashboard/messages/${id}`, method: 'DELETE' };
+	else return redirect(redirectTo);
 
 	try {
-		const response = await apiRawFetch(path, { method, countryId: locals.countryId, cookieHeader: `token=${token}` });
+		// @api-contract POST /dashboard/messages/:id/read
+		// @api-contract POST /dashboard/messages/:id/important
+		// @api-contract DELETE /dashboard/messages/:id
+		const response = await apiRawFetch(operation.path, { method: operation.method, countryId: locals.countryId, cookieHeader: `token=${token}` });
 		const json: any = await response.json().catch(() => null);
 		if (!response.ok || json?.success === false) url.searchParams.set('error', json?.message || 'تعذّر تنفيذ العملية.');
 		else url.searchParams.set('success', params.action === 'delete' ? 'تم حذف الرسالة.' : 'تم تحديث الرسالة.');

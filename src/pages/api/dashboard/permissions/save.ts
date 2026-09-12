@@ -17,8 +17,14 @@ export const POST: APIRoute = async ({ request, cookies, locals, redirect, cache
 	const name = String(form.get('name') || '').trim().toLocaleLowerCase();
 	if (name.length < 2 || name.length > 125) return redirect(notice('error', 'يجب أن يتكون اسم الصلاحية من حرفين إلى 125 حرفًا.'));
 
-	const response = await apiRawFetch(id ? `/dashboard/permissions/${id}` : '/dashboard/permissions', {
-		method: id ? 'PUT' : 'POST', countryId: locals.countryId, cookieHeader: `token=${token}`,
+	const operation: { path: string; method: 'PUT' | 'POST' } = id
+		? { path: `/dashboard/permissions/${id}`, method: 'PUT' }
+		: { path: '/dashboard/permissions', method: 'POST' };
+
+	// @api-contract PUT /dashboard/permissions/:id
+	// @api-contract POST /dashboard/permissions
+	const response = await apiRawFetch(operation.path, {
+		method: operation.method, countryId: locals.countryId, cookieHeader: `token=${token}`,
 		headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }),
 	});
 	const json: any = await response.json().catch(() => null);

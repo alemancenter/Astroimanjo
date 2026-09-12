@@ -22,12 +22,18 @@ export const POST: APIRoute = async ({ request, cookies, locals, redirect, cache
 		permissions: form.getAll('permissions').map((value) => Number(value)).filter(Number.isFinite),
 	};
 
-	if (payload.name.length < 2 || payload.name.length > 125) {
-		return redirect(addNotice(redirectTo, 'error', 'يجب أن يتكون اسم الدور من حرفين إلى 125 حرفًا.'));
-	}
+if (payload.name.length < 2 || payload.name.length > 125) {
+return redirect(addNotice(redirectTo, 'error', 'يجب أن يتكون اسم الدور من حرفين إلى 125 حرفًا.'));
+}
 
-	const response = await apiRawFetch(isEdit ? `/dashboard/roles/${id}` : '/dashboard/roles', {
-		method: isEdit ? 'PUT' : 'POST',
+	const operation: { path: string; method: 'PUT' | 'POST' } = isEdit
+		? { path: `/dashboard/roles/${id}`, method: 'PUT' }
+		: { path: '/dashboard/roles', method: 'POST' };
+
+// @api-contract PUT /dashboard/roles/:id
+// @api-contract POST /dashboard/roles
+	const response = await apiRawFetch(operation.path, {
+		method: operation.method,
 		countryId: locals.countryId,
 		cookieHeader: `token=${token}`,
 		headers: { 'Content-Type': 'application/json' },

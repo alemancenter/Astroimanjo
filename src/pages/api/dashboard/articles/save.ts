@@ -49,8 +49,14 @@ export const POST: APIRoute = async ({ request, cookies, locals, redirect, cache
 		return redirect(`${back}?error=${encodeURIComponent(message)}`);
 	}
 
-	const res = await apiRawFetch(isEdit ? `/dashboard/articles/${id}` : '/dashboard/articles', {
-		method: isEdit ? 'PUT' : 'POST',
+	const operation: { path: string; method: 'PUT' | 'POST' } = isEdit
+		? { path: `/dashboard/articles/${id}`, method: 'PUT' }
+		: { path: '/dashboard/articles', method: 'POST' };
+
+	// @api-contract PUT /dashboard/articles/:id
+	// @api-contract POST /dashboard/articles
+	const res = await apiRawFetch(operation.path, {
+		method: operation.method,
 		countryId: locals.countryId,
 		cookieHeader: `token=${token}`,
 		headers: { 'Content-Type': 'application/json' },

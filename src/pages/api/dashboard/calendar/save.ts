@@ -29,8 +29,14 @@ export const POST: APIRoute = async ({ request, cookies, locals, redirect, cache
 		return redirect(addNotice(redirectTo, 'error', 'يرجى إدخال عنوان صحيح وتحديد تاريخ الحدث'));
 	}
 
-	const res = await apiRawFetch(isEdit ? `/dashboard/calendar/events/${id}` : '/dashboard/calendar/events', {
-		method: isEdit ? 'PUT' : 'POST',
+	const operation: { path: string; method: 'PUT' | 'POST' } = isEdit
+		? { path: `/dashboard/calendar/events/${id}`, method: 'PUT' }
+		: { path: '/dashboard/calendar/events', method: 'POST' };
+
+	// @api-contract PUT /dashboard/calendar/events/:id
+	// @api-contract POST /dashboard/calendar/events
+	const res = await apiRawFetch(operation.path, {
+		method: operation.method,
 		countryId: locals.countryId,
 		cookieHeader: `token=${token}`,
 		headers: { 'Content-Type': 'application/json' },

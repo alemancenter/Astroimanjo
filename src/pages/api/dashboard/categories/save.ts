@@ -30,8 +30,14 @@ export const POST: APIRoute = async ({ request, cookies, locals, redirect, cache
 		return redirect(noticeUrl(back, 'error', 'يرجى إدخال اسم التصنيف'));
 	}
 
-	const saveResponse = await apiRawFetch(isEdit ? `/dashboard/categories/${id}` : '/dashboard/categories', {
-		method: isEdit ? 'PUT' : 'POST',
+	const operation: { path: string; method: 'PUT' | 'POST' } = isEdit
+		? { path: `/dashboard/categories/${id}`, method: 'PUT' }
+		: { path: '/dashboard/categories', method: 'POST' };
+
+	// @api-contract PUT /dashboard/categories/:id
+	// @api-contract POST /dashboard/categories
+	const saveResponse = await apiRawFetch(operation.path, {
+		method: operation.method,
 		countryId: locals.countryId,
 		cookieHeader: `token=${token}`,
 		headers: { 'Content-Type': 'application/json' },

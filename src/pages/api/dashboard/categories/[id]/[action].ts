@@ -18,15 +18,14 @@ export const POST: APIRoute = async ({ params, request, cookies, locals, redirec
 
 	if (!token) return redirect(`/login?redirect_to=${encodeURIComponent('/dashboard/categories')}`);
 
-	let path = '';
-	let method: 'POST' | 'DELETE' = 'POST';
-	if (action === 'toggle') path = `/dashboard/categories/${id}/toggle`;
-	else if (action === 'delete') {
-		path = `/dashboard/categories/${id}`;
-		method = 'DELETE';
-	} else return redirect(redirectTo);
+	let operation: { path: string; method: 'POST' | 'DELETE' };
+	if (action === 'toggle') operation = { path: `/dashboard/categories/${id}/toggle`, method: 'POST' };
+	else if (action === 'delete') operation = { path: `/dashboard/categories/${id}`, method: 'DELETE' };
+	else return redirect(redirectTo);
 
-	const res = await apiRawFetch(path, { method, countryId: locals.countryId, cookieHeader: `token=${token}` });
+	// @api-contract POST /dashboard/categories/:id/toggle
+	// @api-contract DELETE /dashboard/categories/:id
+	const res = await apiRawFetch(operation.path, { method: operation.method, countryId: locals.countryId, cookieHeader: `token=${token}` });
 	const json: any = await res.json().catch(() => null);
 
 	if (!res.ok || json?.success === false) {

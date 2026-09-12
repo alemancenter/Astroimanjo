@@ -18,16 +18,16 @@ export const POST: APIRoute = async ({ params, request, cookies, locals, redirec
 
 	if (!token) return redirect(`/login?redirect_to=${encodeURIComponent('/dashboard/comments')}`);
 
-	let path = '';
-	let method: 'POST' | 'DELETE' = 'POST';
-	if (action === 'approve') path = `/dashboard/comments/${database}/${id}/approve`;
-	else if (action === 'reject') path = `/dashboard/comments/${database}/${id}/reject`;
-	else if (action === 'delete') {
-		path = `/dashboard/comments/${database}/${id}`;
-		method = 'DELETE';
-	} else return redirect(redirectTo);
+	let operation: { path: string; method: 'POST' | 'DELETE' };
+	if (action === 'approve') operation = { path: `/dashboard/comments/${database}/${id}/approve`, method: 'POST' };
+	else if (action === 'reject') operation = { path: `/dashboard/comments/${database}/${id}/reject`, method: 'POST' };
+	else if (action === 'delete') operation = { path: `/dashboard/comments/${database}/${id}`, method: 'DELETE' };
+	else return redirect(redirectTo);
 
-	const res = await apiRawFetch(path, { method, countryId: locals.countryId, cookieHeader: `token=${token}` });
+	// @api-contract POST /dashboard/comments/:database/:id/approve
+	// @api-contract POST /dashboard/comments/:database/:id/reject
+	// @api-contract DELETE /dashboard/comments/:database/:id
+	const res = await apiRawFetch(operation.path, { method: operation.method, countryId: locals.countryId, cookieHeader: `token=${token}` });
 	const json: any = await res.json().catch(() => null);
 
 	if (!res.ok || json?.success === false) {

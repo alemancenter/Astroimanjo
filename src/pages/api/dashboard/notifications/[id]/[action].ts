@@ -12,15 +12,14 @@ export const POST: APIRoute = async ({ params, request, cookies, locals, redirec
 	const separator = redirectTo.includes('?') ? '&' : '?';
 	if (!token) return redirect(`/login?redirect_to=${encodeURIComponent('/dashboard/notifications')}`);
 
-	let path = '';
-	let method: 'POST' | 'DELETE' = 'POST';
-	if (action === 'read') path = `/dashboard/notifications/${id}/read`;
-	else if (action === 'delete') {
-		path = `/dashboard/notifications/${id}`;
-		method = 'DELETE';
-	} else return redirect(redirectTo);
+	let operation: { path: string; method: 'POST' | 'DELETE' };
+	if (action === 'read') operation = { path: `/dashboard/notifications/${id}/read`, method: 'POST' };
+	else if (action === 'delete') operation = { path: `/dashboard/notifications/${id}`, method: 'DELETE' };
+	else return redirect(redirectTo);
 
-	const res = await apiRawFetch(path, { method, countryId: locals.countryId, cookieHeader: `token=${token}` });
+	// @api-contract POST /dashboard/notifications/:id/read
+	// @api-contract DELETE /dashboard/notifications/:id
+	const res = await apiRawFetch(operation.path, { method: operation.method, countryId: locals.countryId, cookieHeader: `token=${token}` });
 	const json: any = await res.json().catch(() => null);
 	if (!res.ok || json?.success === false) {
 		return redirect(`${redirectTo}${separator}error=${encodeURIComponent(json?.message || 'فشل تنفيذ العملية')}`);

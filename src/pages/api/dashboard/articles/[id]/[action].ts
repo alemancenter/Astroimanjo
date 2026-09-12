@@ -12,16 +12,16 @@ export const POST: APIRoute = async ({ params, request, cookies, locals, redirec
 
 	if (!token) return redirect(`/login?redirect_to=${encodeURIComponent('/dashboard/articles')}`);
 
-	let path = '';
-	let method: 'POST' | 'DELETE' = 'POST';
-	if (action === 'publish') path = `/dashboard/articles/${id}/publish`;
-	else if (action === 'unpublish') path = `/dashboard/articles/${id}/unpublish`;
-	else if (action === 'delete') {
-		path = `/dashboard/articles/${id}`;
-		method = 'DELETE';
-	} else return redirect(redirectTo);
+	let operation: { path: string; method: 'POST' | 'DELETE' };
+	if (action === 'publish') operation = { path: `/dashboard/articles/${id}/publish`, method: 'POST' };
+	else if (action === 'unpublish') operation = { path: `/dashboard/articles/${id}/unpublish`, method: 'POST' };
+	else if (action === 'delete') operation = { path: `/dashboard/articles/${id}`, method: 'DELETE' };
+	else return redirect(redirectTo);
 
-	const res = await apiRawFetch(path, { method, countryId: locals.countryId, cookieHeader: `token=${token}` });
+	// @api-contract POST /dashboard/articles/:id/publish
+	// @api-contract POST /dashboard/articles/:id/unpublish
+	// @api-contract DELETE /dashboard/articles/:id
+	const res = await apiRawFetch(operation.path, { method: operation.method, countryId: locals.countryId, cookieHeader: `token=${token}` });
 	const json: any = await res.json().catch(() => null);
 
 	if (!res.ok || json?.success === false) {

@@ -19,9 +19,12 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
 	if (!provider || !token) {
 		return Response.json({ success: false, message: 'لم يتم استلام بيانات تسجيل الدخول.' }, { status: 400 });
 	}
+	const operation = provider === 'google'
+		? { path: '/auth/google/token', providerName: 'Google' }
+		: { path: '/auth/facebook/token', providerName: 'Facebook' };
 
 	try {
-		const response = await apiRawFetch(`/auth/${provider}/token`, {
+		const response = await apiRawFetch(operation.path, {
 			method: 'POST',
 			countryId: locals.countryId,
 			headers: { 'Content-Type': 'application/json' },
@@ -31,7 +34,7 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
 		if (!response.ok || !json?.success) {
 			return Response.json({
 				success: false,
-				message: json?.message || `تعذر تسجيل الدخول عبر ${provider === 'google' ? 'Google' : 'Facebook'}.`,
+				message: json?.message || `تعذر تسجيل الدخول عبر ${operation.providerName}.`,
 			}, { status: response.status >= 400 ? response.status : 401 });
 		}
 
