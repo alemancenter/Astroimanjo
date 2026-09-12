@@ -29,6 +29,21 @@ export interface ReadinessItem {
 	adsense_risk: string;
 	gate_reasons: string[];
 	diagnostic_signals: string[];
+	language_check?: {
+		language: string;
+		checked: boolean;
+		error_count: number;
+		blocking: boolean;
+		findings: Array<{
+			field: 'title' | 'content' | string;
+			offset: number;
+			length: number;
+			token: string;
+			suggestion?: string;
+			rule: string;
+			message: string;
+		}>;
+	};
 	issues: string[];
 	problems: ReadinessProblem[];
 	primary_problem?: string;

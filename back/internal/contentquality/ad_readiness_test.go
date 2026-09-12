@@ -35,3 +35,22 @@ func TestApplyAdReadinessRequirementsKeepsCompleteApproval(t *testing.T) {
 		t.Fatalf("complete approved page should remain eligible: %#v", guarded.Reasons)
 	}
 }
+
+func TestApplyAdReadinessRequirementsRevokesAdsForLanguageErrorsOnly(t *testing.T) {
+	base := Gate{Indexable: true, AdsEligible: true, Audited: true, Reasons: []string{"المحتوى مؤهل للإعلانات."}}
+	guarded := ApplyAdReadinessRequirements(
+		base,
+		"طريقه انشاء درس تعليمي واضح ومتكامل",
+		strings.Repeat("هذا محتوى تعليمي مفيد يشرح الموضوع بصورة واضحة. ", 70),
+		strings.Repeat("وصف تعريفي واضح ودقيق للمحتوى التعليمي المنشور في هذه الصفحة. ", 2),
+	)
+	if guarded.AdsEligible {
+		t.Fatal("language findings must revoke ad eligibility")
+	}
+	if !guarded.Indexable {
+		t.Fatal("language findings must not change indexing")
+	}
+	if !guarded.Audited {
+		t.Fatal("language findings must not change the saved audit state")
+	}
+}

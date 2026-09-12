@@ -1,0 +1,116 @@
+<div id="arabic-language-check" class="language-check" hidden aria-live="polite">
+	<header>
+		<div>
+			<span>التدقيق الإملائي</span>
+			<strong data-language-summary>جارٍ فحص النص…</strong>
+		</div>
+		<i data-language-count>0</i>
+	</header>
+	<p data-language-note>هذا فحص محلي عالي الثقة. لا يمنع الحفظ أو النشر، لكنه يؤثر في أهلية الإعلانات.</p>
+	<ul data-language-findings></ul>
+</div>
+
+<script>
+	const form = document.querySelector<HTMLFormElement>('#article-form, #post-editor-form');
+	const titleInput = form?.querySelector<HTMLInputElement>('#title');
+	const contentInput = form?.querySelector<HTMLTextAreaElement>('#content');
+	const panel = document.getElementById('arabic-language-check');
+
+	if (form && titleInput && contentInput && panel) {
+		const summary = panel.querySelector<HTMLElement>('[data-language-summary]');
+		const count = panel.querySelector<HTMLElement>('[data-language-count]');
+		const list = panel.querySelector<HTMLUListElement>('[data-language-findings]');
+		const editor = form.querySelector<HTMLElement>('.ql-editor');
+		const dictionary: Record<string, string> = {
+			'الى': 'إلى', 'انشاء': 'إنشاء', 'هاذا': 'هذا', 'هاذه': 'هذه',
+			'اللذي': 'الذي', 'اللتي': 'التي', 'الذى': 'الذي', 'لاكن': 'لكن',
+			'مسؤل': 'مسؤول', 'مساله': 'مسألة', 'مسأله': 'مسألة', 'شئ': 'شيء',
+			'قراءه': 'قراءة', 'بيئه': 'بيئة', 'منشأه': 'منشأة', 'مشكله': 'مشكلة',
+			'طريقه': 'طريقة', 'مدرسه': 'مدرسة', 'اللغه': 'اللغة', 'الصفحه': 'الصفحة',
+		};
+		type Finding = { field: string; message: string };
+		const inspect = (field: string, value: string) => {
+			const findings: Finding[] = [];
+			for (const match of value.matchAll(/[\p{Script=Arabic}]+/gu)) {
+				const replacement = dictionary[match[0].replace(/[\u0640\u064B-\u065F\u0670]/g, '')];
+				if (replacement) findings.push({ field, message: `استبدل «${match[0]}» بـ«${replacement}».` });
+			}
+			const patterns: Array<[RegExp, string]> = [
+				[/\s+[،؛؟!,:.]/gu, 'احذف المسافة التي تسبق علامة الترقيم.'],
+				[/[،؛؟!,:][\p{Script=Arabic}]/gu, 'أضف مسافة بعد علامة الترقيم.'],
+				[/[،؛؟!]{2,}/gu, 'استخدم علامة ترقيم واحدة.'],
+				[/ـ+/gu, 'احذف التطويل الزخرفي من النص التحريري.'],
+			];
+			for (const [pattern, message] of patterns) {
+				for (const _match of value.matchAll(pattern)) findings.push({ field, message });
+			}
+			return findings;
+		};
+		let timer = 0;
+		const render = () => {
+			const content = editor?.innerText || contentInput.value.replace(/<[^>]+>/g, ' ');
+			const findings = [...inspect('العنوان', titleInput.value), ...inspect('المحتوى', content)];
+			panel.hidden = false;
+			panel.classList.toggle('is-clean', findings.length === 0);
+			if (summary) summary.textContent = findings.length ? 'يحتاج النص إلى تصحيح قبل تفعيل الإعلانات' : 'لا توجد أخطاء عالية الثقة';
+			if (count) count.textContent = String(findings.length);
+			if (list) {
+				list.replaceChildren();
+				if (!findings.length) {
+					const item = document.createElement('li');
+					item.className = 'is-clean';
+					item.textContent = 'يمكنك متابعة الحفظ والنشر. سيعيد الخادم الفحص عند تحديد أهلية الإعلانات.';
+					list.append(item);
+				} else {
+					findings.slice(0, 12).forEach((finding) => {
+						const item = document.createElement('li');
+						const field = document.createElement('b');
+						field.textContent = finding.field;
+						item.append(field, document.createTextNode(`: ${finding.message}`));
+						list.append(item);
+					});
+					if (findings.length > 12) {
+						const item = document.createElement('li');
+						item.textContent = `و${findings.length - 12} ملاحظة إضافية.`;
+						list.append(item);
+					}
+				}
+			}
+		};
+		const schedule = () => {
+			window.clearTimeout(timer);
+			timer = window.setTimeout(render, 350);
+		};
+		titleInput.addEventListener('input', schedule);
+		contentInput.addEventListener('input', schedule);
+		if (editor) {
+			editor.addEventListener('input', schedule);
+			new MutationObserver(schedule).observe(editor, { childList: true, characterData: true, subtree: true });
+		}
+		const contentContainer = contentInput.parentElement;
+		contentContainer?.append(panel);
+		render();
+	}
+</script>
+
+<style>
+	.language-check{margin-top:1rem;border:1px solid #fecaca;border-radius:.85rem;background:#fff7f7;padding:.85rem;color:#7f1d1d}
+	.language-check[hidden]{display:none}
+	.language-check header{display:flex;align-items:center;justify-content:space-between;gap:1rem}
+	.language-check header>div{display:grid;gap:.15rem}
+	.language-check header span{font-size:.68rem;font-weight:800;color:#b91c1c}
+	.language-check header strong{font-size:.82rem}
+	.language-check header i{display:grid;min-width:2rem;height:2rem;place-items:center;border-radius:999px;background:#dc2626;color:#fff;font-size:.75rem;font-style:normal;font-weight:900}
+	.language-check>p{margin:.5rem 0;font-size:.7rem;color:#991b1b}
+	.language-check ul{display:grid;gap:.3rem;margin:0;padding:0;list-style:none;font-size:.72rem}
+	.language-check li{border-radius:.45rem;background:#fff;padding:.4rem .55rem}
+	.language-check li b{color:#b91c1c}
+	.language-check.is-clean{border-color:#bbf7d0;background:#f0fdf4;color:#14532d}
+	.language-check.is-clean header span,.language-check.is-clean>p{color:#15803d}
+	.language-check.is-clean header i{background:#16a34a}
+	.language-check.is-clean li{color:#166534}
+	:global(.dark) .language-check{border-color:#7f1d1d;background:#2b1218;color:#fecaca}
+	:global(.dark) .language-check li{background:#3a1820}
+	:global(.dark) .language-check.is-clean{border-color:#166534;background:#10291a;color:#bbf7d0}
+	:global(.dark) .language-check.is-clean li{background:#153621;color:#bbf7d0}
+</style>

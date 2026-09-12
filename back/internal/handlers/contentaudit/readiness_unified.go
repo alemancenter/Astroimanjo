@@ -20,25 +20,26 @@ import (
 )
 
 type unifiedReadinessItem struct {
-	ID                uint                   `json:"id"`
-	Type              string                 `json:"type"`
-	Title             string                 `json:"title"`
-	Status            string                 `json:"status"`
-	Score             int                    `json:"score"`
-	Level             string                 `json:"level"`
-	WordCount         int                    `json:"word_count"`
-	CharCount         int                    `json:"char_count"`
-	FilesCount        int                    `json:"files_count"`
-	ShouldIndex       bool                   `json:"should_index"`
-	ShouldShowAds     bool                   `json:"should_show_ads"`
-	Audited           bool                   `json:"audited"`
-	Decision          string                 `json:"decision"`
-	AdSenseRisk       string                 `json:"adsense_risk"`
-	GateReasons       []string               `json:"gate_reasons"`
-	DiagnosticSignals []string               `json:"diagnostic_signals"`
-	Issues            []string               `json:"issues"`
-	Problems          []readinessItemProblem `json:"problems"`
-	PrimaryProblem    string                 `json:"primary_problem,omitempty"`
+	ID                uint                               `json:"id"`
+	Type              string                             `json:"type"`
+	Title             string                             `json:"title"`
+	Status            string                             `json:"status"`
+	Score             int                                `json:"score"`
+	Level             string                             `json:"level"`
+	WordCount         int                                `json:"word_count"`
+	CharCount         int                                `json:"char_count"`
+	FilesCount        int                                `json:"files_count"`
+	ShouldIndex       bool                               `json:"should_index"`
+	ShouldShowAds     bool                               `json:"should_show_ads"`
+	Audited           bool                               `json:"audited"`
+	Decision          string                             `json:"decision"`
+	AdSenseRisk       string                             `json:"adsense_risk"`
+	GateReasons       []string                           `json:"gate_reasons"`
+	DiagnosticSignals []string                           `json:"diagnostic_signals"`
+	LanguageCheck     contentquality.LanguageCheckResult `json:"language_check"`
+	Issues            []string                           `json:"issues"`
+	Problems          []readinessItemProblem             `json:"problems"`
+	PrimaryProblem    string                             `json:"primary_problem,omitempty"`
 	// ReadinessState is the single governance status (see
 	// rulesregistry.ReadinessState / plan §1) derived from Audited/Indexable and
 	// the matched Problems — computed here, never a stored column, so this is
@@ -188,8 +189,9 @@ func readinessGate(decision *models.ContentAIDecision, title, content, meta, key
 func buildUnifiedReadinessItem(title, content, meta, keywords string, filesCount int, published bool, contentType string, id uint, countryCode string, gate auditservice.ContentQualityGate, baseline *models.ContentPolicyReadiness) unifiedReadinessItem {
 	plainText := readinessPlainText(content)
 	diagnostics := contentquality.EvaluateDiagnostics(title, plainText, meta, filesCount, published)
+	languageCheck := contentquality.CheckArabicLanguage(title, plainText)
 	gate = contentquality.ApplyAdReadinessRequirements(gate, title, plainText, meta)
-	problems := classifyReadinessProblems(title, meta, diagnostics, published, gate)
+	problems := classifyReadinessProblems(title, meta, diagnostics, languageCheck, published, gate)
 	shouldIndex := published && gate.Indexable
 	shouldShowAds := published && gate.AdsEligible
 
@@ -255,6 +257,7 @@ func buildUnifiedReadinessItem(title, content, meta, keywords string, filesCount
 		AdSenseRisk:       gate.Risk,
 		GateReasons:       append([]string(nil), reasons...),
 		DiagnosticSignals: append([]string(nil), diagnostics.Signals...),
+		LanguageCheck:     languageCheck,
 		Issues:            issues,
 		Problems:          problems,
 		PrimaryProblem:    primaryProblem,

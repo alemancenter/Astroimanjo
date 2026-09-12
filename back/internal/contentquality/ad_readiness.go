@@ -1,6 +1,7 @@
 package contentquality
 
 import (
+	"fmt"
 	"strings"
 	"unicode/utf8"
 )
@@ -13,7 +14,7 @@ func ApplyAdReadinessRequirements(gate Gate, title, plainText, meta string) Gate
 		return gate
 	}
 
-	reasons := make([]string, 0, 3)
+	reasons := make([]string, 0, 4)
 	if utf8.RuneCountInString(strings.TrimSpace(title)) < DiagnosticTitleMinChars {
 		reasons = append(reasons, "العنوان الحالي أقصر من الحد التحريري الداخلي؛ الإعلانات متوقفة حتى مراجعته.")
 	}
@@ -22,6 +23,14 @@ func ApplyAdReadinessRequirements(gate Gate, title, plainText, meta string) Gate
 	}
 	if utf8.RuneCountInString(strings.TrimSpace(meta)) < DiagnosticMetaMinChars {
 		reasons = append(reasons, "الوصف التعريفي الحالي مفقود أو أقصر من 80 حرفًا؛ الإعلانات متوقفة حتى إصلاحه.")
+	}
+	language := CheckArabicLanguage(title, plainText)
+	if language.Blocking {
+		reason := fmt.Sprintf("اكتشف التدقيق اللغوي %d خطأً عالي الثقة؛ الإعلانات متوقفة حتى تصحيح النص.", language.ErrorCount)
+		if len(language.Findings) > 0 {
+			reason += " " + language.Findings[0].Message
+		}
+		reasons = append(reasons, reason)
 	}
 	if len(reasons) == 0 {
 		return gate

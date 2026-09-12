@@ -11,7 +11,7 @@ func TestClassifyReadinessProblemsKeepsAuditAndEditorialSignalsSeparate(t *testi
 	diagnostics := contentquality.Diagnostics{WordCount: 75, FilesCount: 0}
 	gate := auditservice.ContentQualityGate{Audited: false, Indexable: true, AdsEligible: false}
 
-	problems := classifyReadinessProblems("عنوان قصير", "", diagnostics, true, gate)
+	problems := classifyReadinessProblems("عنوان قصير", "", diagnostics, contentquality.LanguageCheckResult{}, true, gate)
 	item := unifiedReadinessItem{Problems: problems}
 
 	for _, expected := range []string{
@@ -33,7 +33,7 @@ func TestClassifyReadinessProblemsSurfacesPolicyBlockFirst(t *testing.T) {
 	diagnostics := contentquality.Diagnostics{WordCount: 400, FilesCount: 1}
 	gate := auditservice.ContentQualityGate{Audited: true, Indexable: false, AdsEligible: false}
 
-	problems := classifyReadinessProblems("عنوان تعليمي واضح وطويل بما يكفي", string(make([]rune, 90)), diagnostics, true, gate)
+	problems := classifyReadinessProblems("عنوان تعليمي واضح وطويل بما يكفي", string(make([]rune, 90)), diagnostics, contentquality.LanguageCheckResult{}, true, gate)
 	if len(problems) == 0 || problems[0].Code != readinessProblemPolicyBlocked {
 		t.Fatalf("expected policy block to be the primary problem, got %#v", problems)
 	}
@@ -96,8 +96,8 @@ func TestNormalizeQualityBatchRequestDowngradesUnsafeAutoApply(t *testing.T) {
 
 func TestIssueSpecificExplicitTargetsRequireMembershipAndProblem(t *testing.T) {
 	req := contentQualityBatchRequest{
-		Source: "adsense_readiness",
-		Preset: readinessProblemMetaDescription,
+		Source:  "adsense_readiness",
+		Preset:  readinessProblemMetaDescription,
 		Targets: []contentQualityBatchTarget{{ContentType: "article", ContentID: 7}},
 	}
 	matching := unifiedReadinessItem{Type: "article", ID: 7, Problems: []readinessItemProblem{{Code: readinessProblemMetaDescription}}}
@@ -115,7 +115,7 @@ func TestIssueSpecificExplicitTargetsRequireMembershipAndProblem(t *testing.T) {
 
 func TestSelectedQualityTargetsMatchTypeAndID(t *testing.T) {
 	req := contentQualityBatchRequest{
-		Preset: "selected_items",
+		Preset:  "selected_items",
 		Targets: []contentQualityBatchTarget{{ContentType: "article", ContentID: 7}},
 	}
 	if !shouldIncludeQualityTarget(unifiedReadinessItem{Type: "article", ID: 7}, req) {

@@ -30,6 +30,7 @@ const detailsPayload = (item: ReadinessItem) => JSON.stringify({
 	problems: item.problems || [],
 	gateReasons: item.gate_reasons || [],
 	diagnostics: item.diagnostic_signals || [],
+	languageFindings: item.language_check?.findings || [],
 	editUrl: editContentHref(item),
 	publicUrl: item.url,
 	target: itemTarget(item),
@@ -69,7 +70,7 @@ const detailsPayload = (item: ReadinessItem) => JSON.stringify({
 				<td class="select-column"><input type="checkbox" data-select-item value={itemTarget(item)} data-problems={JSON.stringify(rowProblems)} disabled={!canProcess} aria-label={`تحديد ${item.title}`}/></td>
 				<td><div class="content-cell"><span>{labelType(item.type)}</span><strong title={item.title}>{item.title}</strong><small>#{nf.format(item.id)} · {item.status === 'published' ? 'منشور' : 'غير منشور'}</small></div></td>
 				<td><div class:list={['audit-score', `is-${item.level}`]} style={`--score:${Math.max(0, Math.min(100, Number(item.score || 0)))}`}><strong>{nf.format(item.score || 0)}</strong><i><span></span></i><small>{levelLabels[item.level] || item.level}{!item.audited && item.score > 0 && <em class="baseline-tag" title="درجة أولية من الفحص الحتمي — لم تُراجَع بالذكاء الاصطناعي بعد">· فحص حتمي</em>}</small></div></td>
-				<td><div class="content-metrics"><span><b>{nf.format(item.word_count || 0)}</b> كلمة</span><span><b>{nf.format(item.files_count || 0)}</b> مرفق</span></div></td>
+				<td><div class="content-metrics"><span><b>{nf.format(item.word_count || 0)}</b> كلمة</span><span><b>{nf.format(item.files_count || 0)}</b> مرفق</span>{Boolean(item.language_check?.error_count) && <span class="is-language-error"><b>{nf.format(item.language_check?.error_count || 0)}</b> خطأ لغوي</span>}</div></td>
 				<td><div class="issue-list">{(item.problems || []).slice(0, 2).map((entry) => <span class={`is-${entry.severity}`}><i></i>{entry.label}</span>)}{!(item.problems || []).length && <span class="is-clean"><i></i>لا توجد مشكلات</span>}<button type="button" data-open-eligibility data-payload={detailsPayload(item)}>عرض الأسباب</button></div></td>
 				<td><span class:list={['boolean-badge', item.should_index && 'is-yes']}><i></i>{item.should_index ? 'مفهرس' : 'غير مفهرس'}</span></td>
 				<td><button type="button" class:list={['boolean-badge', 'eligibility-button', item.should_show_ads && 'is-yes']} data-open-eligibility data-payload={detailsPayload(item)}><i></i>{item.should_show_ads ? 'جاهز مبدئيًا' : 'غير مؤهل'}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8h.01"/></svg></button></td>
@@ -91,13 +92,15 @@ const detailsPayload = (item: ReadinessItem) => JSON.stringify({
 		<section><h3>المشكلات القابلة للمعالجة</h3><ul data-detail-problems></ul></section>
 		<section><h3>قرار بوابة الجودة</h3><ul data-detail-reasons></ul></section>
 		<section><h3>إشارات تحريرية مساعدة</h3><ul data-detail-diagnostics></ul></section>
+		<section><h3>الأخطاء اللغوية المكتشفة</h3><ul data-detail-language></ul></section>
 		<footer><a data-detail-public target="_blank" rel="noreferrer">فتح الصفحة</a><a class="is-primary" data-detail-edit>فتح المحرر</a></footer>
 	</div>
 </dialog>
 
 <script>
 	type ClientProblem = { code: string; label: string; message?: string; severity?: string; action_type: string; preset?: string; mode?: string; model_strategy?: string };
-	type DetailPayload = { title: string; type: string; contentType: 'article' | 'post'; id: number; audited: boolean; indexable: boolean; adsEligible: boolean; decision: string; risk: string; problems: ClientProblem[]; gateReasons: string[]; diagnostics: string[]; editUrl: string; publicUrl: string; target: string; countryCode: string; redirectTo: string };
+	type LanguageFinding = { field: string; token: string; suggestion?: string; message: string };
+	type DetailPayload = { title: string; type: string; contentType: 'article' | 'post'; id: number; audited: boolean; indexable: boolean; adsEligible: boolean; decision: string; risk: string; problems: ClientProblem[]; gateReasons: string[]; diagnostics: string[]; languageFindings: LanguageFinding[]; editUrl: string; publicUrl: string; target: string; countryCode: string; redirectTo: string };
 
 	const clientMode = (problem: ClientProblem) => problem.mode || (problem.action_type === 'analyze' ? 'analyze_only' : problem.action_type === 'auto_repair' ? 'auto_apply' : problem.action_type === 'full_review' ? 'full_review' : 'fix_preview');
 	const clientModel = (problem: ClientProblem) => problem.model_strategy || (problem.action_type === 'full_review' ? 'final_review' : ['thin_content', 'needs_enrichment', 'ads_not_eligible'].includes(problem.code) ? 'quality' : 'balanced');
@@ -210,6 +213,7 @@ const detailsPayload = (item: ReadinessItem) => JSON.stringify({
 			renderProblemActions(data);
 			fillList('[data-detail-reasons]', data.gateReasons || [], 'لا توجد أسباب إضافية.');
 			fillList('[data-detail-diagnostics]', data.diagnostics || [], 'لا توجد إشارات تحريرية إضافية.');
+			fillList('[data-detail-language]', (data.languageFindings || []).map((finding) => `${finding.field === 'title' ? 'العنوان' : 'المحتوى'}: ${finding.message}`), 'لم يكتشف المدقق أخطاء عالية الثقة.');
 			const edit = detailsDialog?.querySelector<HTMLAnchorElement>('[data-detail-edit]'); if (edit) edit.href = data.editUrl;
 			const page = detailsDialog?.querySelector<HTMLAnchorElement>('[data-detail-public]'); if (page) page.href = data.publicUrl;
 			detailsDialog?.showModal();

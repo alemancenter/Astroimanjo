@@ -1,6 +1,7 @@
 package contentaudit
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -18,6 +19,7 @@ const (
 	readinessProblemNeedsEnrichment        = "needs_enrichment"
 	readinessProblemMetaDescription        = "meta_description"
 	readinessProblemShortTitle             = "short_title"
+	readinessProblemLanguageErrors         = "language_errors"
 	readinessProblemUnpublished            = "unpublished"
 )
 
@@ -127,6 +129,11 @@ var readinessProblems = map[string]readinessProblemDefinition{
 		Severity:    "medium", ActionType: "ai_preview", Preset: readinessProblemShortTitle,
 		Mode: "fix_preview", ModelStrategy: "balanced", Priority: 55,
 	},
+	readinessProblemLanguageErrors: {
+		Code: readinessProblemLanguageErrors, Label: "أخطاء إملائية أو تحريرية",
+		Description: "صحّح الأخطاء عالية الثقة الظاهرة في تقرير اللغة ثم أعد فحص أهلية الإعلانات.",
+		Severity:    "high", ActionType: "manual", Priority: 83,
+	},
 	readinessProblemUnpublished: {
 		Code: readinessProblemUnpublished, Label: "غير منشور أو غير فعال",
 		Description: "راجع حالة النشر يدويًا؛ المحتوى غير المنشور لا يدخل مسار الإعلانات.",
@@ -140,7 +147,7 @@ func newReadinessRepairCollector() *readinessRepairCollector {
 	return &readinessRepairCollector{counts: make(map[string]int)}
 }
 
-func classifyReadinessProblems(title, meta string, diagnostics contentquality.Diagnostics, published bool, gate auditservice.ContentQualityGate) []readinessItemProblem {
+func classifyReadinessProblems(title, meta string, diagnostics contentquality.Diagnostics, language contentquality.LanguageCheckResult, published bool, gate auditservice.ContentQualityGate) []readinessItemProblem {
 	catalog := readinessProblemCatalog()
 	codes := make([]string, 0, 7)
 	messages := make(map[string]string, 7)
@@ -179,6 +186,13 @@ func classifyReadinessProblems(title, meta string, diagnostics contentquality.Di
 	if utf8.RuneCountInString(strings.TrimSpace(title)) < contentquality.DiagnosticTitleMinChars {
 		add(readinessProblemShortTitle, "العنوان قصير ولا يوضح موضوع الصفحة بالقدر الكافي.")
 	}
+	if language.Blocking {
+		message := fmt.Sprintf("اكتشف المدقق %d خطأً عالي الثقة. التصحيح مطلوب لأهلية الإعلانات ولا يمنع حفظ المحتوى أو نشره.", language.ErrorCount)
+		if len(language.Findings) > 0 {
+			message += " " + language.Findings[0].Message
+		}
+		add(readinessProblemLanguageErrors, message)
+	}
 	if !published {
 		add(readinessProblemUnpublished, "العنصر غير منشور أو غير فعال، لذلك لا يمكن فهرسته أو عرض الإعلانات عليه.")
 	}
@@ -187,6 +201,7 @@ func classifyReadinessProblems(title, meta string, diagnostics contentquality.Di
 		!hasProblemCode(codes, readinessProblemUndocumentedAttachment) &&
 		!hasProblemCode(codes, readinessProblemNeedsEnrichment) &&
 		!hasProblemCode(codes, readinessProblemMetaDescription) &&
+		!hasProblemCode(codes, readinessProblemLanguageErrors) &&
 		!hasProblemCode(codes, readinessProblemShortTitle) {
 		add(readinessProblemAdsNotEligible, "المحتوى مفهرس لكنه لم يستوفِ شروط الاعتماد الداخلية لعرض الإعلانات.")
 	}

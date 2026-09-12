@@ -6,6 +6,7 @@ import SeoHead from '../components/ui/SeoHead.astro';
 import CountrySwitcher from '../components/CountrySwitcher.astro';
 import DashboardNavIcon from '../components/dashboard/DashboardNavIcon.astro';
 import DashboardBrand from '../components/dashboard/DashboardBrand.astro';
+import ArabicLanguageCheck from '../components/dashboard/ArabicLanguageCheck.astro';
 import { assetUrl } from '../lib/assets';
 import { hasPermission, isAdmin, type AuthUser } from '../lib/auth';
 import { DASHBOARD_NAV_ITEMS, type DashboardNavItem } from '../lib/dashboard-nav';
@@ -166,6 +167,8 @@ const avatarUrl = assetUrl(user.profile_photo_path, 96) || user.profile_photo_ur
 				</main>
 			</div>
 		</div>
+
+<ArabicLanguageCheck />
 
 		<script>
 			const sidebar = document.getElementById('dashboard-sidebar');
