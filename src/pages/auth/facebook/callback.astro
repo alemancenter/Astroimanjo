@@ -1,0 +1,14 @@
+---
+// Landing page for the backend's redirect-based Facebook OAuth flow — see
+// src/pages/auth/google/callback.astro for why this page only needs to redirect onward.
+import { safeRedirectPath } from '../../../lib/safe-redirect';
+import { oauthErrorMessage } from '../../../lib/oauth-errors';
+
+const params = Astro.url.searchParams;
+const errorMessage = oauthErrorMessage(params.get('error'));
+const destination = errorMessage
+	? `/login?error=${encodeURIComponent(errorMessage)}`
+	: safeRedirectPath(params.get('redirect_to'), '/');
+return Astro.redirect(destination);
+---
+<p>جارِ تحويلك... إذا لم يتم التحويل تلقائيًا، <a href={destination}>اضغط هنا</a>.</p>
