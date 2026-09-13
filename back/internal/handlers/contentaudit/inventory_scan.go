@@ -85,7 +85,7 @@ func latestEditorialDecisionMap(ctx context.Context, country, contentType string
 }
 
 func inventorySimilarityMap(ctx context.Context, country, contentType string) (map[string]inventorySimilaritySignal, error) {
-	documents, _, err := loadSimilarityDocuments(ctx, country, contentType)
+	documents, members, err := loadSimilarityDocuments(ctx, country, contentType)
 	if err != nil {
 		return nil, err
 	}
@@ -99,6 +99,24 @@ func inventorySimilarityMap(ctx context.Context, country, contentType string) (m
 				(candidate.Kind == current.Kind && candidate.Similarity > current.Similarity) {
 				signals[key] = candidate
 			}
+		}
+	}
+	titleGroups := make(map[string][]string)
+	for key, member := range members {
+		title := strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(member.Title)), " "))
+		if title != "" {
+			titleGroups[title] = append(titleGroups[title], key)
+		}
+	}
+	for _, keys := range titleGroups {
+		if len(keys) < 2 {
+			continue
+		}
+		for _, key := range keys {
+			signal := signals[key]
+			signal.TitleConflict = true
+			signal.TitleConflictCount = len(keys)
+			signals[key] = signal
 		}
 	}
 	return signals, nil

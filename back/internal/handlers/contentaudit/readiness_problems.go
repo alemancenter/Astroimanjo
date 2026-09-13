@@ -20,6 +20,10 @@ const (
 	readinessProblemMetaDescription        = "meta_description"
 	readinessProblemShortTitle             = "short_title"
 	readinessProblemLanguageErrors         = "language_errors"
+	readinessProblemExactDuplicate         = "exact_duplicate"
+	readinessProblemNearDuplicate          = "near_duplicate"
+	readinessProblemTemplateSimilar        = "template_similar"
+	readinessProblemTitleConflict          = "title_conflict"
 	readinessProblemUnpublished            = "unpublished"
 )
 
@@ -134,6 +138,26 @@ var readinessProblems = map[string]readinessProblemDefinition{
 		Description: "صحّح الأخطاء عالية الثقة الظاهرة في تقرير اللغة ثم أعد فحص أهلية الإعلانات.",
 		Severity:    "high", ActionType: "manual", Priority: 83,
 	},
+	readinessProblemExactDuplicate: {
+		Code: readinessProblemExactDuplicate, Label: "محتوى مطابق لمحتوى آخر",
+		Description: "يوجد محتوى مطابق أو شبه مطابق؛ راجع الفرق والقيمة الأصلية قبل إبقاء الصفحتين مفهرستين.",
+		Severity:    "high", ActionType: "manual", Priority: 84,
+	},
+	readinessProblemNearDuplicate: {
+		Code: readinessProblemNearDuplicate, Label: "شبه تكرار",
+		Description: "يوجد تشابه قريب مع محتوى آخر؛ أضف قيمة أصلية أو ادمج الصفحتين بعد مراجعة بشرية.",
+		Severity:    "medium", ActionType: "manual", Priority: 62,
+	},
+	readinessProblemTemplateSimilar: {
+		Code: readinessProblemTemplateSimilar, Label: "قالب متكرر",
+		Description: "تستخدم الصفحة قالبًا متشابهًا مع صفحات أخرى؛ راجع ما إذا كانت تضيف قيمة مستقلة.",
+		Severity:    "medium", ActionType: "manual", Priority: 60,
+	},
+	readinessProblemTitleConflict: {
+		Code: readinessProblemTitleConflict, Label: "تعارض محتمل في العنوان",
+		Description: "العنوان مكرر في مخزون المحتوى. راجع الصف أو المادة أو الفصل يدويًا قبل إبقاء الصفحات متنافستين.",
+		Severity:    "medium", ActionType: "manual", Priority: 58,
+	},
 	readinessProblemUnpublished: {
 		Code: readinessProblemUnpublished, Label: "غير منشور أو غير فعال",
 		Description: "راجع حالة النشر يدويًا؛ المحتوى غير المنشور لا يدخل مسار الإعلانات.",
@@ -147,7 +171,7 @@ func newReadinessRepairCollector() *readinessRepairCollector {
 	return &readinessRepairCollector{counts: make(map[string]int)}
 }
 
-func classifyReadinessProblems(title, meta string, diagnostics contentquality.Diagnostics, language contentquality.LanguageCheckResult, published bool, gate auditservice.ContentQualityGate) []readinessItemProblem {
+func classifyReadinessProblems(title, meta string, diagnostics contentquality.Diagnostics, language contentquality.LanguageCheckResult, published bool, gate auditservice.ContentQualityGate, similarity ...inventorySimilaritySignal) []readinessItemProblem {
 	catalog := readinessProblemCatalog()
 	codes := make([]string, 0, 7)
 	messages := make(map[string]string, 7)
@@ -192,6 +216,19 @@ func classifyReadinessProblems(title, meta string, diagnostics contentquality.Di
 			message += " " + language.Findings[0].Message
 		}
 		add(readinessProblemLanguageErrors, message)
+	}
+	if len(similarity) > 0 {
+		switch similarity[0].Kind {
+		case contentquality.SimilarityKindExact:
+			add(readinessProblemExactDuplicate, fmt.Sprintf("مطابقة كاملة مع محتوى آخر (درجة المطابقة %.0f%%)؛ المراجعة اليدوية مطلوبة قبل إبقاء النسختين.", similarity[0].Similarity*100))
+		case contentquality.SimilarityKindNear:
+			add(readinessProblemNearDuplicate, fmt.Sprintf("شبه تكرار مع محتوى آخر بدرجة %.0f%%؛ أضف قيمة أصلية أو راجع الدمج.", similarity[0].Similarity*100))
+		case contentquality.SimilarityKindTemplate:
+			add(readinessProblemTemplateSimilar, fmt.Sprintf("تشابه قالبي مع محتوى آخر بدرجة %.0f%%؛ راجع القيمة الخاصة بهذه الصفحة.", similarity[0].Similarity*100))
+		}
+		if similarity[0].TitleConflict {
+			add(readinessProblemTitleConflict, fmt.Sprintf("العنوان مكرر في %d صفحات على الأقل؛ تحقق من الصف والمادة والفصل قبل اتخاذ قرار فهرسة أو دمج.", similarity[0].TitleConflictCount))
+		}
 	}
 	if !published {
 		add(readinessProblemUnpublished, "العنصر غير منشور أو غير فعال، لذلك لا يمكن فهرسته أو عرض الإعلانات عليه.")

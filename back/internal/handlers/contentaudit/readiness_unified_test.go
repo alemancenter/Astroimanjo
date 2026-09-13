@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/imanjo/fiber-api/internal/contentquality"
 	"github.com/imanjo/fiber-api/internal/models"
 	auditservice "github.com/imanjo/fiber-api/internal/services/contentaudit"
 )
@@ -90,5 +91,40 @@ func TestReadinessGateAppliesCurrentSourceCorruptionGuard(t *testing.T) {
 	}
 	if gate.Risk != "critical" {
 		t.Fatalf("risk = %q, want critical", gate.Risk)
+	}
+}
+
+func TestUnifiedReadinessSurfacesSimilarityAndTitleConflictForReview(t *testing.T) {
+	decision := &models.ContentAIDecision{ID: 11, Decision: models.AIDecisionApproved, AdSenseRisk: "low", Score: 95}
+	similarity := inventorySimilaritySignal{
+		Kind:               contentquality.SimilarityKindNear,
+		Similarity:         0.82,
+		ClusterID:          "cluster-1",
+		TitleConflict:      true,
+		TitleConflictCount: 2,
+	}
+	item := buildUnifiedReadinessItemWithSimilarity(
+		"عنوان تعليمي طويل بما يكفي للمراجعة",
+		strings.Repeat("محتوى ", 350),
+		strings.Repeat("و", 90),
+		"",
+		1,
+		true,
+		"article",
+		15,
+		"jo",
+		auditservice.EvaluateQualityGate(decision),
+		nil,
+		similarity,
+	)
+	if item.Similarity.ClusterID != "cluster-1" {
+		t.Fatalf("cluster id = %q, want cluster-1", item.Similarity.ClusterID)
+	}
+	codes := make(map[string]bool, len(item.Problems))
+	for _, problem := range item.Problems {
+		codes[problem.Code] = true
+	}
+	if !codes[readinessProblemNearDuplicate] || !codes[readinessProblemTitleConflict] {
+		t.Fatalf("similarity review problems = %#v, want near duplicate and title conflict", codes)
 	}
 }

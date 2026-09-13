@@ -2,6 +2,7 @@ package contentaudit
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -35,6 +36,7 @@ type unifiedReadinessItem struct {
 	GateReasons       []string                           `json:"gate_reasons"`
 	DiagnosticSignals []string                           `json:"diagnostic_signals"`
 	LanguageCheck     contentquality.LanguageCheckResult `json:"language_check"`
+	Similarity        inventorySimilaritySignal          `json:"similarity"`
 	Issues            []string                           `json:"issues"`
 	Problems          []readinessItemProblem             `json:"problems"`
 	PrimaryProblem    string                             `json:"primary_problem,omitempty"`
@@ -176,6 +178,10 @@ func readinessGate(decision *models.ContentAIDecision, title, content, meta, key
 }
 
 func buildUnifiedReadinessItem(title, content, meta, keywords string, filesCount int, published bool, contentType string, id uint, countryCode string, gate auditservice.ContentQualityGate, baseline *models.ContentPolicyReadiness, languageCheck ...contentquality.LanguageCheckResult) unifiedReadinessItem {
+	return buildUnifiedReadinessItemWithSimilarity(title, content, meta, keywords, filesCount, published, contentType, id, countryCode, gate, baseline, inventorySimilaritySignal{}, languageCheck...)
+}
+
+func buildUnifiedReadinessItemWithSimilarity(title, content, meta, keywords string, filesCount int, published bool, contentType string, id uint, countryCode string, gate auditservice.ContentQualityGate, baseline *models.ContentPolicyReadiness, similarity inventorySimilaritySignal, languageCheck ...contentquality.LanguageCheckResult) unifiedReadinessItem {
 	plainText := readinessPlainText(content)
 	diagnostics := contentquality.EvaluateDiagnostics(title, plainText, meta, filesCount, published)
 	language := contentquality.CheckArabicLanguage(title, plainText)
@@ -183,7 +189,7 @@ func buildUnifiedReadinessItem(title, content, meta, keywords string, filesCount
 		language = languageCheck[0]
 	}
 	gate = contentquality.ApplyAdReadinessRequirementsWithLanguage(gate, title, plainText, meta, language)
-	problems := classifyReadinessProblems(title, meta, diagnostics, language, published, gate)
+	problems := classifyReadinessProblems(title, meta, diagnostics, language, published, gate, similarity)
 	shouldIndex := published && gate.Indexable
 	shouldShowAds := published && gate.AdsEligible
 
@@ -250,6 +256,7 @@ func buildUnifiedReadinessItem(title, content, meta, keywords string, filesCount
 		GateReasons:       append([]string(nil), reasons...),
 		DiagnosticSignals: append([]string(nil), diagnostics.Signals...),
 		LanguageCheck:     language,
+		Similarity:        similarity,
 		Issues:            issues,
 		Problems:          problems,
 		PrimaryProblem:    primaryProblem,
@@ -297,6 +304,10 @@ func updateUnifiedReadinessSummary(summary *unifiedReadinessSummary, item unifie
 // heavy scan is written in one place.
 func collectReadinessItems(ctx context.Context, db *gorm.DB, countryCode, contentType, search string) ([]unifiedReadinessRow, error) {
 	articleFileCounts, postFileCounts := readinessFileCountMaps(ctx, db)
+	similaritySignals, err := inventorySimilarityMap(ctx, countryCode, contentType)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]unifiedReadinessRow, 0, 256)
 
 	if contentType == "all" || contentType == "article" {
@@ -337,7 +348,7 @@ func collectReadinessItems(ctx context.Context, db *gorm.DB, countryCode, conten
 			}
 			language := languageChecks[article.ID]
 			gate := readinessGate(decisions[article.ID], article.Title, article.Content, meta, "", language, editorial[article.ID])
-			item := buildUnifiedReadinessItem(article.Title, article.Content, meta, "", articleFileCounts[article.ID], article.Status == 1, "article", article.ID, countryCode, gate, policyBaselines[article.ID], language)
+			item := buildUnifiedReadinessItemWithSimilarity(article.Title, article.Content, meta, "", articleFileCounts[article.ID], article.Status == 1, "article", article.ID, countryCode, gate, policyBaselines[article.ID], similaritySignals[fmt.Sprintf("article:%d", article.ID)], language)
 			out = append(out, unifiedReadinessRow{Item: item, CreatedAt: article.CreatedAt, body: article.Content})
 		}
 	}
@@ -384,7 +395,7 @@ func collectReadinessItems(ctx context.Context, db *gorm.DB, countryCode, conten
 			}
 			language := languageChecks[post.ID]
 			gate := readinessGate(decisions[post.ID], post.Title, post.Content, meta, keywords, language, editorial[post.ID])
-			item := buildUnifiedReadinessItem(post.Title, post.Content, meta, keywords, postFileCounts[post.ID], post.IsActive, "post", post.ID, countryCode, gate, policyBaselines[post.ID], language)
+			item := buildUnifiedReadinessItemWithSimilarity(post.Title, post.Content, meta, keywords, postFileCounts[post.ID], post.IsActive, "post", post.ID, countryCode, gate, policyBaselines[post.ID], similaritySignals[fmt.Sprintf("post:%d", post.ID)], language)
 			out = append(out, unifiedReadinessRow{Item: item, CreatedAt: post.CreatedAt, body: post.Content})
 		}
 	}

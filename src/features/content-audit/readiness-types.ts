@@ -47,6 +47,11 @@ export interface ReadinessItem {
 			message: string;
 		}>;
 	};
+	similarity?: {
+		kind?: 'exact' | 'near' | 'template' | string;
+		similarity?: number;
+		cluster_id?: string;
+	};
 	issues: string[];
 	problems: ReadinessProblem[];
 	primary_problem?: string;

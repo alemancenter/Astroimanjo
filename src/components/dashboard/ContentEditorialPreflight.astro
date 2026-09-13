@@ -1,0 +1,102 @@
+<aside id="content-editorial-preflight" class="editorial-preflight" hidden aria-live="polite">
+	<header>
+		<div>
+			<span>فحص تحريري قبل الحفظ</span>
+			<strong data-preflight-summary>جارٍ الفحص…</strong>
+		</div>
+		<b data-preflight-count>0</b>
+	</header>
+	<p>هذه مؤشرات مساعدة لتحسين قيمة الصفحة. لا تمنع الحفظ أو النشر، ولا تستبدل المراجعة البشرية.</p>
+	<ul data-preflight-list></ul>
+</aside>
+
+<script>
+	const editorialForm = document.querySelector<HTMLFormElement>('#article-form, #post-editor-form');
+	const editorialTitle = editorialForm?.querySelector<HTMLInputElement>('#title');
+	const editorialContent = editorialForm?.querySelector<HTMLTextAreaElement>('#content');
+	const editorialPanel = document.getElementById('content-editorial-preflight');
+
+	if (editorialForm && editorialTitle && editorialContent && editorialPanel) {
+		const summary = editorialPanel.querySelector<HTMLElement>('[data-preflight-summary]');
+		const count = editorialPanel.querySelector<HTMLElement>('[data-preflight-count]');
+		const list = editorialPanel.querySelector<HTMLUListElement>('[data-preflight-list]');
+		const editor = editorialForm.querySelector<HTMLElement>('.ql-editor');
+		const plainText = () => (editor?.innerText || editorialContent.value.replace(/<[^>]+>/g, ' '))
+			.replace(/\s+/g, ' ')
+			.trim();
+		const wordCount = (value: string) => value ? value.split(/\s+/).filter(Boolean).length : 0;
+		const repeatedParagraphs = (value: string) => {
+			const paragraphs = value.split(/\n{2,}|(?<=[.!؟])\s{2,}/u)
+				.map((part) => part.trim().replace(/\s+/g, ' '))
+				.filter((part) => part.length >= 45);
+			const seen = new Set<string>();
+			const repeated = new Set<string>();
+			paragraphs.forEach((part) => {
+				if (seen.has(part)) repeated.add(part);
+				seen.add(part);
+			});
+			return repeated.size;
+		};
+		const inspect = () => {
+			const title = editorialTitle.value.trim();
+			const content = plainText();
+			const words = wordCount(content);
+			const findings: string[] = [];
+			if (title.length < 18) findings.push('العنوان قصير؛ أضف موضوع المورد والصف أو المادة عندما يكون ذلك مهمًا.');
+			if (words < 120) findings.push('أضف شرحًا يوضح فائدة الصفحة وطريقة استخدام المورد، لا تكتفِ بزر التحميل.');
+			if (repeatedParagraphs(content) > 0) findings.push('توجد فقرات مكررة؛ راجعها وأبقِ النسخة التي تضيف قيمة فعلية فقط.');
+			if (content && !/[؟?!.。]|كيفية|طريقة|يتضمن|يهدف|يستخدم/u.test(content)) findings.push('أضف جملة تشرح الهدف أو طريقة الاستخدام حتى يفهم الزائر قيمة المورد.');
+
+			editorialPanel.hidden = false;
+			editorialPanel.classList.toggle('is-clean', findings.length === 0);
+			if (summary) summary.textContent = findings.length ? 'توجد مؤشرات تحتاج مراجعة' : 'لا توجد مؤشرات تحريرية أساسية';
+			if (count) count.textContent = String(findings.length);
+			if (list) {
+				list.replaceChildren();
+				if (!findings.length) {
+					const item = document.createElement('li');
+					item.className = 'is-clean';
+					item.textContent = `النص يحتوي على ${words} كلمة، ويمكن متابعة الحفظ والنشر.`;
+					list.append(item);
+				} else {
+					findings.forEach((finding) => {
+						const item = document.createElement('li');
+						item.textContent = finding;
+						list.append(item);
+					});
+				}
+			}
+		};
+		let timer = 0;
+		const schedule = () => {
+			window.clearTimeout(timer);
+			timer = window.setTimeout(inspect, 350);
+		};
+		editorialTitle.addEventListener('input', schedule);
+		editorialContent.addEventListener('input', schedule);
+		editor?.addEventListener('input', schedule);
+		if (editor) new MutationObserver(schedule).observe(editor, { childList: true, characterData: true, subtree: true });
+		editorialContent.parentElement?.append(editorialPanel);
+		inspect();
+	}
+</script>
+
+<style>
+	.editorial-preflight{margin-top:1rem;border:1px solid #c7d7ed;border-radius:.85rem;background:#f5f9ff;padding:.85rem;color:#29496f}
+	.editorial-preflight[hidden]{display:none}
+	.editorial-preflight header{display:flex;align-items:center;justify-content:space-between;gap:1rem}
+	.editorial-preflight header>div{display:grid;gap:.15rem}
+	.editorial-preflight header span{font-size:.68rem;font-weight:800;color:#315e96}
+	.editorial-preflight header strong{font-size:.82rem}
+	.editorial-preflight header>b{display:grid;min-width:2rem;height:2rem;place-items:center;border-radius:999px;background:#315e96;color:#fff;font-size:.75rem}
+	.editorial-preflight>p{margin:.5rem 0;font-size:.7rem;color:#526f94}
+	.editorial-preflight ul{display:grid;gap:.3rem;margin:0;padding:0;list-style:none;font-size:.72rem}
+	.editorial-preflight li{border-radius:.45rem;background:#fff;padding:.4rem .55rem}
+	.editorial-preflight.is-clean{border-color:#bbf7d0;background:#f0fdf4;color:#14532d}
+	.editorial-preflight.is-clean header span,.editorial-preflight.is-clean>p{color:#15803d}
+	.editorial-preflight.is-clean header>b{background:#16a34a}
+	.editorial-preflight.is-clean li{color:#166534}
+	:global(.dark) .editorial-preflight{border-color:#31547f;background:#102746;color:#d4e4fa}
+	:global(.dark) .editorial-preflight li{background:#183354}
+	:global(.dark) .editorial-preflight.is-clean{border-color:#166534;background:#10291a;color:#bbf7d0}
+</style>

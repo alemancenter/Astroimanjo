@@ -3,8 +3,8 @@ name: Go crypto firewall block
 description: Why full backend tests may fail before compilation in the Replit environment.
 ---
 
-The pinned `golang.org/x/crypto` release is rejected by Replit's package firewall for a critical CVE, so `go test ./...` can fail during dependency download before compiling project code.
+Older pinned `golang.org/x/crypto` releases can be rejected by Replit's package firewall for a critical CVE. In this project, `v0.55.0` was accepted and allowed the backend packages to compile and test.
 
-**Why:** This is an environment security block rather than evidence that the code under test failed.
+**Why:** The firewall blocks vulnerable archives before compilation; selecting a newer compatible module release restores verification without bypassing the security control.
 
-**How to apply:** When validating backend changes, report this distinction and run dependency-independent tests where possible. Do not bypass the firewall; upgrade to a safe accepted release as a separate reviewed change.
+**How to apply:** If dependency download is blocked, try the latest Go-compatible release through the normal module workflow, then rerun targeted and full tests. Never bypass the firewall.
