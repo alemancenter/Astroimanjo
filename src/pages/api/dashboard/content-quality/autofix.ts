@@ -3,14 +3,11 @@ import { apiRawFetch } from '../../../../lib/api';
 
 export const prerender = false;
 
-// "إصلاح الأوصاف تلقائيًا" — starts the safe, allowlisted meta-description
-// auto-repair batch. The backend picks the targets from the readiness report
-// (items with a short/missing description) and applies generated descriptions
-// to the meta field only. Content and titles are never auto-changed.
+// Compatibility route: create suggestions for individual review, never apply them.
 export const POST: APIRoute = async ({ cookies, locals, redirect }) => {
 	const token = cookies.get('token')?.value;
 	if (!token) return redirect('/login?redirect_to=/dashboard/content-quality');
-	const back = '/dashboard/content-quality';
+	const back = '/dashboard/content-audit/ai-operations';
 
 	try {
 		const res = await apiRawFetch('/dashboard/content-audit/ai/batch-jobs', {
@@ -19,8 +16,8 @@ export const POST: APIRoute = async ({ cookies, locals, redirect }) => {
 			cookieHeader: `token=${token}`,
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({
-                country_code: locals.countryCode,
-				mode: 'auto_apply',
+				country_code: locals.countryCode,
+				mode: 'fix_preview',
 				preset: 'meta_description',
 				source: 'adsense_readiness',
 				model_strategy: 'balanced',
@@ -32,7 +29,7 @@ export const POST: APIRoute = async ({ cookies, locals, redirect }) => {
 		if (!res.ok || json?.success === false) {
 			return redirect(`${back}?error=${encodeURIComponent(json?.message || 'تعذّر بدء الإصلاح')}`);
 		}
-		return redirect(`${back}?success=autofix`);
+		return redirect(`${back}?success=batch_started`);
 	} catch {
 		return redirect(`${back}?error=${encodeURIComponent('تعذّر الاتصال بخدمة الإصلاح')}`);
 	}

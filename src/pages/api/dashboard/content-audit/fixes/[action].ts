@@ -4,7 +4,7 @@ import { safeRedirectPath } from '../../../../../lib/safe-redirect';
 
 export const prerender = false;
 
-export const POST: APIRoute = async ({ request, params, cookies, locals, redirect }) => {
+export const POST: APIRoute = async ({ request, params, cookies, locals, redirect, cache }) => {
 	const token = cookies.get('token')?.value;
 	if (!token) return redirect(`/login?redirect_to=${encodeURIComponent('/dashboard/content-audit/ai-operations')}`);
 	const action = params.action === 'apply' ? 'apply-fix' : params.action === 'reject' ? 'reject-fix' : '';
@@ -19,5 +19,6 @@ export const POST: APIRoute = async ({ request, params, cookies, locals, redirec
 	});
 	const json: any = await res.json().catch(() => null);
 	if (!res.ok || json?.success === false) return redirect(`${redirectTo}${separator}error=${encodeURIComponent(json?.message || 'تعذّر تنفيذ القرار')}`);
+	if (action === 'apply-fix') await cache.invalidate({ tags: ['articles', 'posts', 'classes', 'subjects'] }).catch(() => undefined);
 	return redirect(`${redirectTo}${separator}success=${action === 'apply-fix' ? 'fix_applied' : 'fix_rejected'}`);
 };

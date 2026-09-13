@@ -19,7 +19,7 @@ test('actual session resolver refreshes without access cookie; batch sends corre
   const route=await server.ssrLoadModule('/src/pages/api/dashboard/content-quality/autofix.ts');let payload,headers;
   globalThis.fetch=async(_url,options)=>{payload=JSON.parse(options.body);headers=options.headers;return Response.json({success:true,data:{id:'job'}});};
   await route.POST({cookies:{get:()=>({value:'access'})},locals:{countryId:'2',countryCode:'sa'},redirect:url=>new Response(null,{status:302,headers:{Location:url}})});
-  assert.equal(payload.limit,100);assert.equal(payload.country_code,'sa');assert.equal(headers['X-Country-Id'],'2');assert.equal(payload.count,undefined);
+  assert.equal(payload.mode,'fix_preview');assert.equal(payload.limit,100);assert.equal(payload.country_code,'sa');assert.equal(headers['X-Country-Id'],'2');assert.equal(payload.count,undefined);
  } finally {globalThis.fetch=originalFetch;await server.close();}
 });
 

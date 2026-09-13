@@ -76,7 +76,6 @@ const pageHref = (targetPage: number) => { const u = new URL(Astro.url); u.searc
 					<label><input type="checkbox" data-select-all/><span>تحديد كل المعاينات الظاهرة</span></label>
 					<div><span aria-live="polite"><b data-selected-count>٠</b> محدد</span><small>يشمل التحديد هذه الصفحة فقط.</small></div>
 					<button type="button" class="is-reject" data-bulk-action="reject" disabled>رفض المحدد</button>
-					<button type="button" class="is-apply" data-bulk-action="apply" disabled>قبول وتطبيق المحدد</button>
 					<input type="hidden" name="action"/>
 					<input type="hidden" name="fix_preview_ids"/>
 					<input type="hidden" name="note" value="قرار جماعي من طابور معاينات الإصلاح"/>
@@ -163,16 +162,12 @@ const pageHref = (targetPage: number) => { const u = new URL(Astro.url); u.searc
 			if (!bulkForm) return;
 			const ids = selectedPreviewIDs();
 			if (ids.length === 0) return;
-			const action = button.dataset.bulkAction === 'reject' ? 'reject' : 'apply';
+			const action = 'reject';
 			const actionInput = bulkForm.querySelector<HTMLInputElement>('[name="action"]');
 			const idsInput = bulkForm.querySelector<HTMLInputElement>('[name="fix_preview_ids"]');
 			if (actionInput) actionInput.value = action;
 			if (idsInput) idsInput.value = JSON.stringify(ids);
-			if (action === 'apply') {
-				confirmAction(bulkForm, `قبول وتطبيق ${ids.length} معاينة؟`, 'سيتم تحديث العنوان والمحتوى والبيانات الوصفية لكل عنصر محدد. إذا تعذّر عنصر فسيبقى في الطابور.', 'قبول وتطبيق المحدد');
-			} else {
-				confirmAction(bulkForm, `رفض ${ids.length} معاينة؟`, 'سيتم إغلاق المعاينات المحددة كمرفوضة مع إبقاء المحتوى الحالي دون أي تغيير.', 'رفض المحدد');
-			}
+			confirmAction(bulkForm, `رفض ${ids.length} معاينة؟`, 'سيتم إغلاق المعاينات المحددة مع إبقاء المحتوى الحالي.', 'رفض المحدد');
 		}));
 		updateBulkSelection();
 

@@ -25,6 +25,7 @@ export const POST: APIRoute = async ({ request, cookies, locals, redirect }) => 
 		source: 'adsense_readiness', preset: String(form.get('preset') || 'weak_first'),
 		targets,
 	};
+	if (!['analyze_only', 'fix_preview', 'full_review'].includes(payload.mode)) payload.mode = 'fix_preview';
 	const res = await apiRawFetch('/dashboard/content-audit/ai/batch-jobs', {
 		method: 'POST', countryId: locals.countryId, cookieHeader: `token=${token}`,
 		headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
@@ -32,6 +33,6 @@ export const POST: APIRoute = async ({ request, cookies, locals, redirect }) => 
 	const json: any = await res.json().catch(() => null);
 	if (!res.ok || json?.success === false) return redirect(`${redirectTo}${separator}error=${encodeURIComponent(json?.message || 'تعذّر بدء دفعة التحليل')}`);
 	const batchId = String(json?.data?.id || '').trim();
-	const success = payload.mode === 'auto_apply' ? 'auto_repair_started' : 'batch_started';
+	const success = 'batch_started';
 	return redirect(`${redirectTo}${separator}success=${success}${batchId ? `&batch_id=${encodeURIComponent(batchId)}` : ''}`);
 };

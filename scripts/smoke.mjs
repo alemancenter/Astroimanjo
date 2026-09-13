@@ -9,6 +9,7 @@ const api=http.createServer((req,res)=>{
  if(req.url.startsWith('/storage/')){res.writeHead(200,{'Content-Type':'image/png'});return res.end(fixturePNG);}
  if(req.url.includes('/download-url')){res.writeHead(401,{'Content-Type':'application/json'});return res.end(JSON.stringify({success:false,message:'AUTH_REQUIRED'}));}
  res.writeHead(200,{'Content-Type':'application/json'});
+ if(req.url.startsWith('/api/auth/user')) return res.end(JSON.stringify({success:true,data:{id:7,name:'Review fixture',roles:[{name:'Admin'}],permissions:[]}}));
  const data=req.url.startsWith('/api/front/settings')?{site_name:'ImanJo Test',maintenance_mode:'false'}:req.url.startsWith('/api/home')?{articles:[],posts:[],featured_posts:[],categories:[],classes:[],settings:{}}:req.url.includes('/team')?[]:{};
  res.end(JSON.stringify({success:true,data}));
 });
@@ -29,5 +30,14 @@ try{
  const download=await fetch(site+'/api/download/article-file/1',{redirect:'manual'});assert.equal(download.status,302);assert.ok(download.headers.get('location').startsWith('/login'));
  const invalid=await fetch(site+'/api/img?src='+encodeURIComponent('../private/proof.png'));assert.equal(invalid.status,404);
  const image=await fetch(site+'/api/img?src=images/test.png&w=96');assert.equal(image.status,200);assert.equal(image.headers.get('content-type'),'image/webp');assert.ok((await image.arrayBuffer()).byteLength>0);
- console.log('PASS: build and 8 HTTP smoke checks (local fixture API).');
+ const authHeaders={Cookie:'token=local-review-fixture'};
+ for(const [oldPath,target] of [['/dashboard/content-audit?q=test','/dashboard/content-quality?q=test'],['/dashboard/content-audit/readiness?problem=meta_description&page=2','/dashboard/quality?problem=meta_description&page=2&tab=content']]){
+  const response=await fetch(site+oldPath,{headers:authHeaders,redirect:'manual'});
+  assert.equal(response.status,302,oldPath);assert.equal(response.headers.get('location'),target);
+ }
+ for(const path of ['/dashboard/content-quality','/dashboard/quality?tab=content','/dashboard/content-audit/ai-operations']) {
+  const response=await fetch(site+path,{headers:authHeaders,redirect:'manual'});assert.equal(response.status,200,path);
+  const html=await response.text();assert.ok(!html.includes('data-bulk-action="apply"'),path);
+ }
+ console.log('PASS: build, 8 public/security HTTP checks and 5 editorial dashboard checks (local fixture API).');
 }finally{if(app){app.kill('SIGTERM');await once(app,'exit').catch(()=>{});}api.closeAllConnections();await new Promise(r=>api.close(r));}
