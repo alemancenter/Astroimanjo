@@ -44,7 +44,22 @@ function isSafeExternalUrl(value: string): boolean {
 		return false;
 	}
 }
+// Unlike the other social fields (all type="url" in the dashboard form), social_whatsapp has no
+// type set there — its label ("WhatsApp") and the fact that WhatsApp deep links are normally
+// built from a phone number implies admins are expected to paste a number, not a URL. Left as a
+// bare number it failed `new URL(...)` and silently vanished from the footer with no admin-
+// facing error. Build the real wa.me link from digits; still accept an already-full URL as-is.
+function resolveWhatsAppLink(value: string): string | undefined {
+	const trimmed = value.trim();
+	if (isSafeExternalUrl(trimmed)) return trimmed;
+	const digits = trimmed.replace(/\D/g, '');
+	return digits ? `https://wa.me/${digits}` : undefined;
+}
 const socialEntries = (Object.entries(socialLinks) as [keyof SocialLinks, string | undefined][])
+	.map(([platform, value]): [keyof SocialLinks, string | undefined] => [
+		platform,
+		value ? (platform === 'whatsapp' ? resolveWhatsAppLink(value) : value) : undefined,
+	])
 	.filter((entry): entry is [keyof SocialLinks, string] => !!entry[1] && isSafeExternalUrl(entry[1]));
 ---
 

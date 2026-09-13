@@ -22,17 +22,11 @@ interface Section { title: string; description: string; fields: Field[]; tone?: 
 interface SettingsTab { id: string; label: string; shortLabel: string; description: string; sections: Section[]; }
 
 const tabs: SettingsTab[] = [
-	{ id: 'general', label: 'الإعدادات العامة', shortLabel: 'عام', description: 'هوية الموقع، اللغة، المنطقة الزمنية وخيارات التشغيل الأساسية.', sections: [
+	{ id: 'general', label: 'الإعدادات العامة', shortLabel: 'عام', description: 'هوية الموقع وخيارات التشغيل الأساسية.', sections: [
 		{ title: 'هوية الموقع', description: 'المعلومات الأساسية التي تظهر للزائر وفي أجزاء الواجهة.', fields: [
 			{ key: 'site_name', label: 'اسم الموقع', placeholder: 'مركز الإيمان التعليمي' },
 			{ key: 'site_url', label: 'رابط الموقع', type: 'url', placeholder: 'https://imanjo.com' },
 			{ key: 'footer_text', label: 'نبذة الموقع في التذييل', type: 'textarea', wide: true, description: 'نص قصير يظهر أسفل الشعار في تذييل كل صفحة — ليس نص حقوق النشر (ذلك يُضاف تلقائيًا في أسفل التذييل).', placeholder: 'عالم المعلم العربي في موقع واحد؛ محتوى تعليمي وملفات دراسية وخطط ومقالات تخدم الطالب والمعلم وولي الأمر بصورة منظمة وموثوقة.' },
-		] },
-		{ title: 'اللغة والتوقيت', description: 'تنسيق اللغة والتاريخ والوقت في أجزاء النظام.', fields: [
-			{ key: 'site_language', label: 'لغة الموقع', type: 'select', options: [{ value: 'ar', label: 'العربية' }, { value: 'en', label: 'English' }] },
-			{ key: 'timezone', label: 'المنطقة الزمنية', placeholder: 'Asia/Amman' },
-			{ key: 'date_format', label: 'صيغة التاريخ', placeholder: 'Y-m-d' },
-			{ key: 'time_format', label: 'صيغة الوقت', placeholder: 'H:i' },
 		] },
 		{ title: 'خيارات التشغيل', description: 'تحكم مباشر في التسجيل والإشعارات والوصول إلى الملفات.', tone: 'switches', fields: [
 			{ key: 'maintenance_mode', label: 'وضع الصيانة', type: 'toggle', description: 'إيقاف الواجهة العامة مؤقتًا أثناء أعمال الصيانة.', trueValue: 'true', falseValue: 'false' },
@@ -96,7 +90,7 @@ const tabs: SettingsTab[] = [
 		{ title: 'التحليلات والإعلانات', description: 'معرّفات خدمات القياس والإعلانات المستخدمة في الواجهة.', fields: [
 			{ key: 'google_analytics_id', label: 'Google Analytics ID', placeholder: 'G-XXXXXXXXXX' },
 			{ key: 'adsense_client', label: 'AdSense Client', placeholder: 'ca-pub-...' },
-			{ key: 'facebook_pixel_id', label: 'Facebook Pixel ID' },
+			{ key: 'facebook_pixel_id', label: 'Facebook Pixel ID', description: 'معطّل مؤقتًا في الكود (Layout.astro) لأن Meta Pixel لا يلتزم بإعدادات الموافقة على الخصوصية بعد — يتم حفظ القيمة هنا لكن لن يبدأ التتبع فعليًا حتى تُضاف آلية موافقة حقيقية.' },
 		] },
 		{ title: 'حماية النماذج', description: 'مفاتيح Google reCAPTCHA الخاصة بحماية النماذج العامة.', fields: [
 			{ key: 'recaptcha_site_key', label: 'المفتاح العام' },
