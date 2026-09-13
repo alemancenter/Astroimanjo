@@ -50,11 +50,9 @@ func CORS() fiber.Handler {
 			"Accept",
 			"Authorization",
 			"X-Requested-With",
-			"X-Frontend-Key",
 			"X-Country-Id",
 			"X-Country-Code",
 			"X-App-Locale",
-			"X-CSRF-Token",
 			"Cache-Control",
 		}, ","),
 		ExposeHeaders: strings.Join([]string{

@@ -123,6 +123,20 @@ func frontendGuard(cfg *config.Config) fiber.Handler {
 		}
 
 		// 4. Authenticated token: Authorization bearer or transitional HttpOnly cookie
+// Cookie sessions are browser credentials, so mutation requests carrying them
+// need an independent Origin/Referer check even when the API is reached via an
+// internal hostname. Bearer clients remain compatible because they do not rely
+// on credentials that browsers attach automatically.
+if hasSessionCookie(c) && isMutationMethod(c.Method()) && !isAllowedCookieMutation(c, cfg) {
+logger.Warn("[FG] cookie mutation blocked by origin policy",
+zap.String("path", path),
+zap.String("ip", clientIP),
+zap.String("origin", origin),
+zap.String("referer", referer),
+)
+return utils.Forbidden(c, "Origin غير مصرح بالوصول")
+}
+
 		if authToken != "" {
 			c.Locals("client_type", "auth_token")
 			return continueWithCountry(c, cfg)
@@ -173,6 +187,50 @@ func frontendGuard(cfg *config.Config) fiber.Handler {
 		)
 		return utils.Forbidden(c, "غير مصرح بالوصول")
 	}
+}
+
+func isMutationMethod(method string) bool {
+switch strings.ToUpper(method) {
+case fiber.MethodPost, fiber.MethodPut, fiber.MethodPatch, fiber.MethodDelete:
+return true
+default:
+return false
+}
+}
+
+func hasSessionCookie(c *fiber.Ctx) bool {
+return strings.TrimSpace(c.Cookies("token")) != "" ||
+strings.TrimSpace(c.Cookies("refresh_token")) != ""
+}
+
+func isAllowedCookieMutation(c *fiber.Ctx, cfg *config.Config) bool {
+// The frontend key identifies the trusted Astro BFF. It is never exposed to
+// browsers and therefore does not need to rely on browser Origin semantics.
+if cfg.Frontend.APIKey != "" && c.Get("X-Frontend-Key") == cfg.Frontend.APIKey {
+return true
+}
+
+// A direct local request is an internal server-to-server operation, not a
+// browser request forwarded through the public proxy.
+if isDirectLocalEndpointRequest(c) {
+return true
+}
+
+if origin := strings.TrimSpace(c.Get("Origin")); origin != "" {
+return isAllowedOrigin(origin, cfg.Frontend.CORSOrigins)
+}
+
+// Some user agents omit Origin on form-style mutations. Referer is accepted
+// only when its origin exactly matches the configured frontend origin.
+referer := strings.TrimSpace(c.Get("Referer"))
+if referer == "" {
+return false
+}
+parsed, err := url.Parse(referer)
+if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+return false
+}
+return isAllowedOrigin(parsed.Scheme+"://"+parsed.Host, cfg.Frontend.CORSOrigins)
 }
 
 func isConfiguredAPIHost(c *fiber.Ctx, cfg *config.Config) bool {
