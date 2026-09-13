@@ -18,6 +18,8 @@ interface Props {
 	placement: string;
 	label?: string;
 	class?: string;
+	/** Set only for a page/account path that Google has classified as child-directed. */
+	childDirectedTreatment?: boolean;
 }
 
 const {
@@ -27,6 +29,7 @@ const {
 	placement,
 	label = 'إعلان',
 	class: className = '',
+	childDirectedTreatment = false,
 } = Astro.props;
 
 const allowedKeys = new Set([
@@ -64,6 +67,7 @@ const shouldRender = validClient && Boolean(desktop || mobile);
 		data-ad-client={client}
 		data-desktop-config={desktop ? JSON.stringify(desktop) : ''}
 		data-mobile-config={mobile ? JSON.stringify(mobile) : ''}
+		data-child-directed-treatment={childDirectedTreatment ? '1' : '0'}
 	>
 		<span class="adsense-placement__label">{label}</span>
 		<div class="adsense-placement__mount" data-ad-mount></div>
@@ -78,36 +82,67 @@ const shouldRender = validClient && Boolean(desktop || mobile);
 		matched_content_columns_num: 'matchedContentColumnsNum',
 	};
 
-	document.querySelectorAll<HTMLElement>('[data-adsense-placement]').forEach((placement) => {
-		if (placement.dataset.adInitialized === '1') return;
-		const isDesktop = window.matchMedia('(min-width: 1024px)').matches;
-		const raw = isDesktop ? placement.dataset.desktopConfig : placement.dataset.mobileConfig;
-		const mount = placement.querySelector<HTMLElement>('[data-ad-mount]');
-		if (!raw || !mount) {
-			placement.hidden = true;
-			return;
-		}
+	(() => {
+		const consentEvent = 'imanjo:consent-updated';
+		const canInitializeAds = () => {
+			const consent = (window as typeof window & {
+				__imanjoConsent?: { status?: string };
+			}).__imanjoConsent;
+			return consent?.status === 'granted' || consent?.status === 'denied';
+		};
 
-		try {
-			const config = JSON.parse(raw) as Record<string, string | boolean>;
-			const unit = document.createElement('ins');
-			unit.className = 'adsbygoogle';
-			unit.style.display = 'block';
-			unit.dataset.adClient = placement.dataset.adClient || '';
-			for (const [key, value] of Object.entries(config)) {
-				const dataKey = supportedDataKeys[key];
-				if (dataKey) unit.dataset[dataKey] = String(value);
-			}
-			if (!unit.dataset.adFormat) unit.dataset.adFormat = 'auto';
-			if (!unit.dataset.fullWidthResponsive) unit.dataset.fullWidthResponsive = 'true';
-			mount.append(unit);
-			placement.dataset.adInitialized = '1';
-			const adsWindow = window as typeof window & { adsbygoogle?: Record<string, unknown>[] };
-			(adsWindow.adsbygoogle = adsWindow.adsbygoogle || []).push({});
-		} catch {
-			placement.hidden = true;
+		const initializePlacements = () => {
+			// Missing consent state is intentionally a hard stop. The page content
+			// remains rendered; only the ad mount waits for Google's decision.
+			if (!canInitializeAds()) return false;
+			document.querySelectorAll<HTMLElement>('[data-adsense-placement]').forEach((placement) => {
+				if (placement.dataset.adInitialized === '1') return;
+				const isDesktop = window.matchMedia('(min-width: 1024px)').matches;
+				const raw = isDesktop ? placement.dataset.desktopConfig : placement.dataset.mobileConfig;
+				const mount = placement.querySelector<HTMLElement>('[data-ad-mount]');
+				if (!raw || !mount) {
+					placement.hidden = true;
+					return;
+				}
+
+				try {
+					const config = JSON.parse(raw) as Record<string, string | boolean>;
+					const unit = document.createElement('ins');
+					unit.className = 'adsbygoogle';
+					unit.style.display = 'block';
+					unit.dataset.adClient = placement.dataset.adClient || '';
+					unit.dataset.npaOnUnknownConsent = '1';
+					const consent = (window as typeof window & {
+						__imanjoConsent?: { status?: string };
+					}).__imanjoConsent;
+					unit.dataset.consentState = consent?.status || 'pending';
+					if (placement.dataset.childDirectedTreatment === '1') {
+						unit.dataset.tagForChildDirectedTreatment = '1';
+					}
+					for (const [key, value] of Object.entries(config)) {
+						const dataKey = supportedDataKeys[key];
+						if (dataKey) unit.dataset[dataKey] = String(value);
+					}
+					if (!unit.dataset.adFormat) unit.dataset.adFormat = 'auto';
+					if (!unit.dataset.fullWidthResponsive) unit.dataset.fullWidthResponsive = 'true';
+					mount.append(unit);
+					placement.dataset.adInitialized = '1';
+					const adsWindow = window as typeof window & { adsbygoogle?: Record<string, unknown>[] };
+					(adsWindow.adsbygoogle = adsWindow.adsbygoogle || []).push({});
+				} catch {
+					placement.hidden = true;
+				}
+			});
+			return true;
+		};
+
+		if (!initializePlacements()) {
+			const onConsent = () => {
+				if (initializePlacements()) window.removeEventListener(consentEvent, onConsent);
+			};
+			window.addEventListener(consentEvent, onConsent);
 		}
-	});
+	})();
 </script>
 
 <style>

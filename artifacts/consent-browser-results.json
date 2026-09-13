@@ -1,0 +1,150 @@
+{
+  "generatedAt": "2026-09-13T07:30:44.217Z",
+  "browser": "/repl/tools/bin/chromium",
+  "note": "Cases use fresh Chromium profiles and simulate the CMP region/choice locally; they do not spoof a public source IP.",
+  "results": [
+    {
+      "region": "EEA",
+      "decision": "undecided",
+      "child": false,
+      "state": "pending",
+      "contentAvailable": true,
+      "unitCreated": false,
+      "loaderCreated": false,
+      "childTag": false,
+      "passed": true
+    },
+    {
+      "region": "EEA",
+      "decision": "reject",
+      "child": false,
+      "state": "denied",
+      "contentAvailable": true,
+      "unitCreated": true,
+      "loaderCreated": true,
+      "childTag": false,
+      "passed": true
+    },
+    {
+      "region": "EEA",
+      "decision": "accept",
+      "child": false,
+      "state": "granted",
+      "contentAvailable": true,
+      "unitCreated": true,
+      "loaderCreated": true,
+      "childTag": false,
+      "passed": true
+    },
+    {
+      "region": "UK",
+      "decision": "undecided",
+      "child": false,
+      "state": "pending",
+      "contentAvailable": true,
+      "unitCreated": false,
+      "loaderCreated": false,
+      "childTag": false,
+      "passed": true
+    },
+    {
+      "region": "UK",
+      "decision": "reject",
+      "child": false,
+      "state": "denied",
+      "contentAvailable": true,
+      "unitCreated": true,
+      "loaderCreated": true,
+      "childTag": false,
+      "passed": true
+    },
+    {
+      "region": "UK",
+      "decision": "accept",
+      "child": false,
+      "state": "granted",
+      "contentAvailable": true,
+      "unitCreated": true,
+      "loaderCreated": true,
+      "childTag": false,
+      "passed": true
+    },
+    {
+      "region": "CH",
+      "decision": "undecided",
+      "child": false,
+      "state": "pending",
+      "contentAvailable": true,
+      "unitCreated": false,
+      "loaderCreated": false,
+      "childTag": false,
+      "passed": true
+    },
+    {
+      "region": "CH",
+      "decision": "reject",
+      "child": false,
+      "state": "denied",
+      "contentAvailable": true,
+      "unitCreated": true,
+      "loaderCreated": true,
+      "childTag": false,
+      "passed": true
+    },
+    {
+      "region": "CH",
+      "decision": "accept",
+      "child": false,
+      "state": "granted",
+      "contentAvailable": true,
+      "unitCreated": true,
+      "loaderCreated": true,
+      "childTag": false,
+      "passed": true
+    },
+    {
+      "region": "OUTSIDE_EEA_UK_CH",
+      "decision": "undecided",
+      "child": false,
+      "state": "pending",
+      "contentAvailable": true,
+      "unitCreated": false,
+      "loaderCreated": false,
+      "childTag": false,
+      "passed": true
+    },
+    {
+      "region": "OUTSIDE_EEA_UK_CH",
+      "decision": "reject",
+      "child": false,
+      "state": "denied",
+      "contentAvailable": true,
+      "unitCreated": true,
+      "loaderCreated": true,
+      "childTag": false,
+      "passed": true
+    },
+    {
+      "region": "OUTSIDE_EEA_UK_CH",
+      "decision": "accept",
+      "child": false,
+      "state": "granted",
+      "contentAvailable": true,
+      "unitCreated": true,
+      "loaderCreated": true,
+      "childTag": false,
+      "passed": true
+    },
+    {
+      "region": "EEA",
+      "decision": "accept",
+      "child": true,
+      "state": "granted",
+      "contentAvailable": true,
+      "unitCreated": true,
+      "loaderCreated": true,
+      "childTag": true,
+      "passed": true
+    }
+  ]
+}

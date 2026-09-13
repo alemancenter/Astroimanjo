@@ -113,8 +113,34 @@ const socialLinks = {
 		   hasn't rendered yet — GA/Ads run in a degraded, cookieless-ping mode instead of full
 		   tracking until the visitor actually grants consent via the banner. */}
 		<script is:inline>
+			/*
+			 * Consent is fail-closed for ad units. Funding Choices calls this same
+			 * gtag function when the visitor makes a choice; keeping the small state
+			 * machine here lets AdSensePlacement wait for that update without
+			 * guessing the visitor's region from language or URL.
+			 */
 			window.dataLayer = window.dataLayer || [];
-			function gtag() { dataLayer.push(arguments); }
+			window.__imanjoConsent = window.__imanjoConsent || {
+				adStorage: 'denied',
+				status: 'pending',
+			};
+			window.__imanjoConsentNotify = function (params) {
+				if (!params || typeof params !== 'object' || !('ad_storage' in params)) return;
+				const adStorage = params.ad_storage;
+				if (adStorage !== 'granted' && adStorage !== 'denied') return;
+				window.__imanjoConsent.adStorage = adStorage;
+				window.__imanjoConsent.status = adStorage === 'granted' ? 'granted' : 'denied';
+				window.dispatchEvent(new CustomEvent('imanjo:consent-updated', {
+					detail: { ...window.__imanjoConsent },
+				}));
+			};
+			window.gtag = function () {
+				const args = Array.from(arguments);
+				window.dataLayer.push(args);
+				if (args[0] === 'consent' && args[1] === 'update') {
+					window.__imanjoConsentNotify(args[2]);
+				}
+			};
 			// IMANJO_GA4_REGIONAL_CONSENT_V1
                         //
                         // EEA + UK + Switzerland:
@@ -233,7 +259,6 @@ const socialLinks = {
 				<script is:inline async src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`}></script>
 				<script is:inline define:vars={{ gaId }}>
 					window.dataLayer = window.dataLayer || [];
-					function gtag() { dataLayer.push(arguments); }
 					gtag('js', new Date());
 					gtag('config', gaId);
 				</script>
@@ -263,12 +288,30 @@ const socialLinks = {
 		   decision for the site owner, not something to guess at here. google_ads_* (per-position
 		   ad slot IDs) remain unused pending that decision. */}
 		{adsenseClient && enableAds && (
-			<script
-				is:inline
-				async
-				src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${adsenseClient}`}
-				crossorigin="anonymous"
-			></script>
+			<script is:inline define:vars={{ adsenseClient }}>
+				/*
+				 * Do not even fetch the AdSense runtime until Consent Mode has
+				 * received an explicit grant or denial. A denial still permits
+				 * Google's non-personalized treatment; an unresolved choice does
+				 * not permit an ad unit to be created.
+				 */
+				(() => {
+					const loadAdsense = () => {
+						const consent = window.__imanjoConsent;
+						if (!consent || (consent.status !== 'granted' && consent.status !== 'denied')) return;
+						if (document.querySelector('script[data-imanjo-adsense-loader]')) return;
+						const script = document.createElement('script');
+						script.async = true;
+						script.crossOrigin = 'anonymous';
+						script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${adsenseClient}`;
+						script.dataset.imanjoAdsenseLoader = '1';
+						script.dataset.npaOnUnknownConsent = '1';
+						document.head.appendChild(script);
+					};
+					window.addEventListener('imanjo:consent-updated', loadAdsense);
+					loadAdsense();
+				})();
+			</script>
 		)}
 	</head>
 	<body class="flex min-h-screen flex-col font-sans antialiased transition-colors duration-300">
