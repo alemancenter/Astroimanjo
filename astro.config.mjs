@@ -50,16 +50,18 @@ export default defineConfig({
     provider: memoryCache(),
   },
 
-  // The ImanSEO + content-audit page sprawl (16 routes) was replaced by one page,
-  // /dashboard/content-quality. These 301s keep every old bookmark / inbound link
-  // working. Only applies where no page file matches — the old .astro files are
-  // deleted.
+  // The ImanSEO + content-audit + content-quality subsystem (AI-assisted analysis, batch
+  // fixes, readiness reports, corruption/similarity/inventory scans) was removed entirely.
+  // Google Search Console survives as its own standalone page (/dashboard/gsc — real Google
+  // data, no AI). These 301s keep old bookmarks / inbound links from 404ing outright.
   redirects: {
-    '/dashboard/seo/search-console': { status: 301, destination: '/dashboard/content-quality?tab=search' },
-    '/dashboard/seo': { status: 301, destination: '/dashboard/content-quality' },
-    '/dashboard/seo/[...slug]': { status: 301, destination: '/dashboard/content-quality' },
-    '/dashboard/content-audit': { status: 301, destination: '/dashboard/content-quality' },
-    '/dashboard/content-audit/[...slug]': { status: 301, destination: '/dashboard/content-quality' },
+    '/dashboard/seo/search-console': { status: 301, destination: '/dashboard/gsc' },
+    '/dashboard/seo': { status: 301, destination: '/dashboard' },
+    '/dashboard/seo/[...slug]': { status: 301, destination: '/dashboard' },
+    '/dashboard/content-audit': { status: 301, destination: '/dashboard' },
+    '/dashboard/content-audit/[...slug]': { status: 301, destination: '/dashboard' },
+    '/dashboard/content-quality': { status: 301, destination: '/dashboard' },
+    '/dashboard/quality': { status: 301, destination: '/dashboard' },
   },
   // Public rendering reads current publication/eligibility; service caches own data TTLs.
   routeRules: {},

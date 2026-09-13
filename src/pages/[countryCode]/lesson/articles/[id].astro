@@ -17,10 +17,9 @@ const params = Astro.url.searchParams;
 const formError = params.get('error');
 const commentSent = params.get('comment_sent') === '1';
 
-const [articleResult, settingsResult, adStatusResult, seoResult] = await Promise.all([
+const [articleResult, settingsResult, seoResult] = await Promise.all([
 	apiFetch<any>(`/articles/${id}`, { countryId }),
 	apiFetch<Record<string, string>>('/front/settings', { countryId }),
-	apiFetch<{ eligible: boolean; ads_eligible?: boolean; indexable: boolean; adsense_risk: string }>(`/articles/${id}/ad-status`, { countryId, params: { country: countryCode } }),
 	apiFetch<any>(`/seo/article/${id}`, { countryId }),
 ]);
 const article = articleResult.data;
@@ -48,10 +47,10 @@ const wordCount = plainContent ? plainContent.split(/\s+/).filter(Boolean).lengt
 const readingMinutes = Math.max(1, Math.ceil(wordCount / 200));
 const settings = settingsResult.data ?? {};
 const adsenseClient = settings.adsense_client?.trim() || '';
-// The backend Content Quality Gate is the single authority for ad eligibility.
-// Word count stays presentation/diagnostic data only and never overrides the gate.
-const gateAdsEligible = adStatusResult.data?.ads_eligible ?? adStatusResult.data?.eligible ?? false;
-const adsEligible = Boolean(article && adStatusResult.ok && gateAdsEligible && adsenseClient);
+// The content-audit AI quality gate that used to decide ad eligibility per page was
+// removed; ads are now allowed on every published article that has an AdSense client ID
+// configured (see /dashboard/settings).
+const adsEligible = Boolean(article && adsenseClient);
 
 const publishedAt = article?.published_at || article?.created_at;
 const updatedAt = article?.updated_at;
@@ -131,7 +130,7 @@ const jsonLd = article
 const effectiveJsonLd = seo?.schema_json && jsonLd ? [...jsonLd, seo.schema_json] : jsonLd;
 ---
 
-<Layout title={seo?.title || article?.title || 'المقال'} description={description} canonical={canonicalUrl} image={contentImage} jsonLd={effectiveJsonLd} settings={settings} robots={seo?.robots} ogTitle={seo?.og_title} ogDescription={seo?.og_description} ogImage={seoOGImage} ogType="article" twitterTitle={seo?.twitter_title} twitterDescription={seo?.twitter_description} twitterImage={seoTwitterImage} qualityIndexable={adStatusResult.ok ? adStatusResult.data?.indexable : undefined} enableAds={adsEligible}>
+<Layout title={seo?.title || article?.title || 'المقال'} description={description} canonical={canonicalUrl} image={contentImage} jsonLd={effectiveJsonLd} settings={settings} robots={seo?.robots} ogTitle={seo?.og_title} ogDescription={seo?.og_description} ogImage={seoOGImage} ogType="article" twitterTitle={seo?.twitter_title} twitterDescription={seo?.twitter_description} twitterImage={seoTwitterImage} enableAds={adsEligible}>
 	<div id="reading-progress" class="fixed inset-x-0 top-0 z-[70] h-0.5 origin-right scale-x-0 bg-gradient-to-l from-royal-600 via-emerald-brand-600 to-sunset-400" aria-hidden="true"></div>
 
 	{

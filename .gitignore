@@ -26,3 +26,6 @@ pnpm-debug.log*
 # local build-artifact snapshot / internal audit notes — not part of the source export
 Astro03.zip
 report.md
+
+# stray local tool config/telemetry (Go, Astro) that leaked into the project root
+.config/

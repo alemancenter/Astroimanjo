@@ -71,24 +71,8 @@ export const POST: APIRoute = async ({ request, cookies, locals, redirect, cache
 		return redirect(`${back}?error=${encodeURIComponent(message)}`);
 	}
 
-	// The AI-source file (if any) was uploaded immediately, before the article existed, via
-	// files/upload.ts with no article_id set — see ArticleForm.astro. Now that a real article
-	// id exists, associate it so it shows up as a normal attachment too, not just AI input.
- let seoWarning = '';
-	const sourceFileId = String(form.get('ai_source_file_id') || '').trim();
+	let seoWarning = '';
 	const articleId = isEdit ? id : json?.data?.id;
-	if (sourceFileId && articleId) {
-		const linked = await apiRawFetch(`/dashboard/files/${sourceFileId}`, {
-			method: 'PUT',
-			countryId: locals.countryId,
-			cookieHeader: `token=${token}`,
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ article_id: Number(articleId) }),
-		}).catch(() => null);
- if (!linked?.ok) seoWarning = 'حُفظ المحتوى، لكن تعذّر ربط الملف المصدر؛ يمكنك ربطه من صفحة التعديل.';
-	}
-
-	
 	if (articleId) {
 		const seoRes = await apiRawFetch(`/dashboard/seo/metadata/article/${articleId}`, {
 			method: 'PUT',

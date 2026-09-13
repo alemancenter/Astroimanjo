@@ -1,0 +1,78 @@
+---
+import DashboardLayout from '../../../layouts/DashboardLayout.astro';
+import AnalyticsHeader from '../../../components/dashboard/AnalyticsHeader.astro';
+import '../../../styles/analytics-shared.css';
+import { requireDashboard, hasPermission, isAdmin } from '../../../lib/auth';
+import { apiFetch } from '../../../lib/api';
+import { getCountryById } from '../../../lib/countries';
+
+const guard = await requireDashboard(Astro);
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+const allowed = isAdmin(user) || hasPermission(user, 'manage monitoring') || hasPermission(user, 'manage performance');
+if (!allowed) return Astro.redirect('/dashboard?error=forbidden');
+
+const params = Astro.url.searchParams;
+const days = [7, 14, 30, 90, 365].includes(Number(params.get('days'))) ? Number(params.get('days')) : 30;
+const countryId = Astro.locals.countryId;
+const currentCountry = getCountryById(countryId);
+const cookieHeader = `token=${Astro.cookies.get('token')?.value}`;
+
+const visitorResult = await apiFetch<any>('/dashboard/visitor-analytics', { countryId, cookieHeader, params: { days } });
+const visitor = visitorResult.data || {};
+const visitorStats = visitor.visitor_stats || {};
+const chartData: any[] = Array.isArray(visitor.chart_data) ? visitor.chart_data : [];
+const devices: any[] = Array.isArray(visitor.device_stats) ? visitor.device_stats : [];
+const sources: any[] = Array.isArray(visitor.traffic_sources) ? visitor.traffic_sources : [];
+const countries: any[] = Array.isArray(visitor.country_stats) ? visitor.country_stats : [];
+const activeVisitors: any[] = Array.isArray(visitorStats.active_visitors) ? visitorStats.active_visitors : [];
+
+const numberValue = (...values: unknown[]) => {
+	for (const value of values) { const parsed = Number(value); if (Number.isFinite(parsed)) return parsed; }
+	return 0;
+};
+const number = new Intl.NumberFormat('ar-EG');
+const decimal = new Intl.NumberFormat('ar-EG', { maximumFractionDigits: 1 });
+const percent = (value: unknown) => `${decimal.format(numberValue(value))}%`;
+const periodViews = chartData.reduce((total, item) => total + numberValue(item.pageViews, item.views), 0);
+const periodVisitors = chartData.reduce((total, item) => total + numberValue(item.visitors), 0);
+const pagesPerVisitor = periodVisitors > 0 ? periodViews / periodVisitors : 0;
+const maxSource = Math.max(1, ...sources.map((item) => numberValue(item.visits)));
+const maxCountry = Math.max(1, ...countries.map((item) => numberValue(item.count)));
+const deviceTotal = Math.max(1, devices.reduce((total, item) => total + numberValue(item.count), 0));
+const deviceRows = devices.map((item, index) => ({
+	...item,
+	share: numberValue(item.value) || (numberValue(item.count) / deviceTotal) * 100,
+	tone: `tone-${index % 4}`,
+	iconPath: String(item.name).toLowerCase().includes('mobile') ? 'M8 2h8v20H8zM11 18h2' : 'M3 4h18v13H3zM8 21h8M12 17v4',
+}));
+const sourceLabel = (source: string) => !source || source === 'Direct' ? 'دخول مباشر' : source;
+const deviceLabel = (name: string) => ({ Desktop: 'حاسوب', Mobile: 'هاتف', Tablet: 'جهاز لوحي' }[name] || name || 'غير معروف');
+const success = params.get('success');
+const error = params.get('error');
+---
+
+<DashboardLayout title="التحليلات · الجمهور" description="التوزيع الجغرافي والتقني لزوار المنصة" user={user}>
+	<div class="analytics-page">
+		<AnalyticsHeader activeTab="audience" days={days} countryName={currentCountry.name} realtimeCount={visitorResult.ok ? activeVisitors.length : undefined} allOk={visitorResult.ok} error={error} success={success} />
+
+		<main class="tab-panel audience-panel" role="tabpanel">
+			<section class="audience-intro"><div><span>تحليل الجمهور</span><h2>من يصل إلى المنصة وكيف؟</h2><p>توزيع جغرافي وتقني يساعدك على تحسين المحتوى وتجربة الاستخدام.</p></div><aside><div><span>إجمالي الزوار</span><strong>{number.format(periodVisitors)}</strong></div><div><span>إجمالي المشاهدات</span><strong>{number.format(periodViews)}</strong></div><div><span>صفحات لكل زائر</span><strong>{decimal.format(pagesPerVisitor)}</strong></div></aside></section>
+			<div class="audience-grid">
+				<section class="panel countries-panel"><header class="panel-heading"><div><span>التوزيع الجغرافي</span><h2>أعلى الدول</h2><p>ترتيب الزيارات المسجلة حسب الدولة.</p></div><span class="count-badge">{number.format(countries.length)} دولة</span></header><div class="bar-list">{countries.slice(0,10).map((item,index) => <article><i>{number.format(index+1)}</i><div><header><span>{item.country || 'غير معروف'}</span><strong>{number.format(item.count)}</strong></header><b><i style={`width:${(numberValue(item.count)/maxCountry)*100}%`}></i></b></div></article>)}{!countries.length && <div class="empty"><h3>لا توجد بيانات جغرافية</h3></div>}</div></section>
+				<section class="panel device-panel"><header class="panel-heading"><div><span>التجربة التقنية</span><h2>الأجهزة المستخدمة</h2><p>حصة كل نوع من إجمالي الزيارات.</p></div></header><div class="device-layout"><div class="device-donut" style={`--desktop:${(numberValue(devices[0]?.count)/deviceTotal)*360}deg`}><span><strong>{number.format(deviceTotal)}</strong><small>زيارة مصنفة</small></span></div><div class="device-list">{deviceRows.map((item) => <article><i class={item.tone}><svg viewBox="0 0 24 24"><path d={item.iconPath}/></svg></i><div><span>{deviceLabel(item.name)}</span><b><i style={`width:${item.share}%`}></i></b></div><strong>{decimal.format(item.share)}%</strong></article>)}</div></div></section>
+				<section class="panel sources-panel"><header class="panel-heading"><div><span>قنوات الاستحواذ</span><h2>مصادر الزيارات</h2><p>المواقع والإحالات التي جلبت الجمهور.</p></div></header><div class="source-list">{sources.slice(0,12).map((item,index) => <article><i>{number.format(index+1)}</i><div><header><span title={item.source}>{sourceLabel(item.source)}</span><strong>{number.format(item.visits)}</strong></header><b><i style={`width:${(numberValue(item.visits)/maxSource)*100}%`}></i></b></div><em class:list={{ down:numberValue(item.change)<0 }}>{numberValue(item.change)<0?'↓':'↑'} {percent(Math.abs(numberValue(item.change)))}</em></article>)}{!sources.length && <div class="empty"><h3>لا توجد مصادر زيارات مسجلة</h3></div>}</div></section>
+			</div>
+		</main>
+	</div>
+</DashboardLayout>
+
+<style>
+	.audience-intro{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:.7rem;border:1px solid var(--an-line);border-radius:.8rem;background:#fff;padding:.9rem}.audience-intro>aside{display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem}.audience-intro>aside>div{display:grid;min-width:8rem;border-radius:.48rem;background:#f5f8fb;padding:.45rem}.audience-intro aside span{color:#788698;font-size:.56rem}.audience-intro aside strong{color:#304760;font-size:.73rem}.audience-grid{display:grid;grid-template-columns:1fr 1fr;gap:.7rem}.audience-grid>.panel{padding:.9rem}.sources-panel{grid-column:1/-1}.count-badge{border-radius:99rem;background:#eaf1fa;padding:.25rem .42rem;color:var(--an-blue);font-size:.57rem;font-weight:850}
+	.bar-list,.source-list{display:grid;padding-top:.5rem}.bar-list article,.source-list article{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:.5rem;border-bottom:1px solid #edf1f5;padding:.5rem 0}.bar-list article>i,.source-list article>i{display:grid;width:1.7rem;height:1.7rem;place-items:center;border-radius:.42rem;background:#eef2f6;color:#66768a;font-size:.57rem;font-style:normal}.bar-list article>div,.source-list article>div{display:grid;gap:.24rem}.bar-list header,.source-list header{display:flex;justify-content:space-between;gap:.5rem}.bar-list header span,.source-list header span{overflow:hidden;color:#40556e;font-size:.63rem;text-overflow:ellipsis;white-space:nowrap}.bar-list header strong,.source-list header strong{color:#607187;font-size:.59rem}.bar-list article>div>b,.source-list article>div>b,.device-list article>div>b{display:block;height:.35rem;overflow:hidden;border-radius:99rem;background:#e9eef3}.bar-list article>div>b>i,.source-list article>div>b>i,.device-list article>div>b>i{display:block;height:100%;border-radius:inherit;background:var(--an-blue)}.source-list article>div>b>i{background:var(--an-green)}.source-list em{border-radius:99rem;background:#e4f6ef;padding:.2rem .36rem;color:#087559;font-size:.54rem;font-style:normal}.source-list em.down{background:#fff0f2;color:#b13642}
+	.device-layout{display:grid;grid-template-columns:8rem 1fr;align-items:center;gap:.7rem;padding-top:.75rem}.device-donut{display:grid;width:7.2rem;aspect-ratio:1;place-items:center;border-radius:50%;background:conic-gradient(var(--an-blue) 0 var(--desktop),#d8eee7 var(--desktop) 290deg,#f3d8a8 290deg);position:relative}.device-donut::after{position:absolute;width:5.1rem;aspect-ratio:1;border-radius:50%;background:#fff;content:""}.device-donut>span{display:grid;z-index:1;text-align:center}.device-donut strong{color:var(--an-ink);font-size:.84rem}.device-donut small{color:#7d8a9b;font-size:.52rem}.device-list{display:grid;gap:.35rem}.device-list article{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:.4rem}.device-list article>i{display:grid;width:1.8rem;height:1.8rem;place-items:center;border-radius:.42rem;background:#eaf1fa;color:var(--an-blue)}.device-list article>i.tone-1{background:#e4f6ef;color:var(--an-green)}.device-list article>i.tone-2{background:#fff2df;color:#b36c16}.device-list article>div{display:grid;gap:.2rem}.device-list span{color:#54677e;font-size:.59rem}.device-list strong{color:#53657b;font-size:.58rem}
+	:global(.dark) .audience-intro{border-color:#30445d;background:#0f2547}:global(.dark) .bar-list article,:global(.dark) .source-list article{border-color:#2b415c}:global(.dark) .device-donut::after{background:#0f2547}
+	@media(max-width:1120px){.audience-grid{grid-template-columns:1fr}.sources-panel{grid-column:auto}}
+	@media(max-width:850px){.audience-intro{align-items:stretch;flex-direction:column}}
+	@media(max-width:600px){.audience-intro>aside{grid-template-columns:1fr}.device-layout{grid-template-columns:1fr}.device-donut{margin:auto}}
+</style>

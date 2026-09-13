@@ -1,0 +1,99 @@
+---
+import DashboardLayout from '../../../layouts/DashboardLayout.astro';
+import AnalyticsHeader from '../../../components/dashboard/AnalyticsHeader.astro';
+import DashboardNavIcon from '../../../components/dashboard/DashboardNavIcon.astro';
+import '../../../styles/analytics-shared.css';
+import { requireDashboard, hasPermission, isAdmin } from '../../../lib/auth';
+import { apiFetch } from '../../../lib/api';
+import { getCountryById } from '../../../lib/countries';
+
+const guard = await requireDashboard(Astro);
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+const allowed = isAdmin(user) || hasPermission(user, 'manage monitoring') || hasPermission(user, 'manage performance');
+if (!allowed) return Astro.redirect('/dashboard?error=forbidden');
+
+const params = Astro.url.searchParams;
+const days = [7, 14, 30, 90, 365].includes(Number(params.get('days'))) ? Number(params.get('days')) : 30;
+const visitorType = ['all', 'members', 'guests', 'bots'].includes(params.get('type') || '') ? String(params.get('type')) : 'all';
+const q = (params.get('q') || '').trim().toLowerCase();
+const countryId = Astro.locals.countryId;
+const currentCountry = getCountryById(countryId);
+const cookieHeader = `token=${Astro.cookies.get('token')?.value}`;
+
+// This tab only ever needs the live "active now" slice of the payload — still the same
+// endpoint (the backend caches the whole response together), but no chart/device/source
+// data is read here, unlike overview/audience.
+const visitorResult = await apiFetch<any>('/dashboard/visitor-analytics', { countryId, cookieHeader, params: { days } });
+const visitor = visitorResult.data || {};
+const visitorStats = visitor.visitor_stats || {};
+const activeVisitors: any[] = Array.isArray(visitorStats.active_visitors) ? visitorStats.active_visitors : [];
+
+const number = new Intl.NumberFormat('ar-EG');
+const formatTime = (value: unknown) => {
+	const date = new Date(String(value || ''));
+	return Number.isNaN(date.getTime()) ? 'الآن' : date.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+};
+const filteredVisitors = activeVisitors.filter((item) => {
+	const typeMatch = visitorType === 'all' || (visitorType === 'members' && item.is_member) || (visitorType === 'guests' && !item.is_member && !item.is_bot) || (visitorType === 'bots' && item.is_bot);
+	const haystack = [item.ip, item.country, item.city, item.user_name, item.user_email, item.browser, item.os, item.current_page].join(' ').toLowerCase();
+	return typeMatch && (!q || haystack.includes(q));
+});
+const deviceTypeLabel = (type: string) => ({ mobile: 'هاتف', tablet: 'جهاز لوحي', desktop: 'حاسوب' }[type] || 'غير معروف');
+const success = params.get('success');
+const error = params.get('error');
+---
+
+<DashboardLayout title="التحليلات · الزوار الآن" description="نشاط الزوار اللحظي على المنصة" user={user}>
+	<div class="analytics-page" data-tab="realtime">
+		<AnalyticsHeader activeTab="realtime" days={days} countryName={currentCountry.name} realtimeCount={visitorResult.ok ? activeVisitors.length : undefined} allOk={visitorResult.ok} error={error} success={success} />
+
+		<main class="tab-panel realtime-panel" role="tabpanel">
+			<section class="realtime-hero"><div class="pulse-orbit"><i></i><span><strong>{number.format(visitorStats.current)}</strong><small>نشط الآن</small></span></div><div><span>تحديث لحظي</span><h2>زوار المنصة خلال آخر 15 دقيقة</h2><p>تابع نوع الزائر وموقعه والجهاز والصفحة الحالية دون مغادرة لوحة الإدارة.</p><div><b><i></i>{number.format(visitorStats.current_members)} أعضاء</b><b><i></i>{number.format(visitorStats.current_guests)} زوار</b></div></div><div class="realtime-actions"><button type="button" data-autorefresh aria-pressed="true"><i></i><span>تحديث تلقائي</span></button><a href={`/dashboard/analytics/realtime?days=${days}`}><svg viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6 9a7 7 0 0 1 12-2l2 2M4 15l2 2a7 7 0 0 0 12-2"/></svg>تحديث الآن</a></div></section>
+			<section class="panel visitors-panel"><header class="visitors-header"><div><span>قائمة المتصلين</span><h2>الجلسات النشطة</h2><p>تظهر البيانات المتاحة فقط، وتحترم الحقول غير المسجلة.</p></div><form method="get"><input type="hidden" name="days" value={days}/><label class="visitor-search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input name="q" value={params.get('q') || ''} placeholder="بحث بالاسم أو IP أو الموقع..."/></label><select name="type"><option value="all" selected={visitorType==='all'}>جميع الزوار</option><option value="members" selected={visitorType==='members'}>الأعضاء فقط</option><option value="guests" selected={visitorType==='guests'}>الزوار فقط</option><option value="bots" selected={visitorType==='bots'}>البوتات فقط</option></select><button>بحث</button>{(q||visitorType!=='all')&&<a href={`/dashboard/analytics/realtime?days=${days}`}>مسح</a>}</form></header><div class="visitor-summary"><span><b>{number.format(filteredVisitors.length)}</b> جلسة مطابقة</span><span><b>{number.format(filteredVisitors.filter(item=>item.is_member).length)}</b> أعضاء</span><span><b>{number.format(filteredVisitors.filter(item=>!item.is_member&&!item.is_bot).length)}</b> زوار</span><span><b>{number.format(filteredVisitors.filter(item=>item.is_bot).length)}</b> بوتات</span></div>
+				<div class="visitors-table-wrap"><table><thead><tr><th>الزائر</th><th>الموقع</th><th>الجهاز والمتصفح</th><th>الصفحة الحالية</th><th>آخر نشاط</th><th>عنوان IP</th></tr></thead><tbody>{filteredVisitors.map((item)=><tr><td><div class="visitor-id"><i class:list={{ member:item.is_member, bot:item.is_bot }}>{item.is_bot?'ب':item.is_member?String(item.user_name||'ع').slice(0,1):'ز'}</i><span><strong>{item.is_bot?'بوت':item.is_member?(item.user_name||'عضو مسجل'):'زائر'}</strong><small>{item.is_bot?'زيارة آلية':item.is_member?(item.user_email||'عضو'):'جلسة عامة'}</small></span></div></td><td><div class="location"><svg viewBox="0 0 24 24"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2"/></svg><span>{[item.city,item.country].filter(Boolean).join('، ')||'غير معروف'}</span></div></td><td><div class="device-info"><strong>{item.browser||'غير معروف'}</strong><small>{item.os||'نظام غير معروف'} · {deviceTypeLabel(item.device_type)}</small></div></td><td><a class="current-page" href={item.current_page_full||item.current_page||'#'} target="_blank" rel="noopener" dir="ltr">{item.current_page||'—'}</a></td><td>{formatTime(item.last_active)}</td><td><code dir="ltr">{item.ip||'—'}</code></td></tr>)}</tbody></table></div>{!filteredVisitors.length&&<div class="empty"><i><DashboardNavIcon name="users" class="size-6"/></i><h3>لا توجد جلسات مطابقة حاليًا</h3><p>جرّب إزالة البحث أو تغيير نوع الزائر.</p></div>}</section>
+		</main>
+	</div>
+
+	<script>
+		// Keep the active-sessions view fresh without a manual reload. The backend caches
+		// visitor-analytics for ~15s, so a 30s cycle mostly serves cache and stays cheap.
+		const autoBtn = document.querySelector<HTMLButtonElement>('[data-autorefresh]');
+		if (autoBtn) {
+			const STORE_KEY = 'analytics:realtime:autorefresh';
+			let enabled = true;
+			try { enabled = localStorage.getItem(STORE_KEY) !== 'off'; } catch { /* storage blocked */ }
+			let timer = 0;
+			const label = autoBtn.querySelector('span');
+			const stop = () => { if (timer) { clearTimeout(timer); timer = 0; } };
+			const schedule = () => {
+				stop();
+				timer = window.setTimeout(() => {
+					const typing = document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLSelectElement;
+					if (document.visibilityState === 'visible' && !typing) location.reload();
+					else schedule();
+				}, 30_000);
+			};
+			const apply = () => {
+				autoBtn.setAttribute('aria-pressed', String(enabled));
+				if (label) label.textContent = enabled ? 'تحديث تلقائي' : 'التحديث موقوف';
+				if (enabled) schedule(); else stop();
+			};
+			autoBtn.addEventListener('click', () => {
+				enabled = !enabled;
+				try { localStorage.setItem(STORE_KEY, enabled ? 'on' : 'off'); } catch { /* storage blocked */ }
+				apply();
+			});
+			document.addEventListener('visibilitychange', () => { if (enabled && document.visibilityState === 'visible') schedule(); });
+			apply();
+		}
+	</script>
+
+<style>
+	.realtime-hero{display:flex;align-items:center;gap:1rem;margin-bottom:.7rem;border:1px solid #bce4d6;border-radius:.85rem;background:#f4fbf8;padding:1rem}.pulse-orbit{display:grid;width:6.8rem;aspect-ratio:1;flex:none;place-items:center;border:1px solid #a8dbc9;border-radius:50%;position:relative}.pulse-orbit::before,.pulse-orbit>i{position:absolute;border-radius:50%;content:""}.pulse-orbit::before{width:5rem;height:5rem;background:#dff5ed}.pulse-orbit>i{top:.65rem;right:.65rem;width:.55rem;height:.55rem;background:#0fa378;box-shadow:0 0 0 .2rem #c5ecde}.pulse-orbit>span{display:grid;z-index:1;text-align:center}.pulse-orbit strong{color:#087559;font-size:1.2rem}.pulse-orbit small{color:#5f8276;font-size:.57rem}.realtime-hero>div:nth-child(2){display:grid}.realtime-hero>div:nth-child(2)>span{color:var(--an-green);font-size:.64rem;font-weight:900}.realtime-hero h2{margin:.1rem 0;color:var(--an-ink);font-size:1.05rem}.realtime-hero p{margin:0;color:#657c74;font-size:.69rem}.realtime-hero>div:nth-child(2)>div{display:flex;gap:.4rem;margin-top:.45rem}.realtime-hero b{display:flex;align-items:center;gap:.25rem;border-radius:99rem;background:#fff;padding:.25rem .42rem;color:#3e6559;font-size:.57rem}.realtime-hero b i{width:.37rem;height:.37rem;border-radius:50%;background:var(--an-green)}.realtime-actions{display:flex;align-items:center;gap:.4rem;margin-inline-start:auto}.realtime-actions>a,.realtime-actions>[data-autorefresh]{display:flex;min-height:2.35rem;align-items:center;gap:.3rem;border:1px solid #7fc4ad;border-radius:.48rem;background:#fff;padding:.4rem .6rem;color:var(--an-green);font-family:inherit;font-size:.63rem;font-weight:850;cursor:pointer}.realtime-actions>[data-autorefresh]>i{width:.5rem;height:.5rem;border-radius:50%;background:var(--an-green);box-shadow:0 0 0 .18rem #d3efe5;animation:rt-blink 1.6s ease-in-out infinite}.realtime-actions>[data-autorefresh][aria-pressed=false]{border-color:#cdd7de;color:#7c8a99}.realtime-actions>[data-autorefresh][aria-pressed=false]>i{background:#aab6c2;box-shadow:none;animation:none}@keyframes rt-blink{50%{opacity:.35}}
+	.visitors-panel{overflow:hidden}.visitors-header{display:flex;align-items:center;justify-content:space-between;gap:.8rem;padding:.9rem}.visitors-header>form{display:flex;align-items:center;gap:.35rem}.visitor-search{display:flex;min-height:2.4rem;align-items:center;gap:.35rem;border:1px solid #d6dfe8;border-radius:.48rem;padding:0 .55rem}.visitor-search input{width:13rem;border:0;outline:0;background:transparent;font-family:inherit;font-size:.63rem}.visitors-header select,.visitors-header button{min-height:2.4rem;border:1px solid #d6dfe8;border-radius:.48rem;background:#fff;padding:0 .55rem;color:#4d6178;font-family:inherit;font-size:.62rem}.visitors-header button{border-color:var(--an-blue);background:var(--an-blue);color:#fff;font-weight:850}.visitors-header form>a{color:#9b5660;font-size:.59rem}.visitor-summary{display:flex;gap:1rem;border-block:1px solid #e8edf2;background:#f8fafc;padding:.55rem .9rem}.visitor-summary span{color:#798697;font-size:.59rem}.visitor-summary b{color:#40556e}.visitors-table-wrap{overflow-x:auto}.visitors-panel table{width:100%;border-collapse:collapse}.visitors-panel th{background:#fbfcfd;padding:.62rem .75rem;color:#718095;font-size:.61rem;text-align:right;white-space:nowrap}.visitors-panel td{border-top:1px solid #edf1f5;padding:.62rem .75rem;color:#5e7086;font-size:.62rem;vertical-align:middle}.visitor-id{display:flex;min-width:10rem;align-items:center;gap:.45rem}.visitor-id>i{display:grid;width:2rem;height:2rem;flex:none;place-items:center;border-radius:50%;background:#fff2df;color:#ad6816;font-style:normal;font-weight:900}.visitor-id>i.member{background:#eaf1fa;color:var(--an-blue)}.visitor-id>i.bot{background:#eef1f5;color:#5b6b81}.visitor-id>span,.device-info{display:grid;min-width:0}.visitor-id strong,.device-info strong{overflow:hidden;color:#344a62;font-size:.63rem;text-overflow:ellipsis;white-space:nowrap}.visitor-id small,.device-info small{overflow:hidden;color:#8995a4;font-size:.54rem;text-overflow:ellipsis;white-space:nowrap}.location{display:flex;min-width:8rem;align-items:center;gap:.3rem}.location svg{width:.8rem;height:.8rem;color:var(--an-green)}.current-page{display:block;max-width:14rem;overflow:hidden;color:var(--an-blue);font-family:ui-monospace,Consolas,monospace;font-size:.57rem;text-overflow:ellipsis;white-space:nowrap}.visitors-panel code{font-size:.57rem}
+	:global(.dark) .visitor-summary{background:#122a49}:global(.dark) .visitors-header select,:global(.dark) .visitor-search{background:#122a49;color:#dbe5f1}:global(.dark) .visitors-panel th{background:#112946}:global(.dark) .visitors-panel td{border-color:#2b415c}
+	@media(max-width:850px){.visitors-header{align-items:stretch;flex-direction:column}.visitors-header>form{flex-wrap:wrap}.visitor-search{flex:1}}
+	@media(max-width:600px){.realtime-hero{align-items:flex-start;flex-direction:column}.realtime-actions{width:100%;margin:0}.realtime-actions>a,.realtime-actions>[data-autorefresh]{flex:1;justify-content:center}.visitor-search input{width:100%}}
+</style>
+</DashboardLayout>

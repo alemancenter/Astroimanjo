@@ -1,0 +1,23 @@
+/* Shared tokens + primitives across all four /dashboard/analytics/* pages
+   (overview, audience, realtime, performance). Split out of one monolithic
+   analytics page so each tab is now its own route with its own data-fetch and
+   its own scoped per-page styles — this file is the only piece still shared. */
+.analytics-page{--an-blue:#1a4d8f;--an-green:#0f8464;--an-orange:#e8a244;--an-ink:#1b2a3d;--an-muted:#69788b;--an-line:#dce4ed;direction:rtl;padding:.1rem}
+.analytics-page *{box-sizing:border-box}
+.analytics-page svg,.analytics-confirm svg{width:1.1rem;height:1.1rem;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;stroke-width:1.8}
+.tab-panel{animation:tab-in .2s ease both}
+@keyframes tab-in{from{opacity:.3;transform:translateY(3px)}to{opacity:1;transform:none}}
+.panel{border:1px solid var(--an-line);border-radius:.85rem;background:#fff;box-shadow:0 3px 12px rgb(23 43 77/.04)}
+.panel-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:.8rem;border-bottom:1px solid #edf1f5;padding-bottom:.7rem}
+.panel-heading>div>span,.audience-intro>div>span,.visitors-header>div>span{color:var(--an-blue);font-size:.65rem;font-weight:900}
+.panel-heading h2,.audience-intro h2,.visitors-header h2{margin:.08rem 0;color:var(--an-ink);font-size:.95rem;font-weight:950}
+.panel-heading p,.audience-intro p,.visitors-header p{margin:0;color:var(--an-muted);font-size:.68rem}
+.panel-heading>a{color:var(--an-blue);font-size:.64rem;font-weight:850}
+.empty{display:grid;min-height:14rem;place-items:center;align-content:center;text-align:center}
+.empty>i{display:grid;width:2.8rem;height:2.8rem;place-items:center;border-radius:50%;background:#eaf1fa;color:var(--an-blue)}
+.empty h3{margin:.55rem 0 .12rem;color:#40546b;font-size:.75rem}
+.empty p{margin:0;color:#8390a0;font-size:.62rem}
+.empty.compact{min-height:10rem}
+:global(.dark) .analytics-page{--an-ink:#f2f6fb;--an-muted:#9eacc0;--an-line:#30445d}
+:global(.dark) .panel{border-color:#30445d;background:#0f2547}
+:global(.dark) .panel-heading{border-color:#2b415c}

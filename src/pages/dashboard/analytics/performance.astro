@@ -1,0 +1,106 @@
+---
+import DashboardLayout from '../../../layouts/DashboardLayout.astro';
+import AnalyticsHeader from '../../../components/dashboard/AnalyticsHeader.astro';
+import DashboardNavIcon from '../../../components/dashboard/DashboardNavIcon.astro';
+import '../../../styles/analytics-shared.css';
+import { requireDashboard, hasPermission, isAdmin } from '../../../lib/auth';
+import { apiFetch } from '../../../lib/api';
+import { getCountryById } from '../../../lib/countries';
+
+const guard = await requireDashboard(Astro);
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+const allowed = isAdmin(user) || hasPermission(user, 'manage monitoring') || hasPermission(user, 'manage performance');
+if (!allowed) return Astro.redirect('/dashboard?error=forbidden');
+
+const params = Astro.url.searchParams;
+const days = [7, 14, 30, 90, 365].includes(Number(params.get('days'))) ? Number(params.get('days')) : 30;
+const countryId = Astro.locals.countryId;
+const currentCountry = getCountryById(countryId);
+const cookieHeader = `token=${Astro.cookies.get('token')?.value}`;
+
+const [liveResult, cacheResult, responseResult, rawResult] = await Promise.all([
+	apiFetch<any>('/dashboard/performance/live', { countryId, cookieHeader }),
+	apiFetch<any>('/dashboard/performance/cache', { countryId, cookieHeader }),
+	apiFetch<any>('/dashboard/performance/response-time', { countryId, cookieHeader }),
+	apiFetch<any>('/dashboard/performance/raw', { countryId, cookieHeader }),
+]);
+
+const live = liveResult.data || {};
+const cache = cacheResult.data || {};
+const response = responseResult.data || {};
+const raw = rawResult.data || {};
+const goStats = raw.go || {};
+const redisInfo = raw.redis_info || {};
+
+const numberValue = (...values: unknown[]) => {
+	for (const value of values) { const parsed = Number(value); if (Number.isFinite(parsed)) return parsed; }
+	return 0;
+};
+const number = new Intl.NumberFormat('ar-EG');
+const decimal = new Intl.NumberFormat('ar-EG', { maximumFractionDigits: 1 });
+const formatBytes = (value: unknown) => {
+	const bytes = numberValue(value);
+	if (!bytes) return '0 بايت';
+	if (bytes < 1024) return `${number.format(bytes)} بايت`;
+	if (bytes < 1024 ** 2) return `${decimal.format(bytes / 1024)} كيلوبايت`;
+	if (bytes < 1024 ** 3) return `${decimal.format(bytes / 1024 ** 2)} ميجابايت`;
+	return `${decimal.format(bytes / 1024 ** 3)} جيجابايت`;
+};
+const memoryPct = Math.round(numberValue(live.memory?.usage_percentage));
+const responseMs = numberValue(response.average_ms);
+const cachePct = Math.round(numberValue(cache.hit_ratio));
+const allOk = liveResult.ok && cacheResult.ok && responseResult.ok && rawResult.ok;
+const success = params.get('success');
+const error = params.get('error');
+---
+
+<DashboardLayout title="التحليلات · أداء المنصة" description="مؤشرات Go وRedis والذاكرة الحيّة" user={user}>
+	<div class="analytics-page">
+		<AnalyticsHeader activeTab="performance" days={days} countryName={currentCountry.name} allOk={allOk} error={error} success={success} />
+
+		<main class="tab-panel performance-panel" role="tabpanel">
+			<section class="performance-metrics">
+				<article class:list={['response',responseMs>500&&'danger',responseMs>150&&responseMs<=500&&'warning']}><i><svg viewBox="0 0 24 24"><path d="M4 19a8 8 0 1 1 16 0M12 13l4-4"/></svg></i><div><span>زمن الاستجابة</span><strong>{number.format(responseMs)} <small>ms</small></strong><b>{responseMs<=150?'ممتاز':responseMs<=500?'مقبول':'مرتفع'}</b></div></article>
+				<article class:list={['memory',memoryPct>85&&'danger',memoryPct>65&&memoryPct<=85&&'warning']}><i><svg viewBox="0 0 24 24"><path d="M7 4h10v16H7zM10 8h4M4 8h3m10 0h3M4 12h3m10 0h3M4 16h3m10 0h3"/></svg></i><div><span>ذاكرة التطبيق</span><strong>{number.format(memoryPct)}<small>%</small></strong><b>{formatBytes(live.memory?.used)} مستخدم</b></div></article>
+				<article class:list={['cache',cachePct<50&&'warning']}><i><DashboardNavIcon name="database" class="size-5"/></i><div><span>نسبة إصابة Redis</span><strong>{number.format(cachePct)}<small>%</small></strong><b>{cache.cache_size||'0 B'} حجم الكاش</b></div></article>
+				<article class="runtime"><i><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5zM9 9h6m-6 4h6m-6 4h3"/></svg></i><div><span>Go Routines</span><strong>{number.format(goStats.goroutines)}</strong><b>{number.format(goStats.num_gc)} دورة GC</b></div></article>
+			</section>
+			<div class="performance-grid">
+				<section class="panel resource-panel"><header class="panel-heading"><div><span>موارد التطبيق</span><h2>الذاكرة وRuntime</h2><p>مؤشرات مباشرة من عملية Go الحالية.</p></div><span class="live-chip"><i></i>Live</span></header><div class="resource-body"><div class="resource-ring" style={`--usage:${memoryPct*3.6}deg`}><span><strong>{number.format(memoryPct)}%</strong><small>ذاكرة مستخدمة</small></span></div><dl><div><dt>الذاكرة المستخدمة</dt><dd>{formatBytes(live.memory?.used)}</dd></div><div><dt>ذاكرة النظام</dt><dd>{formatBytes(live.memory?.total)}</dd></div><div><dt>ذاكرة Go المخصصة</dt><dd>{formatBytes(goStats.alloc)}</dd></div><div><dt>ذاكرة Go النظامية</dt><dd>{formatBytes(goStats.sys)}</dd></div><div><dt>أنوية المعالج</dt><dd>{number.format(live.cpu?.cores)}</dd></div><div><dt>دورات تنظيف الذاكرة</dt><dd>{number.format(goStats.num_gc)}</dd></div></dl></div></section>
+				<section class="panel redis-panel"><header class="panel-heading"><div><span>طبقة التخزين المؤقت</span><h2>تشخيص Redis</h2><p>أهم المؤشرات المستخرجة من Redis INFO.</p></div><a href="/dashboard/redis">إدارة Redis</a></header><div class="redis-facts"><article><span>الإصدار</span><strong>{redisInfo.redis_version||'—'}</strong></article><article><span>العملاء</span><strong>{number.format(redisInfo.connected_clients)}</strong></article><article><span>العمليات/ث</span><strong>{number.format(redisInfo.instantaneous_ops_per_sec)}</strong></article><article><span>مدة التشغيل</span><strong>{number.format(redisInfo.uptime_in_days)} يوم</strong></article><article><span>مفاتيح مُرحّلة</span><strong>{number.format(redisInfo.evicted_keys)}</strong></article><article><span>تجزئة الذاكرة</span><strong>{decimal.format(redisInfo.mem_fragmentation_ratio)}×</strong></article></div><footer><div><span>إصابات الكاش</span><strong>{number.format(redisInfo.keyspace_hits)}</strong></div><div><span>فقد الكاش</span><strong>{number.format(redisInfo.keyspace_misses)}</strong></div><div><span>الذاكرة المستخدمة</span><strong>{redisInfo.used_memory_human||cache.cache_size||'—'}</strong></div></footer></section>
+				<section class="panel retention-panel"><header class="panel-heading"><div><span>حوكمة البيانات</span><h2>سياسة الاحتفاظ</h2><p>احذف سجلات الزوار الأقدم من المدة المحددة لتقليل حجم قاعدة البيانات.</p></div><i><svg viewBox="0 0 24 24"><path d="M4 7h16m-10 4v6m4-6v6M9 7l1-3h4l1 3m3 0-1 14H7L6 7"/></svg></i></header><div class="retention-copy"><svg viewBox="0 0 24 24"><path d="M12 3 4 6v5c0 5 3.4 8.2 8 10 4.6-1.8 8-5 8-10V6Z"/><path d="m9 12 2 2 4-5"/></svg><p><strong>عملية محددة النطاق</strong><span>لن تمسح بيانات المحتوى أو المستخدمين؛ تستهدف سجلات تتبع الزيارات القديمة فقط.</span></p></div><form method="post" action="/api/dashboard/analytics/prune" data-prune-form><input type="hidden" name="redirect_to" value={`/dashboard/analytics/performance?days=${days}`}/><label><span>الاحتفاظ ببيانات آخر</span><select name="days"><option value="90">90 يومًا</option><option value="180">180 يومًا</option><option value="365" selected>سنة واحدة</option><option value="730">سنتين</option></select></label><button type="submit"><svg viewBox="0 0 24 24"><path d="M4 7h16m-10 4v6m4-6v6M9 7l1-3h4l1 3m3 0-1 14H7L6 7"/></svg>تنظيف البيانات القديمة</button></form></section>
+			</div>
+		</main>
+	</div>
+
+	<dialog id="analytics-confirm" class="analytics-confirm"><div><button type="button" data-close-confirm>×</button><i><svg viewBox="0 0 24 24"><path d="M12 9v4m0 4h.01M10 3h4l8 18H2Z"/></svg></i><span>إجراء صيانة</span><h2>تنظيف بيانات الزوار القديمة؟</h2><p data-confirm-copy></p><aside><strong>لن يمكن التراجع عن هذه العملية</strong><small>سيتم حذف سجلات التتبع الأقدم من المدة المختارة نهائيًا.</small></aside><footer><button type="button" data-close-confirm>إلغاء</button><button type="button" data-confirm-submit>تأكيد التنظيف</button></footer></div></dialog>
+
+	<script>
+		const pruneForm = document.querySelector<HTMLFormElement>('[data-prune-form]');
+		const confirmDialog = document.getElementById('analytics-confirm') as HTMLDialogElement | null;
+		pruneForm?.addEventListener('submit', (event) => {
+			event.preventDefault();
+			const select = pruneForm.querySelector<HTMLSelectElement>('[name="days"]');
+			const option = select?.selectedOptions[0]?.textContent || 'المدة المختارة';
+			const copy = confirmDialog?.querySelector<HTMLElement>('[data-confirm-copy]');
+			if (copy) copy.textContent = `سيحتفظ النظام ببيانات آخر ${option} ويحذف ما هو أقدم منها.`;
+			confirmDialog?.showModal();
+		});
+		document.querySelectorAll<HTMLButtonElement>('[data-close-confirm]').forEach((button) => button.addEventListener('click', () => confirmDialog?.close()));
+		confirmDialog?.querySelector<HTMLButtonElement>('[data-confirm-submit]')?.addEventListener('click', () => { confirmDialog.close(); pruneForm?.submit(); });
+		confirmDialog?.addEventListener('click', (event) => { if (event.target === confirmDialog) confirmDialog.close(); });
+	</script>
+
+<style>
+	.performance-metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:.65rem;margin-bottom:.7rem}.performance-metrics article{--tone:var(--an-green);--soft:#e4f6ef;display:flex;align-items:center;gap:.6rem;border:1px solid var(--an-line);border-radius:.75rem;background:#fff;padding:.72rem}.performance-metrics article.memory{--tone:var(--an-blue);--soft:#eaf1fa}.performance-metrics article.cache{--tone:#7254a3;--soft:#f1edfa}.performance-metrics article.runtime{--tone:#4c5a6c;--soft:#edf1f5}.performance-metrics article.warning{--tone:#b66d16;--soft:#fff2df}.performance-metrics article.danger{--tone:#b33642;--soft:#fff0f2}.performance-metrics article>i{display:grid;width:2.5rem;height:2.5rem;flex:none;place-items:center;border-radius:.6rem;background:var(--soft);color:var(--tone)}.performance-metrics article>div{display:grid}.performance-metrics span{color:#6c7c90;font-size:.61rem}.performance-metrics strong{color:var(--an-ink);font-size:.9rem}.performance-metrics strong small{font-size:.54rem}.performance-metrics b{color:var(--tone);font-size:.55rem}
+	.performance-grid{display:grid;grid-template-columns:1fr 1fr;gap:.7rem}.performance-grid>.panel{padding:.9rem}.retention-panel{grid-column:1/-1}.live-chip{display:flex;align-items:center;gap:.25rem;border-radius:99rem;background:#e4f6ef;padding:.24rem .4rem;color:#087559;font-size:.55rem}.live-chip i{width:.36rem;height:.36rem;border-radius:50%;background:currentColor}.resource-body{display:grid;grid-template-columns:8rem 1fr;align-items:center;gap:.7rem;padding-top:.75rem}.resource-ring{display:grid;width:7.2rem;aspect-ratio:1;place-items:center;border-radius:50%;background:conic-gradient(var(--an-blue) var(--usage),#e8edf2 var(--usage));position:relative}.resource-ring::after{position:absolute;width:5.2rem;aspect-ratio:1;border-radius:50%;background:#fff;content:""}.resource-ring>span{display:grid;z-index:1;text-align:center}.resource-ring strong{color:var(--an-ink);font-size:.9rem}.resource-ring small{color:#7d8a9a;font-size:.54rem}.resource-body dl{display:grid;grid-template-columns:1fr 1fr;gap:.35rem;margin:0}.resource-body dl>div{display:grid;border:1px solid #e7ecf2;border-radius:.45rem;padding:.4rem}.resource-body dt{color:#788697;font-size:.54rem}.resource-body dd{margin:0;color:#40556e;font-size:.62rem;font-weight:850}
+	.redis-facts{display:grid;grid-template-columns:repeat(3,1fr);gap:.35rem;padding:.7rem 0}.redis-facts article{display:grid;border:1px solid #e7ecf2;border-radius:.45rem;padding:.42rem}.redis-facts span{color:#798697;font-size:.54rem}.redis-facts strong{color:#354b63;font-size:.65rem}.redis-panel>footer{display:grid;grid-template-columns:repeat(3,1fr);gap:.35rem;border-top:1px solid #edf1f5;padding-top:.6rem}.redis-panel>footer>div{display:grid;border-radius:.45rem;background:#f6f8fb;padding:.42rem}.redis-panel>footer span{color:#7a8798;font-size:.53rem}.redis-panel>footer strong{color:#40556e;font-size:.61rem}
+	.retention-panel .panel-heading>i{display:grid;width:2.4rem;height:2.4rem;place-items:center;border-radius:.58rem;background:#fff0f2;color:#b33642}.retention-copy{display:flex;align-items:flex-start;gap:.45rem;margin:.7rem 0;border:1px solid #c9e5da;border-radius:.5rem;background:#f5fbf9;padding:.55rem;color:var(--an-green)}.retention-copy>svg{flex:none}.retention-copy p{display:grid;margin:0}.retention-copy strong{font-size:.63rem}.retention-copy span{color:#638176;font-size:.58rem}.retention-panel form{display:flex;align-items:end;gap:.45rem}.retention-panel label{display:grid;flex:1;gap:.2rem}.retention-panel label span{color:#65778c;font-size:.6rem;font-weight:800}.retention-panel select{min-height:2.45rem;border:1px solid #d5dee8;border-radius:.48rem;background:#fff;padding:0 .55rem;color:#40536b;font-family:inherit;font-size:.64rem}.retention-panel form button{display:flex;min-height:2.45rem;align-items:center;gap:.3rem;border:1px solid #a92f3b;border-radius:.48rem;background:#bd3945;padding:0 .65rem;color:#fff;font-family:inherit;font-size:.63rem;font-weight:900}
+	.analytics-confirm{width:min(92vw,27rem);max-width:none;border:0;background:transparent;padding:0}.analytics-confirm::backdrop{background:rgb(5 20 39/.64);backdrop-filter:blur(3px)}.analytics-confirm>div{position:relative;overflow:hidden;border:1px solid #dbe3ec;border-radius:.9rem;background:#fff;padding:1.2rem;text-align:center;box-shadow:0 30px 70px rgb(6 26 58/.3)}.analytics-confirm>div::before{position:absolute;top:0;right:0;left:0;height:.23rem;background:#bd3945;content:""}.analytics-confirm>div>button{position:absolute;top:.65rem;left:.65rem;width:1.8rem;height:1.8rem;border:1px solid #dce3eb;border-radius:.42rem;background:#fff;color:#748194;font-size:1rem}.analytics-confirm>div>i{display:grid;width:3.3rem;height:3.3rem;margin:.2rem auto .55rem;place-items:center;border-radius:50%;background:#fff0f2;color:#b33642}.analytics-confirm>div>span{color:#b33642;font-size:.61rem;font-weight:900}.analytics-confirm h2{margin:.1rem 0;color:#24374f;font-size:.95rem}.analytics-confirm>div>p{margin:.25rem 0;color:#6d7b8e;font-size:.67rem}.analytics-confirm aside{margin-top:.65rem;border:1px solid #efcdd1;border-radius:.5rem;background:#fff7f8;padding:.5rem;text-align:right}.analytics-confirm aside strong,.analytics-confirm aside small{display:block}.analytics-confirm aside strong{color:#9c303b;font-size:.62rem}.analytics-confirm aside small{color:#8f6469;font-size:.57rem}.analytics-confirm footer{display:grid;grid-template-columns:1fr 1.2fr;gap:.45rem;margin-top:.75rem}.analytics-confirm footer button{min-height:2.4rem;border:1px solid #d8e0e8;border-radius:.48rem;background:#fff;color:#66768a;font-family:inherit;font-size:.65rem;font-weight:900}.analytics-confirm footer button:last-child{border-color:#a62e3a;background:#bd3945;color:#fff}
+	:global(.dark) .performance-metrics article,:global(.dark) .performance-grid>.panel{border-color:#30445d;background:#0f2547}:global(.dark) .resource-ring::after{background:#0f2547}:global(.dark) .redis-panel>footer>div{background:#122a49}:global(.dark) .analytics-confirm>div{border-color:#30445d;background:#0f2547}
+	@media(max-width:1120px){.performance-metrics{grid-template-columns:repeat(2,1fr)}}
+	@media(max-width:850px){.performance-grid{grid-template-columns:1fr}.retention-panel{grid-column:auto}}
+	@media(max-width:600px){.performance-metrics{grid-template-columns:1fr}.resource-body,.redis-facts{grid-template-columns:1fr 1fr}.resource-body dl{grid-template-columns:1fr 1fr}.device-donut,.resource-ring{margin:auto}.retention-panel form{align-items:stretch;flex-direction:column}.retention-panel form button{justify-content:center}.analytics-confirm footer{grid-template-columns:1fr}}
+</style>
+</DashboardLayout>

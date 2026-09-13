@@ -31,9 +31,9 @@ export const DASHBOARD_NAV_ITEMS: DashboardNavItem[] = [
 	{ label: 'الإشعارات', href: '/dashboard/notifications', group: 'التواصل', icon: 'bell', permission: null },
 	{ label: 'الرسائل الداخلية', href: '/dashboard/messages', group: 'التواصل', icon: 'comments', permission: null },
 	{ label: 'الإعدادات', href: '/dashboard/settings', group: 'النظام والذكاء', icon: 'settings', permission: 'manage settings' },
-	// One page replacing the ImanSEO + content-audit sprawl: one verdict per
-	// article/post (status + issues + fix action). See /dashboard/content-quality.
-	{ label: 'صحة المحتوى', href: '/dashboard/content-quality', group: 'النظام والذكاء', icon: 'audit', permission: ['manage content audit', 'manage seo'] },
+	// Real data from Google (index status, clicks/impressions) — no AI, kept as its own
+	// standalone feature after the content-audit/content-quality subsystem was removed.
+	{ label: 'Search Console', href: '/dashboard/gsc', group: 'النظام والذكاء', icon: 'seo', permission: ['manage content audit', 'manage seo'] },
 	{ label: 'الشاتبوت', href: '/dashboard/chatbot', group: 'النظام والذكاء', icon: 'bot', permission: 'manage settings' },
 	{ label: 'الأمان', href: '/dashboard/security', group: 'النظام والذكاء', icon: 'security', permission: 'manage security' },
 	// Actual page (pages/dashboard/redis/index.astro) checks isAdmin() directly, not a

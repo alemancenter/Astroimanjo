@@ -6,8 +6,6 @@ export type DownloadProxyResult =
 	| { ok: true; response: Response }
 	| { ok: false; status: number; message: string };
 
-const LEGACY_STORAGE_ORIGIN = (import.meta.env.PUBLIC_SITE_URL || 'https://imanjo.com').replace(/\/$/, '');
-
 function attachmentDisposition(fileName: string, extension: string): string {
 	const safeExtension = extension.replace(/[^a-z0-9]/gi, '').slice(0, 10) || 'bin';
 	const encoded = encodeURIComponent(fileName.replace(/[\r\n]/g, ''));
@@ -25,14 +23,6 @@ function proxiedFileResponse(upstream: Response, fallbackName?: string, fallback
 	const length = upstream.headers.get('content-length');
 	if (length) headers.set('Content-Length', length);
 	return new Response(upstream.body, { status: 200, headers });
-}
-
-export function safeLegacyStorageUrl(rawPath: unknown): string | null {
-	if (typeof rawPath !== 'string') return null;
-	const normalized = rawPath.replace(/\\/g, '/').replace(/^\/+/, '').replace(/^storage\//, '');
-	const segments = normalized.split('/').filter(Boolean);
-	if (!segments.length || segments.some((segment) => segment === '.' || segment === '..')) return null;
-	return `${LEGACY_STORAGE_ORIGIN}/storage/${segments.map(encodeURIComponent).join('/')}`;
 }
 
 /**

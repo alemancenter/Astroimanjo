@@ -6,9 +6,9 @@ export const prerender = false;
 
 export const POST: APIRoute = async ({ request, cookies, locals, redirect }) => {
 	const token = cookies.get('token')?.value;
-	if (!token) return redirect(`/login?redirect_to=${encodeURIComponent('/dashboard/analytics?tab=performance')}`);
+	if (!token) return redirect(`/login?redirect_to=${encodeURIComponent('/dashboard/analytics/performance')}`);
 	const form = await request.formData();
-	const redirectTo = safeRedirectPath(String(form.get('redirect_to') || ''), '/dashboard/analytics?tab=performance');
+	const redirectTo = safeRedirectPath(String(form.get('redirect_to') || ''), '/dashboard/analytics/performance');
 	const requestedDays = Number.parseInt(String(form.get('days') || '90'), 10) || 90;
 	const days = Math.min(3650, Math.max(30, requestedDays));
 	const res = await apiRawFetch('/dashboard/visitor-analytics/prune', {

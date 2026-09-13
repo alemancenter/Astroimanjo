@@ -1,0 +1,76 @@
+---
+import CountrySwitcher from '../CountrySwitcher.astro';
+import DashboardNavIcon from './DashboardNavIcon.astro';
+
+interface Props {
+	activeTab: 'overview' | 'audience' | 'realtime' | 'performance';
+	days: number;
+	countryName: string;
+	/** Shown as a badge on the "الزوار الآن" tab — omitted while that tab's own data hasn't loaded. */
+	realtimeCount?: number;
+	/** False when at least one backend call this page depends on failed. */
+	allOk: boolean;
+	error?: string | null;
+	success?: string | null;
+}
+
+const { activeTab, days, countryName, realtimeCount, allOk, error, success } = Astro.props;
+
+const tabs = [
+	{ id: 'overview', href: '/dashboard/analytics', icon: 'analytics', label: 'نظرة تنفيذية', note: 'الاتجاهات والمؤشرات' },
+	{ id: 'audience', href: '/dashboard/analytics/audience', label: 'الجمهور والاكتساب', note: 'الدول والأجهزة والمصادر' },
+	{ id: 'realtime', href: '/dashboard/analytics/realtime', label: 'الزوار الآن', note: 'نشاط لحظي مباشر' },
+	{ id: 'performance', href: '/dashboard/analytics/performance', icon: 'database', label: 'أداء المنصة', note: 'Go وRedis والذاكرة' },
+] as const;
+
+const withDays = (href: string) => `${href}?days=${days}`;
+const number = new Intl.NumberFormat('ar-EG');
+---
+
+{error && <div class="analytics-alert is-error" role="alert"><i>!</i><div><strong>تعذّر تنفيذ العملية</strong><span>{error}</span></div><a href={withDays(tabs.find((t) => t.id === activeTab)!.href)}>×</a></div>}
+{success && <div class="analytics-alert is-success" role="status"><i><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg></i><div><strong>تمت العملية بنجاح</strong><span>{success}</span></div><a href={withDays(tabs.find((t) => t.id === activeTab)!.href)}>×</a></div>}
+
+<header class="analytics-hero">
+	<div><span class="eyebrow"><svg viewBox="0 0 24 24"><path d="M4 19V9m5 10V5m6 14v-7m5 7V3"/></svg>ذكاء الأعمال واتخاذ القرار</span><h1>مركز التحليلات</h1><p>افهم سلوك زوار منصة {countryName}، مصادر الوصول، أداء المحتوى وصحة البنية التقنية من بيانات فعلية ومباشرة.</p></div>
+	<div class="hero-controls">
+		<div class="country-select"><span>قاعدة البيانات</span><CountrySwitcher /></div>
+		<form method="get" action={tabs.find((t) => t.id === activeTab)!.href}>
+			<label><span>الفترة الزمنية</span><select name="days" onchange="this.form.submit()">
+				<option value="7" selected={days === 7}>آخر 7 أيام</option>
+				<option value="14" selected={days === 14}>آخر 14 يومًا</option>
+				<option value="30" selected={days === 30}>آخر 30 يومًا</option>
+				<option value="90" selected={days === 90}>آخر 3 أشهر</option>
+				<option value="365" selected={days === 365}>آخر سنة</option>
+			</select></label>
+		</form>
+		<a href={withDays(tabs.find((t) => t.id === activeTab)!.href)} title="تحديث"><svg viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6 9a7 7 0 0 1 12-2l2 2M4 15l2 2a7 7 0 0 0 12-2"/></svg></a>
+	</div>
+</header>
+
+<nav class="analytics-tabs" role="tablist" aria-label="أقسام التحليلات">
+	{tabs.map((t) => (
+		<a href={withDays(t.href)} role="tab" aria-selected={activeTab === t.id} class:list={{ active: activeTab === t.id }}>
+			{t.id === 'realtime'
+				? <svg viewBox="0 0 24 24"><path d="M3 12h4l2-6 4 12 2-6h6"/></svg>
+				: t.id === 'audience'
+				? <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>
+				: t.id === 'performance'
+				? <svg viewBox="0 0 24 24"><path d="M4 19a8 8 0 1 1 16 0M12 13l4-4"/></svg>
+				: <DashboardNavIcon name="analytics" class="size-5"/>}
+			<span><strong>{t.label}</strong><small>{t.note}</small></span>
+			{t.id === 'realtime' && typeof realtimeCount === 'number' && <b>{number.format(realtimeCount)}</b>}
+		</a>
+	))}
+</nav>
+
+{!allOk && <div class="data-notice"><svg viewBox="0 0 24 24"><path d="M12 9v4m0 4h.01M10 3h4l8 18H2Z"/></svg><div><strong>بعض مصادر البيانات لم تستجب</strong><span>ستظل الأقسام المتاحة ظاهرة، ويمكنك إعادة التحديث لاستكمال المؤشرات.</span></div></div>}
+
+<style>
+	.analytics-alert{display:flex;align-items:center;gap:.7rem;margin-bottom:.7rem;border:1px solid;border-radius:.75rem;padding:.7rem .8rem}.analytics-alert>i{display:grid;width:2rem;height:2rem;place-items:center;border-radius:.5rem;font-style:normal;font-weight:950}.analytics-alert>div{display:grid}.analytics-alert strong{font-size:.82rem}.analytics-alert span{font-size:.72rem}.analytics-alert>a{margin-inline-start:auto;color:inherit;font-size:1.2rem}.analytics-alert.is-error{border-color:#efc9cd;background:#fff7f8;color:#a5323e}.analytics-alert.is-error>i{background:#ffe7ea}.analytics-alert.is-success{border-color:#bce5d7;background:#f2fbf7;color:#087255}.analytics-alert.is-success>i{background:#dcf5eb}
+	.analytics-hero{display:flex;align-items:center;justify-content:space-between;gap:1rem;border:1px solid var(--an-line);border-radius:1rem;background:#fff;padding:1.15rem 1.25rem;box-shadow:0 4px 14px rgb(22 43 75/.05)}.eyebrow{display:flex;align-items:center;gap:.35rem;color:var(--an-blue);font-size:.7rem;font-weight:900}.analytics-hero h1{margin:.25rem 0 .15rem;color:var(--an-ink);font-size:1.5rem;font-weight:950}.analytics-hero p{max-width:46rem;margin:0;color:var(--an-muted);font-size:.8rem;line-height:1.7}.hero-controls{display:flex;align-items:end;gap:.45rem}.country-select,.hero-controls label{display:grid;min-width:10rem;gap:.2rem}.country-select>span,.hero-controls label>span{color:#718095;font-size:.61rem;font-weight:800}.hero-controls select{min-height:2.55rem;border:1px solid #d5dee8;border-radius:.52rem;background:#fff;padding:0 .6rem;color:#40536b;font-family:inherit;font-size:.68rem}.hero-controls>a{display:grid;width:2.55rem;height:2.55rem;place-items:center;border:1px solid #c6d5e5;border-radius:.52rem;background:#f5f8fc;color:var(--an-blue)}
+	.analytics-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.55rem;margin:.75rem 0}.analytics-tabs>a{display:grid;min-height:4.2rem;grid-template-columns:auto 1fr auto;align-items:center;gap:.6rem;border:1px solid var(--an-line);border-radius:.75rem;background:#fff;padding:.7rem .78rem;color:#6d7c8f;position:relative}.analytics-tabs>a::after{position:absolute;right:.65rem;bottom:-1px;left:.65rem;height:.18rem;border-radius:.2rem .2rem 0 0;background:transparent;content:""}.analytics-tabs>a>span{display:grid}.analytics-tabs strong{color:#3d526a;font-size:.75rem}.analytics-tabs small{color:#8895a5;font-size:.59rem}.analytics-tabs>a>b{border-radius:99rem;background:#e5f6ef;padding:.22rem .4rem;color:#087559;font-size:.58rem}.analytics-tabs>a.active{border-color:#b9cde3;background:#f7faff;color:var(--an-blue)}.analytics-tabs>a.active::after{background:var(--an-blue)}.analytics-tabs>a.active strong{color:var(--an-blue)}
+	.data-notice{display:flex;align-items:center;gap:.55rem;margin-bottom:.7rem;border:1px solid #efd7b6;border-radius:.65rem;background:#fffaf3;padding:.58rem .7rem;color:#a26720}.data-notice>div{display:grid}.data-notice strong{font-size:.68rem}.data-notice span{color:#927453;font-size:.61rem}
+	:global(.dark) .analytics-hero,:global(.dark) .analytics-tabs>a{border-color:#30445d;background:#0f2547}
+	@media(max-width:850px){.analytics-hero{align-items:stretch;flex-direction:column}.hero-controls{flex-wrap:wrap}.country-select,.hero-controls form{flex:1}.analytics-tabs{grid-template-columns:repeat(2,1fr)}}
+	@media(max-width:600px){.analytics-hero{padding:1rem}.analytics-hero h1{font-size:1.3rem}.hero-controls>*{flex:1}}
+</style>

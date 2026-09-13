@@ -36,9 +36,6 @@ const INTERNAL_API_URL =
 
 const API_KEY = import.meta.env.FRONTEND_API_KEY;
 
-/** The backend's public API base — safe to use in redirect targets (no secret key needed on the receiving end). */
-export const API_BASE_URL = PUBLIC_API_URL;
-
 export interface PaginationMeta {
 	current_page: number;
 	per_page: number;

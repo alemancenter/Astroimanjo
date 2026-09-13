@@ -55,24 +55,8 @@ export const POST: APIRoute = async ({ request, cookies, locals, redirect, cache
 		return redirect(`${back}?error=${encodeURIComponent(json?.message || 'تعذّر حفظ المنشور')}`);
 	}
 
-	// The AI-source file (if any) was uploaded immediately, before the post existed, via
-	// files/upload.ts with no post_id set — see PostForm.astro. Now that a real post id
-	// exists, associate it so it shows up as a normal attachment too, not just AI input.
- let seoWarning = '';
-	const sourceFileId = String(incoming.get('ai_source_file_id') || '').trim();
+	let seoWarning = '';
 	const postId = isEdit ? id : json?.data?.id;
-	if (sourceFileId && postId) {
-		const linked = await apiRawFetch(`/dashboard/files/${sourceFileId}`, {
-			method: 'PUT',
-			countryId: locals.countryId,
-			cookieHeader: `token=${token}`,
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ post_id: Number(postId) }),
-		}).catch(() => null);
- if (!linked?.ok) seoWarning = 'حُفظ المحتوى، لكن تعذّر ربط الملف المصدر؛ يمكنك ربطه من صفحة التعديل.';
-	}
-
-	
 	if (postId) {
 		const seoRes = await apiRawFetch(`/dashboard/seo/metadata/post/${postId}`, {
 			method: 'PUT',
