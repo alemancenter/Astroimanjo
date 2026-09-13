@@ -18,8 +18,8 @@ export const POST: APIRoute = async ({ request, cookies, locals, redirect }) => 
 	const form = await request.formData();
 	const redirectTo = safeRedirectPath(String(form.get('redirect_to') || ''), '/dashboard/content-audit/ai-operations');
 	const action = String(form.get('action') || '').trim().toLowerCase();
-	if (!['apply', 'reject'].includes(action)) {
-		return redirect(redirectWith(redirectTo, { error: 'اختر قبول المعاينات المحددة أو رفضها.' }));
+	if (action !== 'reject') {
+		return redirect(redirectWith(redirectTo, { error: 'راجع كل اقتراح واعتمده منفردًا. الرفض فقط متاح جماعيًا.' }));
 	}
 
 	let rawIDs: unknown;
@@ -63,6 +63,6 @@ export const POST: APIRoute = async ({ request, cookies, locals, redirect }) => 
 
 	const success = failed > 0
 		? 'bulk_review_partial'
-		: action === 'apply' ? 'bulk_review_applied' : 'bulk_review_rejected';
+		: 'bulk_review_rejected';
 	return redirect(redirectWith(redirectTo, { success, bulk_succeeded: succeeded, bulk_failed: failed }));
 };

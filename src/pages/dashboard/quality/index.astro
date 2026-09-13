@@ -21,7 +21,7 @@ const token = Astro.cookies.get('token')?.value;
 const currentCountry = getCountryById(Astro.locals.countryId);
 const auth = { countryId: Astro.locals.countryId, cookieHeader: `token=${token}` };
 
-const tab = Astro.url.searchParams.get('tab') === 'content' ? 'content' : 'site';
+const tab = Astro.url.searchParams.get('tab') === 'site' ? 'site' : 'content';
 const page = Math.max(1, Number(Astro.url.searchParams.get('page') || 1));
 const contentType = String(Astro.url.searchParams.get('type') || 'all');
 const level = String(Astro.url.searchParams.get('level') || '');
@@ -101,7 +101,7 @@ const batchId = String(Astro.url.searchParams.get('batch_id') || '');
 		</nav>
 
 		{success === 'batch_started' && <section class="audit-flash is-success"><div><strong>تم إنشاء دفعة المعالجة بنجاح</strong><span>بدأت المعالجة في الخلفية، وستظهر النتائج كمعاينات تحتاج اعتمادك.</span></div>{batchId ? <a href={`/dashboard/content-audit/ai-operations/batch-jobs/${batchId}`}>متابعة الدفعة</a> : <a href="/dashboard/content-audit/ai-operations">فتح العمليات</a>}</section>}
-		{success === 'auto_repair_started' && <section class="audit-flash is-success"><div><strong>بدأ إصلاح الوصف التعريفي الآمن</strong><span>سيولّد النظام الوصف ويطبّقه على الحقل الوصفي فقط، ثم يعيد تدقيق الفهرسة وأهلية الإعلانات تلقائيًا.</span></div>{batchId ? <a href={`/dashboard/content-audit/ai-operations/batch-jobs/${batchId}`}>متابعة الإصلاح</a> : <a href="/dashboard/content-audit/ai-operations">فتح العمليات</a>}</section>}
+		{success === 'auto_repair_started' && <section class="audit-flash is-success"><div><strong>بدأ إنشاء اقتراحات الوصف</strong><span>تحتاج الاقتراحات مراجعة فردية قبل اعتمادها.</span></div>{batchId ? <a href={`/dashboard/content-audit/ai-operations/batch-jobs/${batchId}`}>متابعة الإصلاح</a> : <a href="/dashboard/content-audit/ai-operations">فتح العمليات</a>}</section>}
 		{error && <section class="audit-flash is-error"><div><strong>تعذّر بدء المعالجة</strong><span>{error}</span></div><button type="button" data-dismiss-flash>إغلاق</button></section>}
 
 		{!readinessResult.ok ? <section class="audit-empty is-error"><i>!</i><h2>تعذّر تحميل بيانات الجودة</h2><p>تحقق من اتصال الخادم ثم أعد المحاولة.</p><a href={Astro.url.pathname}>إعادة المحاولة</a></section> : tab === 'site' ? (

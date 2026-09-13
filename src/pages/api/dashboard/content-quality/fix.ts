@@ -1,44 +1,8 @@
 import type { APIRoute } from 'astro';
-import { apiRawFetch } from '../../../../lib/api';
-
 export const prerender = false;
-
-const OPTIMIZE_TIMEOUT_MS = 120_000;
-
-const json = (body: Record<string, unknown>, status: number) =>
-	new Response(JSON.stringify(body), {
-		status,
-		headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
-	});
-
-// One-click "إصلاح بالذكاء" from the content-quality drawer: runs the AI SEO
-// optimizer for one item and persists it, so the editor form is never needed.
-export const POST: APIRoute = async ({ request, cookies, locals }) => {
-	const token = cookies.get('token')?.value;
-	if (!token) return json({ success: false, message: 'يجب تسجيل الدخول' }, 401);
-	const body = await request.json().catch(() => null);
-	const type = body?.content_type === 'post' ? 'post' : 'article';
-	const id = Number(body?.id);
-	if (!Number.isInteger(id) || id <= 0) return json({ success: false, message: 'معرف غير صالح' }, 400);
-
-	try {
-		const response = await apiRawFetch(`/dashboard/seo/optimize-save/${type}/${id}`, {
-			method: 'POST',
-			countryId: locals.countryId,
-			cookieHeader: `token=${token}`,
-			headers: { 'Content-Type': 'application/json' },
-			body: '{}',
-			timeoutMs: OPTIMIZE_TIMEOUT_MS,
-		});
-		return new Response(await response.text(), {
-			status: response.status,
-			headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
-		});
-	} catch (err) {
-		const timedOut = err instanceof Error && err.name === 'TimeoutError';
-		return json(
-			{ success: false, message: timedOut ? 'استغرق التحسين وقتًا أطول من المتوقع، حاول مرة أخرى.' : 'تعذّر الاتصال بخدمة التحسين حاليًا.' },
-			timedOut ? 504 : 502,
-		);
-	}
-};
+// Retired endpoint: old browser tabs must not trigger generation and saving together.
+export const POST: APIRoute = async ({ cookies }) => new Response(JSON.stringify({
+ success: false,
+ message: cookies.get('token')?.value ? 'افتح محرر المحتوى وراجع الاقتراح قبل حفظه.' : 'يجب تسجيل الدخول',
+}), { status: cookies.get('token')?.value ? 409 : 401,
+ headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });

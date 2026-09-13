@@ -1,6 +1,5 @@
 import type { APIRoute } from 'astro';
 import { apiRawFetch } from '../../../../lib/api';
-import { generateMetaDescription, generateKeywords } from '../../../../lib/seo-autofill';
 import { seoPayloadFromForm } from '../../../../lib/iman-seo';
 
 export const prerender = false;
@@ -26,10 +25,9 @@ export const POST: APIRoute = async ({ request, cookies, locals, redirect, cache
 
 	const title = String(form.get('title') || '').trim();
 	const content = String(form.get('content') || '').trim();
-	// SEO fallback: an article never ships without a description/keywords, even if the admin
-	// didn't use AI generation (which already fills these) or type them by hand.
-	const metaDescription = String(form.get('meta_description') || '').trim() || generateMetaDescription(title, content);
-	const keywords = String(form.get('keywords') || '').trim() || generateKeywords(title, content);
+	// Save exactly the fields the editor reviewed, including intentionally empty values.
+	const metaDescription = String(form.get('meta_description') || '').trim();
+	const keywords = String(form.get('keywords') || '').trim();
 
 	const payload = {
 		title,

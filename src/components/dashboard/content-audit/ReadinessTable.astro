@@ -1,4 +1,5 @@
 ---
+import { previewOnlyMode } from '../../../features/content-audit/readiness-types';
 import type { ReadinessItem, ReadinessProblem } from '../../../features/content-audit/readiness-types';
 import { editContentHref, itemTarget } from '../../../features/content-audit/readiness-types';
 
@@ -14,9 +15,9 @@ const labelType = (type: string) => type === 'article' ? 'مقال' : type === '
 const levelLabels: Record<string, string> = { ready: 'جاهز', review: 'يحتاج مراجعة', weak: 'ضعيف' };
 const primaryProblem = (item: ReadinessItem): ReadinessProblem | undefined => item.problems?.[0];
 const actionableProblems = (item: ReadinessItem) => (item.problems || []).filter((problem) => problem.action_type !== 'manual');
-const batchMode = (problem?: ReadinessProblem) => problem?.mode || (problem?.action_type === 'analyze' ? 'analyze_only' : problem?.action_type === 'auto_repair' ? 'auto_apply' : problem?.action_type === 'full_review' ? 'full_review' : 'fix_preview');
+const batchMode = (problem?: ReadinessProblem) => previewOnlyMode(problem?.mode, problem?.action_type);
 const modelStrategy = (problem?: ReadinessProblem) => problem?.model_strategy || (problem?.action_type === 'full_review' ? 'final_review' : ['thin_content', 'needs_enrichment', 'ads_not_eligible'].includes(problem?.code || '') ? 'quality' : 'balanced');
-const actionText = (problem?: ReadinessProblem) => problem?.action_type === 'analyze' ? 'فحص الآن' : problem?.action_type === 'auto_repair' ? 'توليد وإصلاح الوصف' : problem?.action_type === 'full_review' ? 'مراجعة نهائية' : problem?.action_type === 'manual' ? 'تعديل يدوي' : 'إنشاء معاينة إصلاح';
+const actionText = (problem?: ReadinessProblem) => problem?.action_type === 'analyze' ? 'فحص الآن' : problem?.action_type === 'auto_repair' ? 'اقتراح وصف للمراجعة' : problem?.action_type === 'full_review' ? 'مراجعة نهائية' : problem?.action_type === 'manual' ? 'تعديل يدوي' : 'إنشاء معاينة إصلاح';
 const detailsPayload = (item: ReadinessItem) => JSON.stringify({
 	title: item.title,
 	type: labelType(item.type),
@@ -96,14 +97,15 @@ const detailsPayload = (item: ReadinessItem) => JSON.stringify({
 </dialog>
 
 <script>
+ import { previewOnlyMode } from '../../../features/content-audit/readiness-types';
 	type ClientProblem = { code: string; label: string; message?: string; severity?: string; action_type: string; preset?: string; mode?: string; model_strategy?: string };
 	type DetailPayload = { title: string; type: string; contentType: 'article' | 'post'; id: number; audited: boolean; indexable: boolean; adsEligible: boolean; decision: string; risk: string; problems: ClientProblem[]; gateReasons: string[]; diagnostics: string[]; editUrl: string; publicUrl: string; target: string; countryCode: string; redirectTo: string };
 
-	const clientMode = (problem: ClientProblem) => problem.mode || (problem.action_type === 'analyze' ? 'analyze_only' : problem.action_type === 'auto_repair' ? 'auto_apply' : problem.action_type === 'full_review' ? 'full_review' : 'fix_preview');
+	const clientMode = (problem: ClientProblem) => previewOnlyMode(problem.mode, problem.action_type);
 	const clientModel = (problem: ClientProblem) => problem.model_strategy || (problem.action_type === 'full_review' ? 'final_review' : ['thin_content', 'needs_enrichment', 'ads_not_eligible'].includes(problem.code) ? 'quality' : 'balanced');
 	const clientActionText = (problem: ClientProblem, bulk = false) => {
 		if (problem.action_type === 'analyze') return bulk ? 'فحص العناصر المحددة' : 'فحص الآن';
-		if (problem.action_type === 'auto_repair') return bulk ? 'توليد وإصلاح الأوصاف المحددة' : 'توليد وإصلاح الوصف';
+		if (problem.action_type === 'auto_repair') return bulk ? 'اقتراح أوصاف المحدد للمراجعة' : 'اقتراح وصف للمراجعة';
 		if (problem.action_type === 'full_review') return bulk ? 'إنشاء مراجعة نهائية للمحدد' : 'إنشاء مراجعة نهائية';
 		if (problem.action_type === 'manual') return 'فتح المحرر';
 		return bulk ? 'إنشاء معاينات للمحدد' : 'إنشاء معاينة إصلاح';
@@ -153,7 +155,7 @@ const detailsPayload = (item: ReadinessItem) => JSON.stringify({
 		if (selectedMode) selectedMode.value = active ? clientMode(active) : 'fix_preview';
 		if (selectedModel) selectedModel.value = active ? clientModel(active) : 'quality';
 		if (selectedRun) { selectedRun.disabled = !active; selectedRun.textContent = active ? clientActionText(active, true) : 'اختر مشكلة مشتركة'; }
-		if (selectedNote) selectedNote.textContent = checked.length > 1 && !active ? 'اختر عناصر تشترك في المشكلة نفسها حتى تتم معالجتها بأمان.' : active?.action_type === 'auto_repair' ? 'سيُطبّق الوصف التعريفي فقط ثم يُعاد فحص كل صفحة.' : '';
+		if (selectedNote) selectedNote.textContent = checked.length > 1 && !active ? 'اختر عناصر تشترك في المشكلة نفسها حتى تتم معالجتها بأمان.' : active?.action_type === 'auto_repair' ? 'كل اقتراح يحتاج مراجعة واعتمادًا منفردًا.' : '';
 	};
 	const syncSelection = () => {
 		const checked = selectionBoxes.filter((box) => box.checked);
@@ -172,7 +174,7 @@ const detailsPayload = (item: ReadinessItem) => JSON.stringify({
 		const checked = selectionBoxes.filter((box) => box.checked);
 		const active = commonProblems(checked).find((problem) => problem.code === selectedProblem?.value);
 		if (!checked.length || !active) { event.preventDefault(); return; }
-		if (active.action_type === 'auto_repair' && !window.confirm(`سيتم توليد وتطبيق وصف تعريفي لـ ${checked.length} عنصر ثم إعادة فحص الجاهزية. هل تريد المتابعة؟`)) event.preventDefault();
+		if (active.action_type === 'auto_repair' && !window.confirm(`سيتم إنشاء اقتراحات لـ ${checked.length} عنصر لمراجعتها قبل الاعتماد. هل تريد المتابعة؟`)) event.preventDefault();
 	});
 
 	const detailsDialog = document.getElementById('eligibility-details') as HTMLDialogElement | null;
@@ -217,7 +219,7 @@ const detailsPayload = (item: ReadinessItem) => JSON.stringify({
 	}));
 	document.addEventListener('submit', (event) => {
 		const form = event.target as HTMLFormElement;
-		if (form?.dataset?.tableAutoRepair === 'true' && !window.confirm('سيتم توليد وصف تعريفي من نص الصفحة، وتطبيقه تلقائيًا ثم إعادة فحص الجاهزية. هل تريد المتابعة؟')) event.preventDefault();
+		if (form?.dataset?.tableAutoRepair === 'true' && !window.confirm('سيتم إنشاء اقتراح وصف من نص الصفحة لمراجعته قبل الاعتماد. هل تريد المتابعة؟')) event.preventDefault();
 	});
 	document.querySelectorAll('[data-close-eligibility]').forEach((button) => button.addEventListener('click', () => detailsDialog?.close()));
 	detailsDialog?.addEventListener('click', (event) => { if (event.target === detailsDialog) detailsDialog.close(); });

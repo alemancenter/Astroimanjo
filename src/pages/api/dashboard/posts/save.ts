@@ -1,6 +1,5 @@
 import type { APIRoute } from 'astro';
 import { apiRawFetch } from '../../../../lib/api';
-import { generateMetaDescription, generateKeywords } from '../../../../lib/seo-autofill';
 import { seoPayloadFromForm } from '../../../../lib/iman-seo';
 
 export const prerender = false;
@@ -14,8 +13,8 @@ export const POST: APIRoute = async ({ request, cookies, locals, redirect, cache
 	const isEdit = !!id;
 	const title = String(incoming.get('title') || '').trim();
 	const content = String(incoming.get('content') || '').trim();
-	const metaDescription = String(incoming.get('meta_description') || '').trim() || generateMetaDescription(title, content);
-	const keywords = String(incoming.get('keywords') || '').trim() || generateKeywords(title, content);
+	const metaDescription = String(incoming.get('meta_description') || '').trim();
+	const keywords = String(incoming.get('keywords') || '').trim();
 	const alt = String(incoming.get('alt') || '').trim() || title;
 	const isActiveValue = String(incoming.get('is_active') ?? 'false').toLowerCase();
 

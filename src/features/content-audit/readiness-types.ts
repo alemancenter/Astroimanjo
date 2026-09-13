@@ -57,9 +57,14 @@ export const itemTarget = (item: Pick<ReadinessItem, 'type' | 'id'>) => `${item.
 export const actionLabel = (action: ReadinessActionType) => {
 	switch (action) {
 		case 'analyze': return 'تشغيل الفحص';
-		case 'auto_repair': return 'توليد وإصلاح الوصف';
+		case 'auto_repair': return 'اقتراح وصف للمراجعة';
 		case 'full_review': return 'إنشاء مراجعة نهائية';
 		case 'ai_preview': return 'إنشاء معاينات إصلاح';
 		default: return 'مراجعة يدويًا';
 	}
 };
+
+export function previewOnlyMode(mode?: string, action?: string): string {
+ if (mode === 'analyze_only' || mode === 'full_review' || mode === 'fix_preview') return mode;
+ return action === 'analyze' ? 'analyze_only' : 'fix_preview';
+}

@@ -99,9 +99,10 @@ const hasFilter = type !== 'all' || status !== 'all' || q !== '';
 			<div>
 				<span>مراجعة واحدة لكل مقال ومنشور</span>
 				<h1>صحة المحتوى</h1>
-				<p>حالة واحدة لكل عنصر في {country.name}، وما يحتاج عملًا بلغة واضحة. اضغط أي صف لعرض التفاصيل وإصلاحها.</p>
+				<p>راجع المحتوى في {country.name}، وافتح المحرر لتصحيحه. التحليل مساعد اختياري، والنتائج الداخلية لا تمثل قرار Google.</p>
 			</div>
-			<a class="ch-hero-link" href="/dashboard/sitemap">خريطة الموقع</a>
+			<a class="ch-hero-link" href="/dashboard/quality?tab=content">مراجعة التفاصيل</a>
+			<a class="ch-hero-link" href="/dashboard/content-audit/ai-operations">اقتراحات بانتظار الاعتماد</a>
 		</header>
 
 		<nav class="ch-tabs">
@@ -111,7 +112,7 @@ const hasFilter = type !== 'all' || status !== 'all' || q !== '';
 		</nav>
 
 		{flashSuccess === 'autofix' ? (
-			<div class="ch-flash is-ok">بدأ إصلاح الأوصاف التعريفية في الخلفية. أعد تحميل الصفحة بعد دقيقة لرؤية النتائج المحدَّثة.</div>
+			<div class="ch-flash is-ok">بدأ إنشاء اقتراحات الأوصاف. راجعها منفردة في طابور الاقتراحات قبل الاعتماد.</div>
 		) : flashSuccess === 'audit-all' ? (
 			<div class="ch-flash is-ok">بدأ التدقيق الشامل بالذكاء في الخلفية — قد يستغرق عدة دقائق حسب حجم المحتوى. أعد التحميل لاحقًا لرؤية الحالات المحدَّثة.</div>
 		) : flashSuccess === 'index-sync' ? (
@@ -125,13 +126,13 @@ const hasFilter = type !== 'all' || status !== 'all' || q !== '';
 		<Fragment>
 		<div class="ch-actions">
 			<form method="post" action="/api/dashboard/content-quality/audit-all" class="ch-action-card" data-confirm="سيبدأ تدقيق الجودة بالذكاء لكل مقال/منشور لم يُدقَّق بعد (حتى 500 عنصر). يعمل في الخلفية وقد يستغرق وقتًا. متابعة؟">
-				<div><b>تدقيق شامل بالذكاء</b><span>يُخضع كل المحتوى غير المُدقَّق لتحليل الجودة — لازم لأهلية الإعلانات والفهرسة.</span></div>
+				<div><b>تدقيق شامل بالذكاء</b><span>تحليل مساعد للمحتوى غير المدقّق؛ نتائجه مؤشرات داخلية للمراجعة.</span></div>
 				<button type="submit">بدء التدقيق الشامل</button>
 			</form>
 			{summary.needs_work + summary.problem > 0 && (
-				<form method="post" action="/api/dashboard/content-quality/autofix" class="ch-action-card" data-confirm="سيولّد النظام وصفًا تعريفيًا آمنًا لكل مقال/منشور ينقصه وصف جيّد، ويطبّقه على حقل الوصف فقط. المحتوى والعناوين لا تتغيّر. متابعة؟">
-					<div><b>إصلاح الأوصاف تلقائيًا</b><span>ولّد الأوصاف التعريفية الناقصة (آمن — الوصف فقط).</span></div>
-					<button type="submit">إصلاح الأوصاف</button>
+				<form method="post" action="/api/dashboard/content-quality/autofix" class="ch-action-card" data-confirm="سيولّد النظام اقتراحات للأوصاف الناقصة. ستراجع كل اقتراح قبل اعتماده. متابعة؟">
+					<div><b>اقتراح أوصاف للمراجعة</b><span>مساعدة اختيارية؛ تُحفظ الاقتراحات منفصلة حتى اعتمادها.</span></div>
+					<button type="submit">إنشاء الاقتراحات</button>
 				</form>
 			)}
 		</div>
@@ -334,7 +335,7 @@ const hasFilter = type !== 'all' || status !== 'all' || q !== '';
 			<div class="ch-drawer-msg" data-d-msg hidden></div>
 			<div class="ch-drawer-actions">
 				<button type="button" class="ch-drawer-ai" data-d-audit hidden>بدء تدقيق الجودة</button>
-				<button type="button" class="ch-drawer-ai" data-d-ai hidden>تحسين SEO بالذكاء</button>
+				<button type="button" class="ch-drawer-ai" data-d-ai hidden>مراجعة SEO في المحرر</button>
 				<a class="ch-drawer-editor" data-d-editor href="#">فتح المحرر</a>
 			</div>
 		</aside>
@@ -429,7 +430,7 @@ const hasFilter = type !== 'all' || status !== 'all' || q !== '';
 			}
 		};
 
-		dAi?.addEventListener('click', () => runFix(dAi, '/api/dashboard/content-quality/fix', 'جارِ التحسين…', 'تحسين SEO بالذكاء'));
+		dAi?.addEventListener('click', () => { if (current) location.assign(current.editor); });
 		dAudit?.addEventListener('click', () => runFix(dAudit, '/api/dashboard/content-quality/audit', 'جارِ التدقيق…', 'بدء تدقيق الجودة'));
 
 		document.querySelectorAll<HTMLTableRowElement>('tr[data-item]').forEach((row) => {

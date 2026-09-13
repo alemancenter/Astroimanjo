@@ -1,6 +1,6 @@
 ---
 import type { ReadinessProblem, ReadinessRepairCenter } from '../../../features/content-audit/readiness-types';
-import { actionLabel } from '../../../features/content-audit/readiness-types';
+import { actionLabel, previewOnlyMode } from '../../../features/content-audit/readiness-types';
 
 interface Props {
 	repair: ReadinessRepairCenter;
@@ -23,7 +23,7 @@ const problemHref = (code: string) => `/dashboard/content-audit/readiness?proble
 		<div>
 			<span>مركز الإصلاح</span>
 			<h2 id="repair-overview-title">حوّل التقرير إلى خطة معالجة</h2>
-			<p>أصلح البيانات الوصفية الآمنة مباشرة، وأنشئ معاينات للمشكلات التي تمس العنوان أو نص المحتوى.</p>
+			<p>افتح المحتوى لتعديله يدويًا، أو اطلب اقتراحًا مساعدًا لمراجعته قبل الحفظ.</p>
 		</div>
 		<button type="button" data-open-repair-center>
 			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m14.7 6.3 3 3M4 20l3.8-.8L19 8a2.1 2.1 0 0 0-3-3L4.8 16.2Z"/><path d="M12 20h8"/></svg>
@@ -48,13 +48,13 @@ const problemHref = (code: string) => `/dashboard/content-audit/readiness?proble
 <dialog id="readiness-repair-center" class="repair-dialog" aria-labelledby="repair-dialog-title">
 	<div class="repair-dialog-shell">
 		<header>
-			<div><span>معالجة آمنة على دفعات</span><h2 id="repair-dialog-title">إصلاح أبرز مشاكل الجاهزية</h2><p>الوصف التعريفي فقط يمكن إصلاحه تلقائيًا ثم إعادة فحصه؛ العنوان والمحتوى والسياسات تبقى بمعاينة وموافقة بشرية.</p></div>
+			<div><span>معالجة آمنة على دفعات</span><h2 id="repair-dialog-title">إصلاح أبرز مشاكل الجاهزية</h2><p>كل نص مقترح، بما فيه الوصف التعريفي، يحتاج مراجعة واعتمادًا فرديًا قبل الحفظ.</p></div>
 			<button type="button" data-close-repair-center aria-label="إغلاق">×</button>
 		</header>
 
 		<aside class="repair-safety-note">
 			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 3 4 6v5c0 5 3.4 8.2 8 10 4.6-1.8 8-5 8-10V6Z"/><path d="m9 12 2 2 4-5"/></svg>
-			<p><strong>حماية حسب نوع التغيير</strong><span>التعديل التلقائي محصور في الوصف التعريفي ومُسجّل بالكامل؛ أي تغيير جوهري يحتاج اعتمادك.</span></p>
+			<p><strong>حماية حسب نوع التغيير</strong><span>تُحفظ الاقتراحات منفصلة؛ راجع صحة النص ومطابقته للمرفق قبل اعتماده.</span></p>
 		</aside>
 
 		<div class="repair-problem-list">
@@ -68,7 +68,7 @@ const problemHref = (code: string) => `/dashboard/content-audit/readiness?proble
 						<input type="hidden" name="content_type" value={contentType}/>
 						<input type="hidden" name="level" value="weak"/>
 						<input type="hidden" name="preset" value={problem.preset || problem.code}/>
-						<input type="hidden" name="mode" value={problem.mode || (problem.action_type === 'analyze' ? 'analyze_only' : 'fix_preview')}/>
+						<input type="hidden" name="mode" value={previewOnlyMode(problem.mode, problem.action_type)}/>
 						<input type="hidden" name="model_strategy" value={problem.model_strategy || 'balanced'}/>
 						<input type="hidden" name="limit" value={limitedCount(problem)}/>
 						<input type="hidden" name="concurrency" value="2"/>
@@ -90,7 +90,7 @@ const problemHref = (code: string) => `/dashboard/content-audit/readiness?proble
 	document.querySelectorAll<HTMLButtonElement>('[data-close-repair-center]').forEach((button) => button.addEventListener('click', () => repairDialog?.close()));
 	repairDialog?.addEventListener('click', (event) => { if (event.target === repairDialog) repairDialog.close(); });
 	document.querySelectorAll<HTMLFormElement>('[data-auto-repair-form="true"]').forEach((form) => form.addEventListener('submit', (event) => {
-		if (!window.confirm('سيتم توليد وصف تعريفي من نص الصفحة، وتطبيقه تلقائيًا ثم إعادة فحص الجاهزية. هل تريد المتابعة؟')) event.preventDefault();
+		if (!window.confirm('سيتم إنشاء اقتراح من نص الصفحة لمراجعته قبل الحفظ. هل تريد المتابعة؟')) event.preventDefault();
 	}));
 </script>
 
