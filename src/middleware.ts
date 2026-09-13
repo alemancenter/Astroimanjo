@@ -19,6 +19,33 @@ function isMaintenanceExempt(pathname: string): boolean {
 	return MAINTENANCE_EXEMPT_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
+// CSP is Report-Only, not enforced: this site loads Google Ads/Funding Choices, GA4, and Meta
+// Pixel (see Layout.astro), and Google injects additional ad-serving/iframe domains at runtime
+// that aren't fully enumerable in advance. Getting a strict *enforced* CSP right for AdSense is
+// notoriously easy to get wrong in a way that silently kills ad revenue with no visible error —
+// Report-Only logs violations to the browser console without blocking anything, so it can be
+// tightened and flipped to enforced only after watching real traffic for false positives.
+const CONTENT_SECURITY_POLICY_REPORT_ONLY = [
+	"default-src 'self'",
+	"base-uri 'self'",
+	"object-src 'none'",
+	"frame-ancestors 'self'",
+	"script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.google-analytics.com https://fundingchoicesmessages.google.com https://pagead2.googlesyndication.com https://googleads.g.doubleclick.net https://www.googleadservices.com https://connect.facebook.net https://*.google.com",
+	"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+	"font-src 'self' https://fonts.gstatic.com data:",
+	"img-src 'self' data: https:",
+	"connect-src 'self' https://www.google-analytics.com https://*.google.com https://*.doubleclick.net https://connect.facebook.net",
+	"frame-src 'self' https://*.googlesyndication.com https://*.doubleclick.net https://fundingchoicesmessages.google.com",
+].join('; ');
+
+function applySecurityHeaders(response: Response): Response {
+	response.headers.set('X-Content-Type-Options', 'nosniff');
+	response.headers.set('X-Frame-Options', 'SAMEORIGIN');
+	response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+	response.headers.set('Content-Security-Policy-Report-Only', CONTENT_SECURITY_POLICY_REPORT_ONLY);
+	return response;
+}
+
 // The "وضع الصيانة" dashboard toggle set maintenance_mode in the DB, but nothing in the
 // frontend ever read it — an admin could switch it on and the public site would keep serving
 // normally with no visible change at all. Also had to add maintenance_mode to the Go backend's
@@ -47,7 +74,10 @@ export const onRequest = defineMiddleware(async (context, next) => {
 	const userAgent = context.isPrerendered ? '' : (context.request.headers.get('user-agent') ?? '');
 	const referer = context.isPrerendered ? '' : (context.request.headers.get('referer') ?? '');
 	const page = context.isPrerendered ? '' : context.url.pathname;
-	return runWithRequestContext({ clientIp, userAgent, referer, page }, () => handleRequest(context, next));
+	const response = await runWithRequestContext({ clientIp, userAgent, referer, page }, () => handleRequest(context, next));
+	// Applied here, around every return path out of handleRequest (the CSRF 403, the
+	// maintenance 503, redirects, the normal page render), so no response can accidentally skip it.
+	return applySecurityHeaders(response);
 });
 
 async function handleRequest(context: APIContext, next: MiddlewareNext) {

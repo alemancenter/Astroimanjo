@@ -8,6 +8,7 @@ import Breadcrumbs from '../../../../components/ui/Breadcrumbs.astro';
 import ErrorState from '../../../../components/ui/ErrorState.astro';
 import { apiFetch, applyNotFoundStatus } from '../../../../lib/api';
 import { assetUrl } from '../../../../lib/assets';
+import { sanitizeRichContent } from '../../../../lib/sanitize-content';
 
 const { id } = Astro.params;
 const countryCode = Astro.locals.countryCode!;
@@ -213,7 +214,7 @@ childDirectedTreatment
 									</div>
 									<span class="hidden rounded-full bg-white px-3 py-1.5 text-[11px] font-extrabold text-graphite-500 shadow-sm sm:block dark:bg-graphite-800 dark:text-graphite-300">{wordCount.toLocaleString('ar-JO')} كلمة</span>
 								</header>
-								<div class="article-content overflow-x-auto px-5 py-6 sm:px-8 sm:py-8 lg:px-10 lg:py-10" set:html={article.content} />
+								<div class="article-content overflow-x-auto px-5 py-6 sm:px-8 sm:py-8 lg:px-10 lg:py-10" set:html={sanitizeRichContent(article.content)} />
 							</section>
 
 							<div class="order-3">
