@@ -1,9 +1,9 @@
 ---
-// Deterministic (no AI) AdSense content-policy scanner. Scoped for now to duplicate/near-
-// duplicate content across articles and posts — the issue that got the site rejected by
-// AdSense — reusing the same shingling/Jaccard engine (internal/contentquality) that already
-// gates new article/post saves against the existing library. Nothing here edits, unpublishes,
-// or redirects content automatically; it only surfaces matches for human review.
+// Deterministic (no AI) AdSense content-policy scanner across articles and posts:
+// duplicate/near-duplicate content (matched on content text AND title, not just word count),
+// thin/weak content, and corrupted content (unresolved template artifacts). Reuses
+// internal/contentquality's existing engines end to end. Nothing here edits, unpublishes, or
+// redirects content automatically; it only surfaces issues for human review.
 import DashboardLayout from '../../../layouts/DashboardLayout.astro';
 import { requireDashboard } from '../../../lib/auth';
 
@@ -12,13 +12,13 @@ if ('redirect' in guard) return guard.redirect;
 const { user } = guard;
 ---
 
-<DashboardLayout title="سياسة AdSense" description="فحص المقالات والمنشورات بحثًا عن تكرار المحتوى والتطابق الكامل" user={user}>
+<DashboardLayout title="سياسة AdSense" description="فحص المقالات والمنشورات بحثًا عن مخالفات سياسة AdSense" user={user}>
 	<div class="policy-page">
 		<header class="policy-header">
 			<div>
 				<span>مراجعة الامتثال</span>
-				<h1>سياسة AdSense — تكرار المحتوى</h1>
-				<p>فحص كامل لجميع المقالات والمنشورات الحالية بحثًا عن تطابق كامل أو تشابه عالٍ قد يخالف سياسة AdSense الخاصة بالمحتوى المكرر. المراجعة والقرار (دمج، إعادة كتابة، حذف) تبقى يدوية بالكامل.</p>
+				<h1>سياسة AdSense — المحتوى</h1>
+				<p>فحص كامل لجميع المقالات والمنشورات الحالية بحثًا عن: تطابق كامل في النص أو العنوان، تشابه عالٍ، محتوى ضعيف (قصير جدًا أو ناقص البيانات)، ومحتوى تالف (بقايا نصوص غير مكتملة). المراجعة والقرار تبقى يدوية بالكامل.</p>
 			</div>
 			<button type="button" data-scan-button class="scan-button">
 				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" data-scan-icon><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 3h6l1 3h4v15H4V6h4l1-3Z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m8 14 2 2 5-5M8 10h4"/></svg>
@@ -33,24 +33,39 @@ const { user } = guard;
 			<div class="tone-exact"><strong data-sum-exact>٠</strong><span>تطابق كامل</span></div>
 			<div class="tone-near"><strong data-sum-near>٠</strong><span>تكرار محتوى</span></div>
 			<div class="tone-template"><strong data-sum-template>٠</strong><span>تشابه قالبي</span></div>
-			<div><strong data-sum-affected>٠</strong><span>عنصر متأثر</span></div>
-		</div>
-
-		<div class="policy-empty" data-scan-empty hidden>
-			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="m5 13 4 4L19 7"/></svg>
-			<h3>لا يوجد تكرار أو تطابق ملحوظ</h3>
-			<p>لم يجد الفحص أي مقالات أو منشورات متطابقة أو شديدة التشابه.</p>
+			<div class="tone-weak"><strong data-sum-weak>٠</strong><span>محتوى ضعيف</span></div>
+			<div class="tone-issue"><strong data-sum-issues>٠</strong><span>محتوى تالف</span></div>
 		</div>
 
 		<div class="policy-error" data-scan-error role="alert" hidden></div>
 
-		<div class="policy-clusters" data-scan-clusters></div>
+		<section class="policy-section" data-section="clusters" hidden>
+			<h2>التطابق الكامل والتكرار</h2>
+			<div class="policy-clusters" data-scan-clusters></div>
+		</section>
+
+		<section class="policy-section" data-section="weak" hidden>
+			<h2>محتوى ضعيف</h2>
+			<div class="policy-list" data-scan-weak></div>
+		</section>
+
+		<section class="policy-section" data-section="issues" hidden>
+			<h2>محتوى تالف / مخالفات محتملة</h2>
+			<div class="policy-list" data-scan-issues></div>
+		</section>
+
+		<div class="policy-empty" data-scan-empty hidden>
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="m5 13 4 4L19 7"/></svg>
+			<h3>لا توجد مشاكل ملحوظة</h3>
+			<p>لم يجد الفحص أي تكرار أو محتوى ضعيف أو محتوى تالف.</p>
+		</div>
 	</div>
 
 	<template data-cluster-template>
 		<article class="cluster-card">
 			<header>
 				<span class="cluster-kind" data-cluster-kind></span>
+				<span class="cluster-badges" data-cluster-badges></span>
 				<span class="cluster-sim" data-cluster-sim></span>
 			</header>
 			<p class="cluster-rec" data-cluster-rec></p>
@@ -72,6 +87,39 @@ const { user } = guard;
 		</div>
 	</template>
 
+	<template data-weak-template>
+		<article class="issue-card">
+			<div class="member-row">
+				<div class="member-info">
+					<span class="member-type" data-member-type></span>
+					<a class="member-title" data-member-title target="_blank" rel="noopener"></a>
+					<span class="member-status" data-member-status></span>
+				</div>
+				<div class="member-actions">
+					<span class="member-words" data-member-words></span>
+					<a data-member-edit class="member-edit">تعديل</a>
+				</div>
+			</div>
+			<ul class="issue-signals" data-issue-signals></ul>
+		</article>
+	</template>
+
+	<template data-policy-issue-template>
+		<article class="issue-card tone-issue">
+			<div class="member-row">
+				<div class="member-info">
+					<span class="member-type" data-member-type></span>
+					<a class="member-title" data-member-title target="_blank" rel="noopener"></a>
+					<span class="member-status" data-member-status></span>
+				</div>
+				<div class="member-actions">
+					<a data-member-edit class="member-edit">تعديل</a>
+				</div>
+			</div>
+			<ul class="issue-signals" data-issue-list></ul>
+		</article>
+	</template>
+
 	<script>
 		const scanButton = document.querySelector<HTMLButtonElement>('[data-scan-button]');
 		const scanLabel = document.querySelector<HTMLElement>('[data-scan-label]');
@@ -81,28 +129,37 @@ const { user } = guard;
 		const emptyBox = document.querySelector<HTMLElement>('[data-scan-empty]');
 		const errorBox = document.querySelector<HTMLElement>('[data-scan-error]');
 		const clustersBox = document.querySelector<HTMLElement>('[data-scan-clusters]');
+		const weakBox = document.querySelector<HTMLElement>('[data-scan-weak]');
+		const issuesBox = document.querySelector<HTMLElement>('[data-scan-issues]');
 		const clusterTemplate = document.querySelector<HTMLTemplateElement>('[data-cluster-template]');
 		const memberTemplate = document.querySelector<HTMLTemplateElement>('[data-member-template]');
+		const weakTemplate = document.querySelector<HTMLTemplateElement>('[data-weak-template]');
+		const policyIssueTemplate = document.querySelector<HTMLTemplateElement>('[data-policy-issue-template]');
 
 		const number = new Intl.NumberFormat('ar-EG');
 		const percent = (value: number) => `${new Intl.NumberFormat('ar-EG', { maximumFractionDigits: 1 }).format(value * 100)}%`;
 		const kindClass = (kind: string) => kind === 'exact' ? 'tone-exact' : kind === 'near' ? 'tone-near' : 'tone-template';
+		const matchedOnLabel = (on: string) => on === 'content' ? 'المحتوى' : on === 'title' ? 'العنوان' : on;
+
+		function fillMemberRow(root: DocumentFragment | HTMLElement, member: any) {
+			const typeEl = root.querySelector<HTMLElement>('[data-member-type]')!;
+			typeEl.textContent = member.type === 'article' ? 'مقال' : 'منشور';
+			const titleEl = root.querySelector<HTMLAnchorElement>('[data-member-title]')!;
+			titleEl.textContent = member.title || `#${member.id}`;
+			titleEl.href = member.public_url;
+			const statusEl = root.querySelector<HTMLElement>('[data-member-status]')!;
+			statusEl.textContent = member.published ? 'منشور' : 'مسودة';
+			statusEl.classList.toggle('is-published', Boolean(member.published));
+			const wordsEl = root.querySelector<HTMLElement>('[data-member-words]');
+			if (wordsEl) wordsEl.textContent = `${number.format(member.word_count)} كلمة`;
+			const editEl = root.querySelector<HTMLAnchorElement>('[data-member-edit]')!;
+			editEl.href = member.edit_url;
+		}
 
 		function renderMember(member: any): Node {
 			if (!memberTemplate) return document.createDocumentFragment();
 			const node = memberTemplate.content.cloneNode(true) as DocumentFragment;
-			const typeEl = node.querySelector<HTMLElement>('[data-member-type]')!;
-			typeEl.textContent = member.type === 'article' ? 'مقال' : 'منشور';
-			const titleEl = node.querySelector<HTMLAnchorElement>('[data-member-title]')!;
-			titleEl.textContent = member.title || `#${member.id}`;
-			titleEl.href = member.public_url;
-			const statusEl = node.querySelector<HTMLElement>('[data-member-status]')!;
-			statusEl.textContent = member.published ? 'منشور' : 'مسودة';
-			statusEl.classList.toggle('is-published', Boolean(member.published));
-			const wordsEl = node.querySelector<HTMLElement>('[data-member-words]')!;
-			wordsEl.textContent = `${number.format(member.word_count)} كلمة`;
-			const editEl = node.querySelector<HTMLAnchorElement>('[data-member-edit]')!;
-			editEl.href = member.edit_url;
+			fillMemberRow(node, member);
 			return node;
 		}
 
@@ -112,6 +169,8 @@ const { user } = guard;
 			const card = node.querySelector<HTMLElement>('.cluster-card')!;
 			card.classList.add(kindClass(cluster.kind));
 			node.querySelector<HTMLElement>('[data-cluster-kind]')!.textContent = cluster.kind_label;
+			const badgesEl = node.querySelector<HTMLElement>('[data-cluster-badges]')!;
+			badgesEl.textContent = (cluster.matched_on || []).map(matchedOnLabel).join(' + ');
 			node.querySelector<HTMLElement>('[data-cluster-sim]')!.textContent = `أعلى تشابه ${percent(cluster.max_similarity)}`;
 			node.querySelector<HTMLElement>('[data-cluster-rec]')!.textContent = cluster.recommendation;
 			const membersBox = node.querySelector<HTMLElement>('[data-cluster-members]')!;
@@ -119,10 +178,42 @@ const { user } = guard;
 			return node;
 		}
 
+		function renderWeak(item: any): Node {
+			if (!weakTemplate) return document.createDocumentFragment();
+			const node = weakTemplate.content.cloneNode(true) as DocumentFragment;
+			fillMemberRow(node, item);
+			const list = node.querySelector<HTMLElement>('[data-issue-signals]')!;
+			for (const signal of item.signals || []) {
+				const li = document.createElement('li');
+				li.textContent = signal;
+				list.appendChild(li);
+			}
+			return node;
+		}
+
+		function renderPolicyIssue(item: any): Node {
+			if (!policyIssueTemplate) return document.createDocumentFragment();
+			const node = policyIssueTemplate.content.cloneNode(true) as DocumentFragment;
+			fillMemberRow(node, item);
+			const list = node.querySelector<HTMLElement>('[data-issue-list]')!;
+			for (const issue of item.issues || []) {
+				const li = document.createElement('li');
+				const fieldLabel = issue.field === 'title' ? 'العنوان' : 'المحتوى';
+				li.textContent = `${fieldLabel}: بقايا نص غير مكتمل "${issue.token}" — ...${issue.snippet}...`;
+				list.appendChild(li);
+			}
+			return node;
+		}
+
 		function setBusy(busy: boolean) {
 			if (scanButton) scanButton.disabled = busy;
 			if (scanIcon) scanIcon.classList.toggle('is-spinning', busy);
 			if (scanLabel) scanLabel.textContent = busy ? 'جارِ الفحص... قد يستغرق حتى دقيقة' : 'فحص المقالات والمنشورات بشكل كامل';
+		}
+
+		function toggleSection(name: string, hasItems: boolean) {
+			const section = document.querySelector<HTMLElement>(`[data-section="${name}"]`);
+			if (section) section.hidden = !hasItems;
 		}
 
 		scanButton?.addEventListener('click', async () => {
@@ -142,7 +233,8 @@ const { user } = guard;
 					summaryBox.querySelector('[data-sum-exact]')!.textContent = number.format(summary.exact_clusters || 0);
 					summaryBox.querySelector('[data-sum-near]')!.textContent = number.format(summary.near_clusters || 0);
 					summaryBox.querySelector('[data-sum-template]')!.textContent = number.format(summary.template_clusters || 0);
-					summaryBox.querySelector('[data-sum-affected]')!.textContent = number.format(summary.affected_items || 0);
+					summaryBox.querySelector('[data-sum-weak]')!.textContent = number.format(summary.weak_content_items || 0);
+					summaryBox.querySelector('[data-sum-issues]')!.textContent = number.format(summary.policy_issue_items || 0);
 				}
 
 				const clusters: any[] = Array.isArray(data.clusters) ? data.clusters : [];
@@ -150,7 +242,23 @@ const { user } = guard;
 					clustersBox.innerHTML = '';
 					for (const cluster of clusters) clustersBox.appendChild(renderCluster(cluster));
 				}
-				if (emptyBox) emptyBox.hidden = clusters.length > 0;
+				toggleSection('clusters', clusters.length > 0);
+
+				const weakItems: any[] = Array.isArray(data.weak_content) ? data.weak_content : [];
+				if (weakBox) {
+					weakBox.innerHTML = '';
+					for (const item of weakItems) weakBox.appendChild(renderWeak(item));
+				}
+				toggleSection('weak', weakItems.length > 0);
+
+				const issues: any[] = Array.isArray(data.policy_issues) ? data.policy_issues : [];
+				if (issuesBox) {
+					issuesBox.innerHTML = '';
+					for (const item of issues) issuesBox.appendChild(renderPolicyIssue(item));
+				}
+				toggleSection('issues', issues.length > 0);
+
+				if (emptyBox) emptyBox.hidden = clusters.length > 0 || weakItems.length > 0 || issues.length > 0;
 			} catch (error) {
 				if (errorBox) {
 					errorBox.hidden = false;
@@ -166,7 +274,7 @@ const { user } = guard;
 	<style>
 		.policy-page{max-width:1100px;margin-inline:auto;padding-bottom:3rem}
 		.policy-header{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;border:1px solid #dfe6ee;border-radius:.85rem;background:#fff;padding:1rem 1.1rem;margin-bottom:.9rem}
-		.policy-header>div:first-child{max-width:40rem}
+		.policy-header>div:first-child{max-width:42rem}
 		.policy-header span:first-child{display:block;margin-bottom:.2rem;color:#1a4d8f;font-size:.68rem;font-weight:850}
 		.policy-header h1{margin:0;color:#061a3a;font-size:clamp(1.25rem,1.05rem + .6vw,1.6rem);font-weight:950}
 		.policy-header p{margin:.4rem 0 0;color:#718096;font-size:.72rem;line-height:1.8}
@@ -176,25 +284,32 @@ const { user } = guard;
 		.scan-button svg.is-spinning{animation:policy-spin 1s linear infinite}
 		@keyframes policy-spin{to{transform:rotate(360deg)}}
 		.policy-hint{margin:0 0 .9rem;color:#8a97a6;font-size:.66rem}
-		.policy-summary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:.6rem;margin-bottom:1rem}
+		.policy-summary{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:.6rem;margin-bottom:1rem}
 		.policy-summary>div{border:1px solid #dfe6ee;border-radius:.65rem;background:#fff;padding:.65rem .7rem;text-align:center}
 		.policy-summary strong{display:block;color:#102a43;font-size:1.05rem;font-weight:950}
 		.policy-summary span{display:block;margin-top:.15rem;color:#8a97a6;font-size:.56rem}
 		.policy-summary .tone-exact strong{color:#b3261e}
 		.policy-summary .tone-near strong{color:#b3691e}
 		.policy-summary .tone-template strong{color:#6b5bd6}
+		.policy-summary .tone-weak strong{color:#b36c16}
+		.policy-summary .tone-issue strong{color:#9333ea}
 		.policy-empty{display:grid;justify-items:center;gap:.4rem;border:1px dashed #cfe3da;border-radius:.85rem;background:#f5fbf8;padding:2.2rem 1rem;text-align:center;color:#3f6b5c}
 		.policy-empty svg{width:2rem;height:2rem;color:#0f8464}
 		.policy-empty h3{margin:0;font-size:.85rem}
 		.policy-empty p{margin:0;color:#6d8b82;font-size:.68rem}
 		.policy-error{border:1px solid #f3c6c6;border-radius:.65rem;background:#fff5f5;padding:.7rem .85rem;color:#b3261e;font-size:.68rem;margin-bottom:.9rem}
-		.policy-clusters{display:grid;gap:.7rem}
-		.cluster-card{border:1px solid #dfe6ee;border-radius:.75rem;background:#fff;padding:.8rem .9rem;border-inline-start:4px solid #94a3b8}
+		.policy-section{margin-bottom:1.1rem}
+		.policy-section h2{margin:0 0 .5rem;color:#102a43;font-size:.82rem;font-weight:900}
+		.policy-clusters,.policy-list{display:grid;gap:.7rem}
+		.cluster-card,.issue-card{border:1px solid #dfe6ee;border-radius:.75rem;background:#fff;padding:.8rem .9rem;border-inline-start:4px solid #94a3b8}
 		.cluster-card.tone-exact{border-inline-start-color:#b3261e}
 		.cluster-card.tone-near{border-inline-start-color:#b3691e}
 		.cluster-card.tone-template{border-inline-start-color:#6b5bd6}
+		.issue-card{border-inline-start-color:#b36c16}
+		.issue-card.tone-issue{border-inline-start-color:#9333ea}
 		.cluster-card>header{display:flex;align-items:center;justify-content:space-between;gap:.6rem;flex-wrap:wrap}
 		.cluster-kind{font-weight:900;font-size:.72rem;color:#102a43}
+		.cluster-badges{color:#94a3b8;font-size:.58rem;font-weight:800}
 		.cluster-sim{border-radius:999px;background:#f1f5f9;padding:.2rem .55rem;color:#64748b;font-size:.6rem;font-weight:800}
 		.cluster-rec{margin:.4rem 0 .6rem;color:#697586;font-size:.66rem;line-height:1.75}
 		.cluster-members{display:grid;gap:.4rem;border-top:1px solid #edf1f5;padding-top:.55rem}
@@ -209,12 +324,14 @@ const { user } = guard;
 		.member-words{color:#94a3b8;font-size:.56rem}
 		.member-edit{border:1px solid #d9e2ec;border-radius:.4rem;padding:.25rem .55rem;color:#344b63;font-size:.58rem;font-weight:800;text-decoration:none}
 		.member-edit:hover{border-color:#81a7da;color:#1a4d8f}
-		:global(.dark) .policy-header,:global(.dark) .policy-summary>div,:global(.dark) .cluster-card{border-color:#334155;background:#0f2547;color:#dbe5f0}
+		.issue-signals{margin:.5rem 0 0;padding-inline-start:1.1rem;color:#697586;font-size:.64rem;line-height:1.9}
+		:global(.dark) .policy-header,:global(.dark) .policy-summary>div,:global(.dark) .cluster-card,:global(.dark) .issue-card{border-color:#334155;background:#0f2547;color:#dbe5f0}
 		:global(.dark) .policy-summary strong{color:#f8fafc}
 		:global(.dark) .member-row{background:#122a49}
 		:global(.dark) .cluster-members{border-color:#263b56}
 		:global(.dark) .policy-empty{border-color:#315b50;background:#102f2a;color:#bcd8cd}
-		@media(max-width:800px){.policy-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
+		:global(.dark) .policy-section h2{color:#e2e8f0}
+		@media(max-width:800px){.policy-summary{grid-template-columns:repeat(3,minmax(0,1fr))}}
 		@media(max-width:600px){.policy-header{flex-direction:column}.scan-button{width:100%;justify-content:center}}
 	</style>
 </DashboardLayout>
