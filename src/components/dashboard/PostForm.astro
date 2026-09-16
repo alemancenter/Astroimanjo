@@ -176,6 +176,33 @@ const keywordsValue = typeof post?.keywords === 'string'
 			if (postAiLabel) postAiLabel.textContent = busy ? 'جارِ التوليد...' : 'توليد مسودة بالذكاء الاصطناعي';
 		};
 
+		// Fills the ImanSeoPanel fields (src/components/dashboard/ImanSeoPanel.astro) with the
+		// AI-suggested SEO metadata that the backend already scored/retried against the same
+		// AnalyzeSEO the panel's own "تحليل الآن" button uses, then triggers that same button so
+		// the score shown updates immediately instead of the admin having to click it manually.
+		const applyAIGeneratedSEO = (seo: Record<string, string>) => {
+			const seoRoot = document.querySelector<HTMLElement>('[data-iman-seo]');
+			if (!seoRoot) return;
+			const setValue = (selector: string, value: string | undefined, dispatchInput = false) => {
+				const el = seoRoot.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(selector);
+				if (el && value) {
+					el.value = value;
+					if (dispatchInput) el.dispatchEvent(new Event('input', { bubbles: true }));
+				}
+			};
+			setValue('#meta_description', seo.meta_description, true);
+			setValue('[name="seo_title"]', seo.seo_title, true);
+			setValue('[name="seo_focus_keyword"]', seo.focus_keyword);
+			setValue('[name="seo_additional_keywords"]', seo.additional_keywords);
+			setValue('[name="seo_og_title"]', seo.og_title);
+			setValue('[name="seo_og_description"]', seo.og_description);
+			setValue('[name="seo_twitter_title"]', seo.twitter_title);
+			setValue('[name="seo_twitter_description"]', seo.twitter_description);
+			const schemaSelect = seoRoot.querySelector<HTMLSelectElement>('[name="seo_schema_type"]');
+			if (schemaSelect && seo.schema_type) schemaSelect.value = seo.schema_type;
+			seoRoot.querySelector<HTMLButtonElement>('[data-seo-analyze]')?.click();
+		};
+
 		postAiButton?.addEventListener('click', async () => {
 			if (postAiError) postAiError.hidden = true;
 			if (postAiWarning) postAiWarning.hidden = true;
@@ -204,8 +231,10 @@ const keywordsValue = typeof post?.keywords === 'string'
 				if (!res.ok || !json?.success) throw new Error(json?.message || 'تعذّر توليد المحتوى');
 				const html = json.data?.content_html || '';
 				if (html) quill.clipboard.dangerouslyPasteHTML(html);
-				if (json.data?.warning && postAiWarning) {
-					postAiWarning.textContent = json.data.warning;
+				if (json.data?.seo) applyAIGeneratedSEO(json.data.seo);
+				const warnings = [json.data?.warning, json.data?.seo_warning].filter(Boolean);
+				if (warnings.length && postAiWarning) {
+					postAiWarning.textContent = warnings.join(' ');
 					postAiWarning.hidden = false;
 				}
 			} catch (err) {
