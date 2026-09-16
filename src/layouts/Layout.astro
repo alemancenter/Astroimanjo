@@ -180,6 +180,14 @@ const socialLinks = {
                         });
 		</script>
 
+		{/* Declares the AdSense account for this site — unconditional (unlike the base
+		   adsbygoogle.js loader below, which is deliberately gated on enableAds/consent/a
+		   configured ad slot). This is metadata, not an ad-serving action: Google's own
+		   verification/Auto ads association checks for this exact tag on every page, and
+		   nothing about the "don't run ads on account/functional pages" policy concern that
+		   gates the loader applies to a static <meta> tag. */}
+		{adsenseClient && <meta name="google-adsense-account" content={adsenseClient} />}
+
 		{/* Google's own CMP — AdSense "Privacy & messaging" (formerly Funding Choices), not a
 		   third-party vendor. Only loads when AdSense is actually configured, since there's
 		   nothing to gate consent for otherwise. Shows the EEA/UK/Switzerland consent message
