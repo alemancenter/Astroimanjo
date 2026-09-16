@@ -87,7 +87,14 @@ function formatSize(bytes: number): string {
 			<div class="article-content-section">
 				<div class="article-content-label">
 					<label for="quill-editor-container" class={labelClass}>المحتوى</label>
+					<button type="button" id="ai-generate-btn" class="article-ai-button">
+						<svg id="ai-generate-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m12 3 1.1 4.1L17 8.3l-3.9 1.1L12 13.5l-1.1-4.1L7 8.3l3.9-1.2L12 3Zm6 11 .6 2.2 2.2.6-2.2.6L18 20l-.6-2.6-2.2-.6 2.2-.6L18 14Z" /></svg>
+						<span id="ai-generate-label">توليد مسودة بالذكاء الاصطناعي</span>
+					</button>
 				</div>
+				<p id="ai-generate-error" class="form-hint hidden text-red-600 dark:text-red-400"></p>
+				<p id="ai-generate-warning" class="form-hint hidden text-amber-700 dark:text-amber-400"></p>
+				<input type="hidden" id="ai-attachment-name" value={files.length > 0 ? files[0].file_name : ''} />
 				<div id="quill-toolbar">
 					<span class="ql-formats"><button type="button" class="ql-bold"></button><button type="button" class="ql-italic"></button><button type="button" class="ql-underline"></button><button type="button" class="ql-strike"></button></span>
 					<span class="ql-formats"><select class="ql-header"><option value="1"></option><option value="2"></option><option value="3"></option><option value=""></option></select><select class="ql-size"><option value="12px">صغير</option><option value="" selected>عادي</option><option value="20px">كبير</option><option value="28px">كبير جدًا</option></select></span>
@@ -387,6 +394,35 @@ function formatSize(bytes: number): string {
 		font-size: 0.8rem;
 	}
 
+	.article-ai-button {
+		display: inline-flex;
+		min-height: 1.9rem;
+		align-items: center;
+		gap: 0.35rem;
+		border: 1px solid #d3deed;
+		border-radius: 0.5rem;
+		background: #fff;
+		padding: 0.3rem 0.55rem;
+		color: #2563eb;
+		font-size: 0.64rem;
+		font-weight: 750;
+	}
+
+	.article-ai-button:hover {
+		border-color: #9db7dc;
+		background: #f8fafc;
+	}
+
+	.article-ai-button:disabled {
+		cursor: wait;
+		opacity: 0.7;
+	}
+
+	.article-ai-button svg {
+		width: 0.9rem;
+		height: 0.9rem;
+	}
+
 	#quill-toolbar {
 		display: flex;
 		min-height: 3rem;
@@ -646,7 +682,8 @@ function formatSize(bytes: number): string {
 	:global(.dark) .article-side-card,
 	:global(.dark) .article-attachments-card,
 	:global(.dark) .article-form-page .form-control,
-	:global(.dark) #quill-editor-container {
+	:global(.dark) #quill-editor-container,
+	:global(.dark) .article-ai-button {
 		border-color: #334155;
 		background: #0f2547;
 		color: #e2e8f0;
@@ -860,6 +897,79 @@ function formatSize(bytes: number): string {
 		if (hiddenTextarea.value) quill.clipboard.dangerouslyPasteHTML(hiddenTextarea.value);
 		quill.root.setAttribute('dir', 'rtl');
 		quill.root.style.textAlign = 'right';
+
+		// AI writing assist — a single direct generation call (not the old multi-round
+		// "chase a quality score" pipeline), scoped to exactly the title + grade/subject/
+		// semester already selected, checked against the whole site for duplicate content on
+		// the backend before being returned. Only fills the editor; saving stays fully manual.
+		const aiButton = document.getElementById('ai-generate-btn') as HTMLButtonElement | null;
+		const aiIcon = document.getElementById('ai-generate-icon');
+		const aiLabel = document.getElementById('ai-generate-label');
+		const aiErrorEl = document.getElementById('ai-generate-error');
+		const aiWarningEl = document.getElementById('ai-generate-warning');
+		const titleInputForAI = document.getElementById('title') as HTMLInputElement | null;
+		const gradeSelectForAI = document.getElementById('class_id') as HTMLSelectElement | null;
+		const subjectSelectForAI = document.getElementById('subject_id') as HTMLSelectElement | null;
+		const semesterSelectForAI = document.getElementById('semester_id') as HTMLSelectElement | null;
+		const attachmentNameInput = document.getElementById('ai-attachment-name') as HTMLInputElement | null;
+
+		const setAIBusy = (busy: boolean) => {
+			if (aiButton) aiButton.disabled = busy;
+			aiIcon?.classList.toggle('animate-spin', busy);
+			if (aiLabel) aiLabel.textContent = busy ? 'جارِ التوليد...' : 'توليد مسودة بالذكاء الاصطناعي';
+		};
+
+		aiButton?.addEventListener('click', async () => {
+			aiErrorEl?.classList.add('hidden');
+			aiWarningEl?.classList.add('hidden');
+			const title = titleInputForAI?.value.trim() ?? '';
+			const gradeName = gradeSelectForAI?.selectedOptions[0]?.textContent?.trim() ?? '';
+			const subjectName = subjectSelectForAI?.selectedOptions[0]?.textContent?.trim() ?? '';
+			const semesterName = semesterSelectForAI?.selectedOptions[0]?.textContent?.trim() ?? '';
+			// Create mode: the first staged (not-yet-uploaded) file's name. Edit mode: the
+			// article's existing first attachment, rendered server-side into the hidden input.
+			const attachmentName = stagedFiles[0]?.name || attachmentNameInput?.value || '';
+
+			if (title.length < 5) {
+				if (aiErrorEl) { aiErrorEl.textContent = 'يرجى إدخال عنوان مكوّن من 5 أحرف على الأقل قبل التوليد.'; aiErrorEl.classList.remove('hidden'); }
+				return;
+			}
+			if (!subjectName || !semesterName) {
+				if (aiErrorEl) { aiErrorEl.textContent = 'يرجى اختيار الصف والمادة والفصل الدراسي قبل التوليد.'; aiErrorEl.classList.remove('hidden'); }
+				return;
+			}
+
+			setAIBusy(true);
+			try {
+				const res = await fetch('/api/dashboard/content-gen/draft', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						content_type: 'article',
+						title,
+						grade_level: gradeName,
+						subject_name: subjectName,
+						semester_name: semesterName,
+						attachment_name: attachmentName,
+					}),
+				});
+				const json = await res.json();
+				if (!res.ok || !json?.success) throw new Error(json?.message || 'تعذّر توليد المحتوى');
+				const html = json.data?.content_html || '';
+				if (html) quill.clipboard.dangerouslyPasteHTML(html);
+				if (json.data?.warning && aiWarningEl) {
+					aiWarningEl.textContent = json.data.warning;
+					aiWarningEl.classList.remove('hidden');
+				}
+			} catch (err) {
+				if (aiErrorEl) {
+					aiErrorEl.textContent = err instanceof Error ? err.message : 'تعذّر توليد المحتوى';
+					aiErrorEl.classList.remove('hidden');
+				}
+			} finally {
+				setAIBusy(false);
+			}
+		});
 
 		const form = hiddenTextarea.closest('form') as HTMLFormElement | null;
 		const isCreateMode = !form?.querySelector('input[name="id"]');

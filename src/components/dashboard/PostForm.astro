@@ -60,7 +60,10 @@ const keywordsValue = typeof post?.keywords === 'string'
 				<div class="post-field post-editor-field">
 					<div class="post-label-row">
 						<label for="post-editor-container">المحتوى</label>
+						<button type="button" id="post-ai-generate-btn" class="post-ai-button"><svg id="post-ai-generate-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m12 3 1.1 4.1L17 8.3l-3.9 1.1L12 13.5l-1.1-4.1L7 8.3l3.9-1.2L12 3Zm6 11 .6 2.2 2.2.6-2.2.6L18 20l-.6-2.6-2.2-.6 2.2-.6L18 14Z" /></svg><span id="post-ai-generate-label">توليد مسودة بالذكاء الاصطناعي</span></button>
 					</div>
+					<p id="post-ai-generate-error" class="post-field-error" hidden></p>
+					<p id="post-ai-generate-warning" class="post-field-hint is-warning" hidden></p>
 					<div id="post-editor-toolbar">
 						<span class="ql-formats"><button type="button" class="ql-bold"></button><button type="button" class="ql-italic"></button><button type="button" class="ql-underline"></button><button type="button" class="ql-strike"></button></span>
 						<span class="ql-formats"><select class="ql-header"><option value="2"></option><option value="3"></option><option value=""></option></select></span>
@@ -155,6 +158,66 @@ const keywordsValue = typeof post?.keywords === 'string'
 		quill.root.setAttribute('dir', 'rtl');
 		quill.root.style.textAlign = 'right';
 
+		// AI writing assist — a single direct generation call scoped to the title + category
+		// already selected, checked against the whole site for duplicate content on the
+		// backend before being returned. Only fills the editor; saving stays fully manual.
+		const postAiButton = document.getElementById('post-ai-generate-btn') as HTMLButtonElement | null;
+		const postAiIcon = document.getElementById('post-ai-generate-icon');
+		const postAiLabel = document.getElementById('post-ai-generate-label');
+		const postAiError = document.getElementById('post-ai-generate-error');
+		const postAiWarning = document.getElementById('post-ai-generate-warning');
+		const postTitleInput = document.getElementById('title') as HTMLInputElement | null;
+		const postCategorySelect = document.getElementById('category_id') as HTMLSelectElement | null;
+		const postAttachmentsInput = document.getElementById('post-attachments') as HTMLInputElement | null;
+
+		const setPostAiBusy = (busy: boolean) => {
+			if (postAiButton) postAiButton.disabled = busy;
+			postAiIcon?.classList.toggle('animate-spin', busy);
+			if (postAiLabel) postAiLabel.textContent = busy ? 'جارِ التوليد...' : 'توليد مسودة بالذكاء الاصطناعي';
+		};
+
+		postAiButton?.addEventListener('click', async () => {
+			if (postAiError) postAiError.hidden = true;
+			if (postAiWarning) postAiWarning.hidden = true;
+			const title = postTitleInput?.value.trim() ?? '';
+			const categoryName = postCategorySelect?.selectedOptions[0]?.textContent?.trim() ?? '';
+			const attachmentName = postAttachmentsInput?.files?.[0]?.name ?? '';
+
+			if (title.length < 5) {
+				if (postAiError) { postAiError.textContent = 'يرجى إدخال عنوان مكوّن من 5 أحرف على الأقل قبل التوليد.'; postAiError.hidden = false; }
+				return;
+			}
+
+			setPostAiBusy(true);
+			try {
+				const res = await fetch('/api/dashboard/content-gen/draft', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						content_type: 'post',
+						title,
+						category_name: categoryName,
+						attachment_name: attachmentName,
+					}),
+				});
+				const json = await res.json();
+				if (!res.ok || !json?.success) throw new Error(json?.message || 'تعذّر توليد المحتوى');
+				const html = json.data?.content_html || '';
+				if (html) quill.clipboard.dangerouslyPasteHTML(html);
+				if (json.data?.warning && postAiWarning) {
+					postAiWarning.textContent = json.data.warning;
+					postAiWarning.hidden = false;
+				}
+			} catch (err) {
+				if (postAiError) {
+					postAiError.textContent = err instanceof Error ? err.message : 'تعذّر توليد المحتوى';
+					postAiError.hidden = false;
+				}
+			} finally {
+				setPostAiBusy(false);
+			}
+		});
+
 		const updateWordCount = () => {
 			const words = quill.getText().trim().split(/\s+/).filter(Boolean).length;
 			if (wordCount) wordCount.textContent = `${words} كلمة`;
@@ -230,6 +293,8 @@ const keywordsValue = typeof post?.keywords === 'string'
 	.post-card-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem;border-bottom:1px solid #edf1f5;padding-bottom:.8rem}.post-card-heading>div{display:grid;grid-template-columns:auto 1fr;column-gap:.5rem}.post-card-heading .post-step{grid-row:1 / span 2;display:grid;width:1.75rem;height:1.75rem;place-items:center;border-radius:.4rem;background:#edf4fc;color:#1a4d8f;font-size:.6rem;font-weight:900}.post-card-heading h2{margin:0;color:#102a43;font-size:.86rem;font-weight:900}.post-card-heading p{margin:.12rem 0 0;color:var(--post-muted);font-size:.64rem}.post-card-heading>svg{width:1.1rem;height:1.1rem;color:#1a4d8f}
 	.post-field{display:grid;gap:.35rem;margin-top:.85rem}.post-field:first-of-type{margin-top:0}.post-field label,.post-label-row label{color:#243b53;font-size:.68rem;font-weight:850}.post-label-row{display:flex;align-items:center;justify-content:space-between;gap:.75rem}.post-label-row>span{color:#91a0b2;font-size:.6rem}.post-field input,.post-field select,.post-field textarea{width:100%;min-height:2.45rem;border:1px solid #d9e2ec;border-radius:.5rem;background:#fff;padding:.52rem .65rem;color:#102a43;font-family:inherit;font-size:.72rem;transition:border-color .15s,box-shadow .15s}.post-field textarea{resize:vertical;line-height:1.7}.post-field input:focus,.post-field select:focus,.post-field textarea:focus{border-color:#7da4d7;outline:0;box-shadow:0 0 0 3px rgb(26 77 143 / .07)}.post-field small{color:#8796a8;font-size:.58rem}
 	.post-editor-field{margin-top:1rem}.post-field-error{margin:0;color:#c53030;font-size:.62rem;font-weight:750}.post-field-hint{margin:.5rem 0 0;color:#8796a8;font-size:.6rem}.post-field-hint.is-success{color:#0f8464}.post-field-hint.is-warning{color:#9a6700}.post-field-hint.is-error{color:#c53030}
+	.post-ai-button{display:inline-flex;min-height:1.9rem;align-items:center;gap:.35rem;border:1px solid #d3deed;border-radius:.5rem;background:#fff;padding:.3rem .55rem;color:#2563eb;font-family:inherit;font-size:.64rem;font-weight:750}.post-ai-button:hover{border-color:#9db7dc;background:#f8fafc}.post-ai-button:disabled{cursor:wait;opacity:.7}.post-ai-button svg{width:.9rem;height:.9rem}
+	:global(.dark) .post-ai-button{border-color:#334155;background:#0f2547;color:#93c5fd}
 	:global(#post-editor-toolbar.ql-toolbar.ql-snow){border:1px solid #d9e2ec;border-radius:.55rem .55rem 0 0;background:#fbfcfe;padding:.45rem;direction:rtl}:global(#post-editor-container.ql-container.ql-snow){height:23rem;border:1px solid #d9e2ec;border-top:0;border-radius:0 0 .55rem .55rem;background:#fff;font-family:inherit;font-size:.82rem}:global(#post-editor-container .ql-editor){padding:1rem 1.1rem;line-height:1.9}:global(#post-editor-toolbar .ql-formats){margin-right:0;margin-left:.45rem}.post-editor-footer{display:flex;min-height:1.5rem;align-items:center;justify-content:space-between;gap:1rem;color:#8796a8;font-size:.58rem}
 	.post-side-heading{display:flex;align-items:flex-start;gap:.6rem;margin-bottom:.85rem}.post-side-heading>span{display:grid;width:1.9rem;height:1.9rem;flex:none;place-items:center;border-radius:.45rem;background:#edf4fc;color:#1a4d8f}.post-side-heading svg{width:.95rem;height:.95rem}.post-side-heading h2{margin:0;color:#102a43;font-size:.76rem;font-weight:900}.post-side-heading p{margin:.12rem 0 0;color:var(--post-muted);font-size:.58rem}
 	.post-image-drop{position:relative;display:grid;min-height:9.5rem;cursor:pointer;overflow:hidden;place-items:center;border:1px dashed #afc2d8;border-radius:.6rem;background:#fafcfe;text-align:center}.post-image-drop:hover{border-color:#1a4d8f;background:#f6f9fd}.post-image-drop input,.post-files-drop input{position:absolute;width:1px;height:1px;opacity:0}.post-image-drop img{width:100%;height:10.5rem;object-fit:cover}.post-image-drop>span{display:grid;justify-items:center;gap:.25rem;color:#60758a}.post-image-drop svg,.post-files-drop svg{width:1.25rem;height:1.25rem;color:#1a4d8f}.post-image-drop strong,.post-files-drop strong{font-size:.68rem}.post-image-drop small,.post-files-drop small{color:#8796a8;font-size:.56rem}
