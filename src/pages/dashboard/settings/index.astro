@@ -89,7 +89,7 @@ const tabs: SettingsTab[] = [
 		] },
 		{ title: 'التحليلات والإعلانات', description: 'معرّفات خدمات القياس والإعلانات المستخدمة في الواجهة.', fields: [
 			{ key: 'google_analytics_id', label: 'Google Analytics ID', placeholder: 'G-XXXXXXXXXX' },
-			{ key: 'adsense_client', label: 'AdSense Client', placeholder: 'ca-pub-...' },
+			{ key: 'adsense_client', label: 'كود AdSense (Publisher ID)', placeholder: 'ca-pub-XXXXXXXXXXXXXXXX', wide: true, description: 'الصق معرّف الناشر فقط (يبدأ بـ ca-pub-) من حساب AdSense — دون باقي سطور كود <script>. لا تكفي وحدها لعرض الإعلانات: يجب أيضًا تعبئة موضع إعلان واحد على الأقل من تبويب "الإعدادات المتقدمة" أسفل هذه القائمة.' },
 			{ key: 'facebook_pixel_id', label: 'Facebook Pixel ID', description: 'معطّل مؤقتًا في الكود (Layout.astro) لأن Meta Pixel لا يلتزم بإعدادات الموافقة على الخصوصية بعد — يتم حفظ القيمة هنا لكن لن يبدأ التتبع فعليًا حتى تُضاف آلية موافقة حقيقية.' },
 		] },
 		{ title: 'حماية النماذج', description: 'مفاتيح Google reCAPTCHA الخاصة بحماية النماذج العامة.', fields: [
