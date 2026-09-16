@@ -3,9 +3,12 @@ import { apiRawFetch } from '../../../../lib/api';
 
 export const prerender = false;
 
-// A single Together AI call plus a same-project duplicate check — well under
-// DEFAULT_TIMEOUT_MS's usual budget, but generation latency varies, so give it real headroom.
-const DRAFT_TIMEOUT_MS = 45_000;
+// The backend retries up to 4 times (cycling through fallback AI models) whenever a draft comes
+// back truncated, too short, duplicate, or full of generic filler — each attempt budgets up to
+// 30s, so the worst case is ~120s of AI calls plus duplicate-check overhead. This must stay above
+// that worst case or a legitimately-still-working retry gets aborted here and reported as a
+// failure even though the backend would have returned a good draft moments later.
+const DRAFT_TIMEOUT_MS = 150_000;
 
 export const POST: APIRoute = async ({ request, cookies, locals }) => {
 	const token = cookies.get('token')?.value;
