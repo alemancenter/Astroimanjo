@@ -1,10 +1,24 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import ts from 'typescript';
+import { createRequire } from 'node:module';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const HTTP_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
+
+// `typescript` is a devDependency, and a production install (`npm ci` under NODE_ENV=production,
+// or any `--omit=dev`) legitimately won't have it — that's fine as long as this whole check ends
+// up skipped there (see MissingBackendRoutesError below). A static top-level `import ts from
+// 'typescript'` would defeat that: ESM resolves imports before any of this file's code runs, so
+// the module would fail to load at all even when the skip path never touches `ts`. Loading it
+// lazily, only from inside extractFrontendRequests (the sole entry point that actually parses
+// TypeScript), means a production host that never reaches that function never needs the package
+// installed.
+let ts;
+function loadTypescript() {
+	if (!ts) ts = createRequire(import.meta.url)('typescript');
+	return ts;
+}
 
 // This check only works when the Go backend source is reachable on disk (by default at
 // <astro-root>/back/internal/routes, which only exists when both repos are checked out
@@ -504,6 +518,7 @@ function helperForCall(node, helperBindings) {
 }
 
 export function extractFrontendRequests(root = ROOT) {
+	loadTypescript();
 	const requests = [];
 	const unresolved = [];
 	for (const file of walk(path.join(root, 'src'), ['.ts', '.astro'])) {
