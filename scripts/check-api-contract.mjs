@@ -6,6 +6,31 @@ import ts from 'typescript';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const HTTP_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
 
+// This check only works when the Go backend source is reachable on disk (by default at
+// <astro-root>/back/internal/routes, which only exists when both repos are checked out
+// side by side, e.g. local dev or a monorepo CI runner). Production deploys build the
+// frontend and backend from separate vhosts with no access to each other's source tree, so
+// there is nothing to compare against there. BACKEND_ROUTES_DIR lets an environment that DOES
+// have the backend checked out somewhere else point directly at its internal/routes directory;
+// when neither that variable nor the default path resolves to a real directory, this throws
+// MissingBackendRoutesError so the prebuild CLI step (below) can skip the check with a warning
+// instead of failing the whole production build.
+export class MissingBackendRoutesError extends Error {
+	constructor(directory) {
+		super(`backend routes directory not found: ${directory}`);
+		this.name = 'MissingBackendRoutesError';
+		this.directory = directory;
+	}
+}
+
+function resolveBackendRoutesDir(root) {
+	const directory = process.env.BACKEND_ROUTES_DIR
+		? path.resolve(process.env.BACKEND_ROUTES_DIR)
+		: path.join(root, 'back', 'internal', 'routes');
+	if (!fs.existsSync(directory)) throw new MissingBackendRoutesError(directory);
+	return directory;
+}
+
 function walk(directory, extensions) {
 	const accepted = Array.isArray(extensions) ? extensions : [extensions];
 	const files = [];
@@ -47,7 +72,7 @@ export function extractBackendRoutes(root = ROOT) {
 		['public', '/api'],
 		['dash', '/api/dashboard'],
 	]);
-	const sources = walk(path.join(root, 'back', 'internal', 'routes'), '.go')
+	const sources = walk(resolveBackendRoutesDir(root), '.go')
 		.map((file) => ({ file, text: fs.readFileSync(file, 'utf8') }));
 
 	let changed = true;
@@ -622,7 +647,22 @@ export function compareContracts(root = ROOT) {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-	const { backend, frontend, missing, unresolved } = compareContracts();
+	let result;
+	try {
+		result = compareContracts();
+	} catch (error) {
+		if (error instanceof MissingBackendRoutesError) {
+			console.warn(
+				`Skipping API contract check: ${error.message}\n` +
+					'This is expected on a production build host, which does not have the Go backend ' +
+					'source checked out. Set BACKEND_ROUTES_DIR to that repo\'s internal/routes directory ' +
+					'to enable this check there.'
+			);
+			process.exit(0);
+		}
+		throw error;
+	}
+	const { backend, frontend, missing, unresolved } = result;
 	console.log(`Compared ${frontend.length} frontend requests with ${backend.length} Go routes.`);
 	if (unresolved.length) {
 		console.error('Frontend backend calls that could not be statically validated:');
