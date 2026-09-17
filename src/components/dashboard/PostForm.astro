@@ -203,6 +203,50 @@ const keywordsValue = typeof post?.keywords === 'string'
 			seoRoot.querySelector<HTMLButtonElement>('[data-seo-analyze]')?.click();
 		};
 
+		// Handoff from the AdSense-policy dashboard's "إصلاح بالذكاء الاصطناعي" button
+		// (src/pages/dashboard/adsense-policy/index.astro): that page never edits anything
+		// itself — it stores the AI fix draft under a per-item sessionStorage key and sends the
+		// admin here with ?apply_fix=1. Applied the same way the AI-generate button above fills
+		// the editor/SEO panel: nothing is saved until the admin reviews it and clicks the normal
+		// Save button. The query param and sessionStorage entry are cleared either way so a
+		// reload never re-applies (or silently drops) the same draft twice.
+		function applyPendingPolicyFix() {
+			const url = new URL(window.location.href);
+			if (url.searchParams.get('apply_fix') !== '1') return;
+			url.searchParams.delete('apply_fix');
+			window.history.replaceState({}, '', url.toString());
+
+			const id = document.querySelector<HTMLInputElement>('input[name="id"]')?.value;
+			if (!id) return;
+			const storageKey = `policyFix:post:${id}`;
+			const raw = sessionStorage.getItem(storageKey);
+			sessionStorage.removeItem(storageKey);
+			if (!raw) return;
+
+			try {
+				const draft = JSON.parse(raw);
+				if (draft.title && postTitleInput) {
+					postTitleInput.value = draft.title;
+					postTitleInput.dispatchEvent(new Event('input', { bubbles: true }));
+				}
+				if (draft.content_html) quill.clipboard.dangerouslyPasteHTML(draft.content_html);
+				applyAIGeneratedSEO({ meta_description: draft.meta_description });
+
+				const notes: string[] = ['مسودة إصلاح بالذكاء الاصطناعي — راجعها ثم اضغط حفظ لتطبيقها.'];
+				if (Array.isArray(draft.issues_addressed) && draft.issues_addressed.length) {
+					notes.push(`تم إصلاح: ${draft.issues_addressed.join('، ')}.`);
+				}
+				if (draft.warning) notes.push(draft.warning);
+				if (postAiWarning) {
+					postAiWarning.textContent = notes.join(' ');
+					postAiWarning.hidden = false;
+				}
+			} catch {
+				// Malformed/expired draft — nothing usable to apply, fail silently.
+			}
+		}
+		applyPendingPolicyFix();
+
 		postAiButton?.addEventListener('click', async () => {
 			if (postAiError) postAiError.hidden = true;
 			if (postAiWarning) postAiWarning.hidden = true;

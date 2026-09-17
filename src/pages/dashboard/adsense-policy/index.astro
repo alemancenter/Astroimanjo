@@ -29,6 +29,7 @@ const lastScan = (await apiFetch<any>('/dashboard/adsense-policy/scan', {
 				<span>مراجعة الامتثال</span>
 				<h1>سياسة AdSense — المحتوى</h1>
 				<p>فحص كامل لجميع المقالات والمنشورات الحالية بحثًا عن: تطابق كامل في النص أو العنوان، تشابه عالٍ، محتوى ضعيف (قصير جدًا أو ناقص البيانات)، ومحتوى تالف (بقايا نصوص غير مكتملة). المراجعة والقرار تبقى يدوية بالكامل.</p>
+				<p class="policy-ai-note">زر "إصلاح بالذكاء الاصطناعي" على كل عنصر يعالج تحديدًا مشاكل المحتوى القصير أو المتوسط الطول، التكرار مع محتوى آخر، عبارات الحشو العامة النمطية، الوصف التعريفي القصير أو المفقود، والعنوان القصير — وفق سياسة Google AdSense لجودة المحتوى وسياسات ناشري Google. الناتج مجرد مسودة تُراجعها وتحفظها بنفسك من صفحة التعديل، دون أي حفظ تلقائي؛ مشاكل المرفقات وحالة النشر تبقى تحتاج إجراءً يدويًا. قد يستغرق الإصلاح من عدة ثوانٍ حتى نحو دقيقة لأنه يستدعي نموذج ذكاء اصطناعي خارجي.</p>
 			</div>
 			<div class="scan-action">
 				<button type="button" data-scan-button class="scan-button">
@@ -43,9 +44,10 @@ const lastScan = (await apiFetch<any>('/dashboard/adsense-policy/scan', {
 
 		<div class="policy-summary" data-scan-summary hidden>
 			<div><strong data-sum-scanned>٠</strong><span>عنصر تم فحصه</span></div>
-			<div class="tone-exact"><strong data-sum-exact>٠</strong><span>تطابق كامل</span></div>
+			<div class="tone-exact"><strong data-sum-exact>٠</strong><span>تطابق كامل بالمحتوى</span></div>
 			<div class="tone-near"><strong data-sum-near>٠</strong><span>تكرار محتوى</span></div>
 			<div class="tone-template"><strong data-sum-template>٠</strong><span>تشابه قالبي</span></div>
+			<div class="tone-title-only"><strong data-sum-title-only>٠</strong><span>تطابق عنوان فقط</span></div>
 			<div class="tone-weak"><strong data-sum-weak>٠</strong><span>محتوى ضعيف</span></div>
 			<div class="tone-issue"><strong data-sum-issues>٠</strong><span>محتوى تالف</span></div>
 		</div>
@@ -67,9 +69,10 @@ const lastScan = (await apiFetch<any>('/dashboard/adsense-policy/scan', {
 			</select>
 			<select data-filter-kind>
 				<option value="all">كل أنواع التطابق</option>
-				<option value="exact">تطابق كامل</option>
+				<option value="exact">تطابق كامل بالمحتوى</option>
 				<option value="near">تكرار محتوى</option>
 				<option value="template">تشابه قالبي</option>
+				<option value="title_only">تطابق عنوان فقط</option>
 			</select>
 			<button type="button" data-filter-reset class="filter-reset">إعادة تعيين</button>
 		</div>
@@ -122,9 +125,14 @@ const lastScan = (await apiFetch<any>('/dashboard/adsense-policy/scan', {
 			</div>
 			<div class="member-actions">
 				<span class="member-words" data-member-words></span>
+				<button type="button" class="member-fix-btn" data-member-fix>
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m12 3 1.1 4.1L17 8.3l-3.9 1.1L12 13.5l-1.1-4.1L7 8.3l3.9-1.2L12 3Zm6 11 .6 2.2 2.2.6-2.2.6L18 20l-.6-2.6-2.2-.6 2.2-.6L18 14Z" /></svg>
+					<span data-member-fix-label>إصلاح بالذكاء الاصطناعي</span>
+				</button>
 				<a data-member-edit class="member-edit">تعديل</a>
 			</div>
 		</div>
+		<p class="member-fix-status" data-member-fix-status hidden></p>
 	</template>
 
 	<template data-weak-template>
@@ -137,9 +145,14 @@ const lastScan = (await apiFetch<any>('/dashboard/adsense-policy/scan', {
 				</div>
 				<div class="member-actions">
 					<span class="member-words" data-member-words></span>
+					<button type="button" class="member-fix-btn" data-member-fix>
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m12 3 1.1 4.1L17 8.3l-3.9 1.1L12 13.5l-1.1-4.1L7 8.3l3.9-1.2L12 3Zm6 11 .6 2.2 2.2.6-2.2.6L18 20l-.6-2.6-2.2-.6 2.2-.6L18 14Z" /></svg>
+						<span data-member-fix-label>إصلاح بالذكاء الاصطناعي</span>
+					</button>
 					<a data-member-edit class="member-edit">تعديل</a>
 				</div>
 			</div>
+			<p class="member-fix-status" data-member-fix-status hidden></p>
 			<ul class="issue-signals" data-issue-signals></ul>
 		</article>
 	</template>
@@ -153,9 +166,14 @@ const lastScan = (await apiFetch<any>('/dashboard/adsense-policy/scan', {
 					<span class="member-status" data-member-status></span>
 				</div>
 				<div class="member-actions">
+					<button type="button" class="member-fix-btn" data-member-fix>
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m12 3 1.1 4.1L17 8.3l-3.9 1.1L12 13.5l-1.1-4.1L7 8.3l3.9-1.2L12 3Zm6 11 .6 2.2 2.2.6-2.2.6L18 20l-.6-2.6-2.2-.6 2.2-.6L18 14Z" /></svg>
+						<span data-member-fix-label>إصلاح بالذكاء الاصطناعي</span>
+					</button>
 					<a data-member-edit class="member-edit">تعديل</a>
 				</div>
 			</div>
+			<p class="member-fix-status" data-member-fix-status hidden></p>
 			<ul class="issue-signals" data-issue-list></ul>
 		</article>
 	</template>
@@ -186,10 +204,73 @@ const lastScan = (await apiFetch<any>('/dashboard/adsense-policy/scan', {
 
 		const number = new Intl.NumberFormat('ar-EG');
 		const percent = (value: number) => `${new Intl.NumberFormat('ar-EG', { maximumFractionDigits: 1 }).format(value * 100)}%`;
-		const kindClass = (kind: string) => kind === 'exact' ? 'tone-exact' : kind === 'near' ? 'tone-near' : 'tone-template';
+		const kindClass = (kind: string) => kind === 'exact' ? 'tone-exact' : kind === 'near' ? 'tone-near' : kind === 'title_only' ? 'tone-title-only' : 'tone-template';
 		const matchedOnLabel = (on: string) => on === 'content' ? 'المحتوى' : on === 'title' ? 'العنوان' : on;
 
 		let currentResult: any = null;
+
+		// Draft handoff to the edit page: the AI fix is never saved from this page — it's stored
+		// under a per-item sessionStorage key and the admin is sent to the normal edit page with
+		// ?apply_fix=1, where ArticleForm/PostForm read it, fill the editor/SEO panel for review,
+		// and clear it. Same "generate, then manual Save" contract the existing AI draft button
+		// already uses, just applied to an existing item instead of a blank one.
+		const POLICY_FIX_STORAGE_PREFIX = 'policyFix:';
+		function policyFixStorageKey(member: any): string {
+			return `${POLICY_FIX_STORAGE_PREFIX}${member.type}:${member.id}`;
+		}
+
+		// AI fixing is genuinely not instant (the backend calls an external AI model, sometimes
+		// more than once if the first attempt still needs work) — usually well under a minute,
+		// but it can take longer. Rather than leaving one static "جارِ الإصلاح..." label the
+		// whole time (which reads as frozen past ~10-15s), this rotates through a few honest,
+		// reassuring status messages so the admin knows it's still actively working.
+		const POLICY_FIX_BUSY_MESSAGES = [
+			'جارِ الإصلاح بالذكاء الاصطناعي...',
+			'جارِ تحليل المحتوى الحالي...',
+			'قد يستغرق هذا حتى دقيقة تقريبًا...',
+			'لا يزال العمل جاريًا، شكرًا لانتظارك...',
+		];
+
+		async function requestPolicyFix(member: any, button: HTMLButtonElement, statusEl: HTMLElement | null) {
+			const labelEl = button.querySelector<HTMLElement>('[data-member-fix-label]');
+			const originalLabel = labelEl?.textContent ?? 'إصلاح بالذكاء الاصطناعي';
+			button.disabled = true;
+			button.classList.add('is-busy');
+			if (statusEl) { statusEl.hidden = true; statusEl.textContent = ''; statusEl.classList.remove('is-error'); }
+
+			let step = 0;
+			if (labelEl) labelEl.textContent = POLICY_FIX_BUSY_MESSAGES[0];
+			const ticker = window.setInterval(() => {
+				step = Math.min(step + 1, POLICY_FIX_BUSY_MESSAGES.length - 1);
+				if (labelEl) labelEl.textContent = POLICY_FIX_BUSY_MESSAGES[step];
+			}, 12_000);
+
+			try {
+				const res = await fetch('/api/dashboard/content-gen/fix', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ content_type: member.type, id: member.id }),
+				});
+				const json: any = await res.json().catch(() => null);
+				if (!res.ok || !json?.success || !json.data) {
+					throw new Error(json?.message || 'تعذّر إصلاح المحتوى بالذكاء الاصطناعي');
+				}
+				sessionStorage.setItem(policyFixStorageKey(member), JSON.stringify(json.data));
+				const separator = member.edit_url.includes('?') ? '&' : '?';
+				window.location.href = `${member.edit_url}${separator}apply_fix=1`;
+				// Navigating away — no need to clear the ticker or restore the button.
+			} catch (error) {
+				window.clearInterval(ticker);
+				button.disabled = false;
+				button.classList.remove('is-busy');
+				if (labelEl) labelEl.textContent = originalLabel;
+				if (statusEl) {
+					statusEl.hidden = false;
+					statusEl.classList.add('is-error');
+					statusEl.textContent = error instanceof Error ? error.message : 'تعذّر إصلاح المحتوى بالذكاء الاصطناعي';
+				}
+			}
+		}
 
 		function fillMemberRow(root: DocumentFragment | HTMLElement, member: any) {
 			const typeEl = root.querySelector<HTMLElement>('[data-member-type]')!;
@@ -204,6 +285,10 @@ const lastScan = (await apiFetch<any>('/dashboard/adsense-policy/scan', {
 			if (wordsEl) wordsEl.textContent = `${number.format(member.word_count)} كلمة`;
 			const editEl = root.querySelector<HTMLAnchorElement>('[data-member-edit]')!;
 			editEl.href = member.edit_url;
+
+			const fixBtn = root.querySelector<HTMLButtonElement>('[data-member-fix]');
+			const fixStatusEl = root.querySelector<HTMLElement>('[data-member-fix-status]');
+			fixBtn?.addEventListener('click', () => { void requestPolicyFix(member, fixBtn, fixStatusEl); });
 		}
 
 		function renderMember(member: any): Node {
@@ -346,6 +431,7 @@ const lastScan = (await apiFetch<any>('/dashboard/adsense-policy/scan', {
 				summaryBox.querySelector('[data-sum-exact]')!.textContent = number.format(summary.exact_clusters || 0);
 				summaryBox.querySelector('[data-sum-near]')!.textContent = number.format(summary.near_clusters || 0);
 				summaryBox.querySelector('[data-sum-template]')!.textContent = number.format(summary.template_clusters || 0);
+				summaryBox.querySelector('[data-sum-title-only]')!.textContent = number.format(summary.title_only_clusters || 0);
 				summaryBox.querySelector('[data-sum-weak]')!.textContent = number.format(summary.weak_content_items || 0);
 				summaryBox.querySelector('[data-sum-issues]')!.textContent = number.format(summary.policy_issue_items || 0);
 			}
@@ -413,13 +499,14 @@ const lastScan = (await apiFetch<any>('/dashboard/adsense-policy/scan', {
 		.scan-button svg.is-spinning{animation:policy-spin 1s linear infinite}
 		@keyframes policy-spin{to{transform:rotate(360deg)}}
 		.policy-hint{margin:0 0 .9rem;color:#8a97a6;font-size:.66rem}
-		.policy-summary{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:.6rem;margin-bottom:.9rem}
+		.policy-summary{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:.6rem;margin-bottom:.9rem}
 		.policy-summary>div{border:1px solid #dfe6ee;border-radius:.65rem;background:#fff;padding:.65rem .7rem;text-align:center}
 		.policy-summary strong{display:block;color:#102a43;font-size:1.05rem;font-weight:950}
 		.policy-summary span{display:block;margin-top:.15rem;color:#8a97a6;font-size:.56rem}
 		.policy-summary .tone-exact strong{color:#b3261e}
 		.policy-summary .tone-near strong{color:#b3691e}
 		.policy-summary .tone-template strong{color:#6b5bd6}
+		.policy-summary .tone-title-only strong{color:#0f766e}
 		.policy-summary .tone-weak strong{color:#b36c16}
 		.policy-summary .tone-issue strong{color:#9333ea}
 		.policy-filters{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;border:1px solid #dfe6ee;border-radius:.65rem;background:#fff;padding:.6rem .7rem;margin-bottom:1rem}
@@ -443,6 +530,7 @@ const lastScan = (await apiFetch<any>('/dashboard/adsense-policy/scan', {
 		.cluster-card.tone-exact{border-inline-start-color:#b3261e}
 		.cluster-card.tone-near{border-inline-start-color:#b3691e}
 		.cluster-card.tone-template{border-inline-start-color:#6b5bd6}
+		.cluster-card.tone-title-only{border-inline-start-color:#0f766e}
 		.issue-card{border-inline-start-color:#b36c16}
 		.issue-card.tone-issue{border-inline-start-color:#9333ea}
 		.cluster-card>header{display:flex;align-items:center;justify-content:space-between;gap:.6rem;flex-wrap:wrap}
@@ -458,20 +546,31 @@ const lastScan = (await apiFetch<any>('/dashboard/adsense-policy/scan', {
 		.member-title:hover{text-decoration:underline}
 		.member-status{border-radius:999px;background:#fff2df;padding:.12rem .4rem;color:#ad6816;font-size:.53rem;font-weight:800;flex:none}
 		.member-status.is-published{background:#e4f6ef;color:#0f8464}
-		.member-actions{display:flex;align-items:center;gap:.6rem;flex:none}
+		.member-actions{display:flex;align-items:center;gap:.6rem;flex:none;flex-wrap:wrap}
 		.member-words{color:#94a3b8;font-size:.56rem}
+		.member-fix-btn{display:inline-flex;align-items:center;gap:.3rem;border:1px solid #d6c8f8;border-radius:.4rem;background:#f6f1ff;padding:.25rem .55rem;color:#6b3fd6;font-family:inherit;font-size:.58rem;font-weight:850;white-space:nowrap}
+		.member-fix-btn:hover{border-color:#b79af0;background:#eee4ff}
+		.member-fix-btn:disabled{cursor:wait;opacity:.75}
+		.member-fix-btn svg{width:.75rem;height:.75rem;flex:none}
+		.member-fix-btn.is-busy svg{animation:policy-spin 1s linear infinite}
 		.member-edit{border:1px solid #d9e2ec;border-radius:.4rem;padding:.25rem .55rem;color:#344b63;font-size:.58rem;font-weight:800;text-decoration:none}
 		.member-edit:hover{border-color:#81a7da;color:#1a4d8f}
+		.member-fix-status{margin:.35rem 0 0;color:#b3261e;font-size:.6rem;line-height:1.7}
 		.issue-signals{margin:.5rem 0 0;padding-inline-start:1.1rem;color:#697586;font-size:.64rem;line-height:1.9}
+		.policy-ai-note{margin:.5rem 0 0;color:#6b3fd6;font-size:.66rem;line-height:1.8}
 		:global(.dark) .policy-header,:global(.dark) .policy-summary>div,:global(.dark) .policy-filters,:global(.dark) .cluster-card,:global(.dark) .issue-card{border-color:#334155;background:#0f2547;color:#dbe5f0}
 		:global(.dark) .policy-summary strong{color:#f8fafc}
 		:global(.dark) .filter-search,:global(.dark) .policy-filters select,:global(.dark) .filter-reset{border-color:#334155;background:#122a49;color:#dbe5f0}
 		:global(.dark) .member-row{background:#122a49}
+		:global(.dark) .member-fix-btn{border-color:#4c3a80;background:#241a42;color:#c9b3fb}
+		:global(.dark) .member-fix-btn:hover{border-color:#6b3fd6;background:#2c2050}
+		:global(.dark) .policy-ai-note{color:#c9b3fb}
 		:global(.dark) .cluster-members{border-color:#263b56}
 		:global(.dark) .policy-empty{border-color:#315b50;background:#102f2a;color:#bcd8cd}
 		:global(.dark) .policy-section h2{color:#e2e8f0}
 		:global(.dark) .filter-empty{border-color:#263b56;color:#8a97a6}
-		@media(max-width:800px){.policy-summary{grid-template-columns:repeat(3,minmax(0,1fr))}}
+		@media(max-width:800px){.policy-summary{grid-template-columns:repeat(4,minmax(0,1fr))}}
+		@media(max-width:520px){.policy-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
 		@media(max-width:600px){.policy-header{flex-direction:column}.scan-action{width:100%;justify-items:stretch}.scan-button{width:100%;justify-content:center}.policy-filters{flex-direction:column;align-items:stretch}}
 	</style>
 </DashboardLayout>
