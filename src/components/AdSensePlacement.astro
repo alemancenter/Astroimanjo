@@ -91,10 +91,13 @@ const shouldRender = validClient && Boolean(desktop || mobile);
 			return consent?.status === 'granted' || consent?.status === 'denied';
 		};
 
-		const initializePlacements = () => {
-			// Missing consent state is intentionally a hard stop. The page content
-			// remains rendered; only the ad mount waits for Google's decision.
-			if (!canInitializeAds()) return false;
+		const initializePlacements = (force = false) => {
+			// Missing consent state is a soft stop, not permanent: outside EEA/UK/Switzerland
+			// Google's CMP never shows a message at all, so canInitializeAds() would otherwise
+			// never return true and this mount would stay empty forever. force=true (the
+			// grace-window timeout below) proceeds anyway — data-npa-on-unknown-consent on each
+			// unit makes that safe (non-personalized ads instead of none).
+			if (!force && !canInitializeAds()) return false;
 			document.querySelectorAll<HTMLElement>('[data-adsense-placement]').forEach((placement) => {
 				if (placement.dataset.adInitialized === '1') return;
 				const isDesktop = window.matchMedia('(min-width: 1024px)').matches;
@@ -141,6 +144,10 @@ const shouldRender = validClient && Boolean(desktop || mobile);
 				if (initializePlacements()) window.removeEventListener(consentEvent, onConsent);
 			};
 			window.addEventListener(consentEvent, onConsent);
+			setTimeout(() => {
+				initializePlacements(true);
+				window.removeEventListener(consentEvent, onConsent);
+			}, 2500);
 		}
 	})();
 </script>

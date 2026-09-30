@@ -315,15 +315,16 @@ const socialLinks = {
 		{adsenseClient && enableAds && (
 			<script is:inline define:vars={{ adsenseClient }}>
 				/*
-				 * Do not even fetch the AdSense runtime until Consent Mode has
-				 * received an explicit grant or denial. A denial still permits
-				 * Google's non-personalized treatment; an unresolved choice does
-				 * not permit an ad unit to be created.
+				 * Prefer an explicit Consent Mode grant/denial from Google's CMP before fetching
+				 * the AdSense runtime — but that CMP only ever messages EEA/UK/Switzerland
+				 * visitors, so __imanjoConsent.status stays 'pending' forever for everyone else
+				 * (no message shown, no gtag('consent','update',...) call ever fires). Wait a
+				 * short grace window for that explicit signal, then load regardless — this is
+				 * exactly the scenario data-npa-on-unknown-consent below exists for: Google
+				 * serves non-personalized ads when consent state is unresolved instead of no ads.
 				 */
 				(() => {
 					const loadAdsense = () => {
-						const consent = window.__imanjoConsent;
-						if (!consent || (consent.status !== 'granted' && consent.status !== 'denied')) return;
 						if (document.querySelector('script[data-imanjo-adsense-loader]')) return;
 						const script = document.createElement('script');
 						script.async = true;
@@ -333,8 +334,13 @@ const socialLinks = {
 						script.dataset.npaOnUnknownConsent = '1';
 						document.head.appendChild(script);
 					};
-					window.addEventListener('imanjo:consent-updated', loadAdsense);
-					loadAdsense();
+					const consent = window.__imanjoConsent;
+					if (consent && (consent.status === 'granted' || consent.status === 'denied')) {
+						loadAdsense();
+					} else {
+						window.addEventListener('imanjo:consent-updated', loadAdsense);
+						setTimeout(loadAdsense, 2500);
+					}
 				})();
 			</script>
 		)}

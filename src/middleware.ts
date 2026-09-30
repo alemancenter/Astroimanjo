@@ -30,12 +30,12 @@ const CONTENT_SECURITY_POLICY_REPORT_ONLY = [
 	"base-uri 'self'",
 	"object-src 'none'",
 	"frame-ancestors 'self'",
-	"script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.google-analytics.com https://fundingchoicesmessages.google.com https://pagead2.googlesyndication.com https://googleads.g.doubleclick.net https://www.googleadservices.com https://connect.facebook.net https://*.google.com",
+	"script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.google-analytics.com https://fundingchoicesmessages.google.com https://pagead2.googlesyndication.com https://googleads.g.doubleclick.net https://www.googleadservices.com https://connect.facebook.net https://*.google.com https://*.adtrafficquality.google",
 	"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
 	"font-src 'self' https://fonts.gstatic.com data:",
 	"img-src 'self' data: https:",
-	"connect-src 'self' https://www.google-analytics.com https://*.google.com https://*.doubleclick.net https://connect.facebook.net",
-	"frame-src 'self' https://*.googlesyndication.com https://*.doubleclick.net https://fundingchoicesmessages.google.com",
+	"connect-src 'self' https://www.google-analytics.com https://*.google.com https://*.doubleclick.net https://connect.facebook.net https://*.adtrafficquality.google",
+	"frame-src 'self' https://*.googlesyndication.com https://*.doubleclick.net https://fundingchoicesmessages.google.com https://www.google.com https://*.adtrafficquality.google",
 ].join('; ');
 
 function applySecurityHeaders(response: Response): Response {
