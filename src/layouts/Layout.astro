@@ -325,13 +325,12 @@ const socialLinks = {
 				 */
 				(() => {
 					const loadAdsense = () => {
-						if (document.querySelector('script[data-imanjo-adsense-loader]')) return;
+						if (document.getElementById('imanjo-adsense-loader')) return;
 						const script = document.createElement('script');
+						script.id = 'imanjo-adsense-loader';
 						script.async = true;
 						script.crossOrigin = 'anonymous';
 						script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${adsenseClient}`;
-						script.dataset.imanjoAdsenseLoader = '1';
-						script.dataset.npaOnUnknownConsent = '1';
 						document.head.appendChild(script);
 					};
 					const consent = window.__imanjoConsent;

@@ -34,7 +34,7 @@ const CONTENT_SECURITY_POLICY_REPORT_ONLY = [
 	"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
 	"font-src 'self' https://fonts.gstatic.com data:",
 	"img-src 'self' data: https:",
-	"connect-src 'self' https://www.google-analytics.com https://*.google.com https://*.doubleclick.net https://connect.facebook.net https://*.adtrafficquality.google",
+	"connect-src 'self' https://www.google-analytics.com https://*.google.com https://*.doubleclick.net https://*.googlesyndication.com https://connect.facebook.net https://*.adtrafficquality.google",
 	"frame-src 'self' https://*.googlesyndication.com https://*.doubleclick.net https://fundingchoicesmessages.google.com https://www.google.com https://*.adtrafficquality.google",
 ].join('; ');
 
