@@ -131,7 +131,9 @@ const shouldRender = validClient && Boolean(desktop || mobile);
 					unit.dataset.npaOnUnknownConsent = '1';
 					unit.dataset.consentState = consentState;
 					if (placement.dataset.childDirectedTreatment === '1') {
-						unit.dataset.tagForChildDirectedTreatment = '1';
+						// data-tag-for-child-directed-treatment is deprecated by Google in favor
+						// of this attribute; same "treat this ad request as child-directed" intent.
+						unit.dataset.tagForAgeTreatment = '1';
 					}
 					for (const [key, value] of Object.entries(config)) {
 						const dataKey = supportedDataKeys[key];
