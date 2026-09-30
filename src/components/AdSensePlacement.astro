@@ -98,8 +98,22 @@ const shouldRender = validClient && Boolean(desktop || mobile);
 			// grace-window timeout below) proceeds anyway — data-npa-on-unknown-consent on each
 			// unit makes that safe (non-personalized ads instead of none).
 			if (!force && !canInitializeAds()) return false;
+			const consent = (window as typeof window & {
+				__imanjoConsent?: { status?: string };
+			}).__imanjoConsent;
+			const consentState = consent?.status || 'pending';
 			document.querySelectorAll<HTMLElement>('[data-adsense-placement]').forEach((placement) => {
-				if (placement.dataset.adInitialized === '1') return;
+				// A unit already created under a *resolved* consent state (granted/denied) is
+				// done — never touch it again. But one created earlier by the grace-window
+				// force-path (consentState was still 'pending' at the time) already consumed its
+				// one adsbygoogle.push({}) call — Google doesn't re-fill an <ins> it already
+				// processed, even once real consent arrives — so once a genuine decision comes
+				// in, that placeholder <ins> is swapped for a fresh one to get a real ad request.
+				if (placement.dataset.adInitialized === '1') {
+					if (placement.dataset.adConsentState !== 'pending' || consentState === 'pending') return;
+					const mount = placement.querySelector<HTMLElement>('[data-ad-mount]');
+					if (mount) mount.innerHTML = '';
+				}
 				const isDesktop = window.matchMedia('(min-width: 1024px)').matches;
 				const raw = isDesktop ? placement.dataset.desktopConfig : placement.dataset.mobileConfig;
 				const mount = placement.querySelector<HTMLElement>('[data-ad-mount]');
@@ -115,10 +129,7 @@ const shouldRender = validClient && Boolean(desktop || mobile);
 					unit.style.display = 'block';
 					unit.dataset.adClient = placement.dataset.adClient || '';
 					unit.dataset.npaOnUnknownConsent = '1';
-					const consent = (window as typeof window & {
-						__imanjoConsent?: { status?: string };
-					}).__imanjoConsent;
-					unit.dataset.consentState = consent?.status || 'pending';
+					unit.dataset.consentState = consentState;
 					if (placement.dataset.childDirectedTreatment === '1') {
 						unit.dataset.tagForChildDirectedTreatment = '1';
 					}
@@ -130,6 +141,7 @@ const shouldRender = validClient && Boolean(desktop || mobile);
 					if (!unit.dataset.fullWidthResponsive) unit.dataset.fullWidthResponsive = 'true';
 					mount.append(unit);
 					placement.dataset.adInitialized = '1';
+					placement.dataset.adConsentState = consentState;
 					const adsWindow = window as typeof window & { adsbygoogle?: Record<string, unknown>[] };
 					(adsWindow.adsbygoogle = adsWindow.adsbygoogle || []).push({});
 				} catch {
@@ -140,13 +152,14 @@ const shouldRender = validClient && Boolean(desktop || mobile);
 		};
 
 		if (!initializePlacements()) {
-			const onConsent = () => {
-				if (initializePlacements()) window.removeEventListener(consentEvent, onConsent);
-			};
+			// Stays subscribed even after the grace-window force-fill below: a unit built under
+			// 'pending' consent has already used up its one ad request, so when the real
+			// decision arrives afterward, initializePlacements() needs this event to know to
+			// swap it for a fresh one (see the adConsentState check inside).
+			const onConsent = () => initializePlacements();
 			window.addEventListener(consentEvent, onConsent);
 			setTimeout(() => {
 				initializePlacements(true);
-				window.removeEventListener(consentEvent, onConsent);
 			}, 800);
 		}
 	})();
