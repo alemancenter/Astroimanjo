@@ -40,6 +40,17 @@ const lastScan = (await apiFetch<any>('/dashboard/adsense-policy/scan', {
 			</div>
 		</header>
 
+		<div class="seo-tools">
+			<div>
+				<strong>تقييم ImanSEO لكل المحتوى</strong>
+				<p>عادةً يُحسب تقييم ImanSEO تلقائيًا عند حفظ أي مقال أو منشور من صفحة تعديله. لكن أي عنصر لم يُفتح ويُحفظ ولو مرة منذ إضافة هذه الميزة يبقى تقييمه صفرًا حتى تفعل ذلك يدويًا — بدل فتح كل عنصر على حدة، هذا الزر يحسب تقييمًا أوليًا دفعة واحدة لكل ما لم يُهيَّأ بعد.</p>
+			</div>
+			<div class="seo-tools-action">
+				<button type="button" data-seo-backfill-button class="seo-backfill-button">حساب تقييم ImanSEO لكل المحتوى غير المُهيَّأ</button>
+				<span class="seo-backfill-status" data-seo-backfill-status hidden></span>
+			</div>
+		</div>
+
 		<p class="policy-hint" data-scan-hint hidden>لم يُنفَّذ أي فحص بعد. قد يستغرق الفحص الكامل حتى دقيقة حسب عدد المقالات والمنشورات.</p>
 
 		<div class="policy-summary" data-scan-summary hidden>
@@ -531,6 +542,36 @@ const lastScan = (await apiFetch<any>('/dashboard/adsense-policy/scan', {
 			applyFilters();
 		});
 
+		const seoBackfillButton = document.querySelector<HTMLButtonElement>('[data-seo-backfill-button]');
+		const seoBackfillStatus = document.querySelector<HTMLElement>('[data-seo-backfill-status]');
+		seoBackfillButton?.addEventListener('click', async () => {
+			seoBackfillButton.disabled = true;
+			const originalLabel = seoBackfillButton.textContent;
+			seoBackfillButton.textContent = 'جارِ الحساب... قد يستغرق بعض الوقت';
+			if (seoBackfillStatus) { seoBackfillStatus.hidden = true; seoBackfillStatus.classList.remove('is-error'); }
+			try {
+				const res = await fetch('/api/dashboard/seo/backfill', { method: 'POST' });
+				const json: any = await res.json().catch(() => null);
+				if (!res.ok || !json?.success) throw new Error(json?.message || 'تعذّر حساب تقييمات SEO');
+				const { total = 0, updated = 0, failed = 0 } = json.data || {};
+				if (seoBackfillStatus) {
+					seoBackfillStatus.hidden = false;
+					seoBackfillStatus.textContent = total === 0
+						? 'كل المحتوى مُهيَّأ بالفعل — لا يوجد ما يحتاج حسابًا.'
+						: `تم حساب التقييم لـ ${number.format(updated)} من ${number.format(total)} عنصرًا${failed ? `، وفشل ${number.format(failed)}` : ''}.`;
+				}
+			} catch (error) {
+				if (seoBackfillStatus) {
+					seoBackfillStatus.hidden = false;
+					seoBackfillStatus.classList.add('is-error');
+					seoBackfillStatus.textContent = error instanceof Error ? error.message : 'تعذّر حساب تقييمات SEO';
+				}
+			} finally {
+				seoBackfillButton.disabled = false;
+				seoBackfillButton.textContent = originalLabel;
+			}
+		});
+
 		selectionClearBtn?.addEventListener('click', () => {
 			selectedKeys.clear();
 			document.querySelectorAll<HTMLInputElement>('[data-member-select]').forEach((cb) => { cb.checked = false; });
@@ -619,6 +660,15 @@ const lastScan = (await apiFetch<any>('/dashboard/adsense-policy/scan', {
 		.scan-button svg{width:1rem;height:1rem;stroke-width:1.8}
 		.scan-button svg.is-spinning{animation:policy-spin 1s linear infinite}
 		@keyframes policy-spin{to{transform:rotate(360deg)}}
+		.seo-tools{display:flex;align-items:center;justify-content:space-between;gap:.9rem;flex-wrap:wrap;border:1px solid #cfe3d7;border-radius:.65rem;background:#f5fbf8;padding:.7rem .85rem;margin-bottom:.9rem}
+		.seo-tools strong{display:block;color:#0f5e46;font-size:.68rem;font-weight:900}
+		.seo-tools p{margin:.25rem 0 0;max-width:38rem;color:#3f6b5c;font-size:.62rem;line-height:1.75}
+		.seo-tools-action{display:flex;flex-direction:column;align-items:flex-end;gap:.35rem}
+		.seo-backfill-button{border:1px solid #0f8464;border-radius:.5rem;background:#0f8464;padding:.5rem .85rem;color:#fff;font-family:inherit;font-size:.63rem;font-weight:850;white-space:nowrap}
+		.seo-backfill-button:hover{background:#0c6e53}
+		.seo-backfill-button:disabled{cursor:wait;opacity:.75}
+		.seo-backfill-status{color:#0f5e46;font-size:.6rem;font-weight:800;max-width:22rem;text-align:end}
+		.seo-backfill-status.is-error{color:#b3261e}
 		.policy-hint{margin:0 0 .9rem;color:#8a97a6;font-size:.66rem}
 		.policy-summary{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:.6rem;margin-bottom:.9rem}
 		.policy-summary>div{border:1px solid #dfe6ee;border-radius:.65rem;background:#fff;padding:.65rem .7rem;text-align:center}
@@ -713,6 +763,10 @@ const lastScan = (await apiFetch<any>('/dashboard/adsense-policy/scan', {
 		:global(.dark) .selection-progress{color:#9ec3fb}
 		:global(.dark) .selection-review-link{border-color:#1f6e54;color:#7fd9bb}
 		:global(.dark) .selection-review-link:hover{background:#102f2a}
+		:global(.dark) .seo-tools{border-color:#1f4a3d;background:#102f2a}
+		:global(.dark) .seo-tools strong{color:#7fd9bb}
+		:global(.dark) .seo-tools p{color:#a9c9bd}
+		:global(.dark) .seo-backfill-status{color:#7fd9bb}
 		@media(max-width:800px){.policy-summary{grid-template-columns:repeat(4,minmax(0,1fr))}}
 		@media(max-width:520px){.policy-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
 		@media(max-width:600px){.policy-header{flex-direction:column}.scan-action{width:100%;justify-items:stretch}.scan-button{width:100%;justify-content:center}.policy-filters{flex-direction:column;align-items:stretch}}

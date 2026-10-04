@@ -3,11 +3,14 @@ import { apiRawFetch } from '../../../../lib/api';
 
 export const prerender = false;
 
-// Same underlying AI call as the old content-gen/fix.ts (services.ContentDraftService.
-// FixPolicyContent), so it needs the same generous budget — see that file for the full
-// breakdown. The result is now queued for human review instead of handed back as a draft the
-// admin applies themselves from the edit page.
-const FIX_TIMEOUT_MS = 170_000;
+// Budget: up to 4 content-fix attempts (policyFixMaxAttempts in policy_fix_service.go, ~30s
+// each, ~120s worst case — raised from 3 because a persistent near-duplicate against another
+// live item needed the extra retry to reliably differentiate) plus the SEO/meta pass (up to 3
+// attempts, ~20s each, ~60s) — ~180s worst case. This must stay above that or a legitimately
+// still-working fix gets aborted here and reported as a failure even though the backend would
+// have returned a good draft moments later. (cmd/server/main.go's WriteTimeout is 240s, so the
+// backend itself isn't the constraint.)
+const FIX_TIMEOUT_MS = 200_000;
 
 export const POST: APIRoute = async ({ request, cookies, locals }) => {
 	const token = cookies.get('token')?.value;
