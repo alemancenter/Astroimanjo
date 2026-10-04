@@ -35,7 +35,7 @@ function fixture(caseData) {
 <body>
 <main id="educational-content"><h1>درس تعليمي متاح</h1><p>هذا المحتوى لا يعتمد على قرار الإعلانات.</p></main>
 <div data-cmp-region="${caseData.region}" data-consent-status="pending" id="consent-state"></div>
-<aside data-adsense-placement data-ad-client="ca-pub-6704584546705242" data-desktop-config='{"ad_slot":"1234567890"}' data-child-directed-treatment="${caseData.child ? '1' : '0'}">
+<aside data-adsense-placement data-ad-client="ca-pub-2187451543840210" data-desktop-config='{"ad_slot":"1234567890"}' data-child-directed-treatment="${caseData.child ? '1' : '0'}">
   <div data-ad-mount></div>
 </aside>
 <script>
