@@ -1,0 +1,220 @@
+---
+// Approval queue for AI policy fixes (internal/services/human_review_service.go): every item
+// here is a completed AI fix from the adsense-policy page's "إصلاح بالذكاء الاصطناعي" button
+// (single item or several selected at once), waiting for a human decision. Nothing here is
+// ever applied automatically — approve saves it through the normal article/post update path,
+// reject discards it and leaves the content exactly as it was. Rendered server-side on every
+// load (unlike adsense-policy's own client-rendered scan result) since this list only changes
+// when a fix is queued or a decision is made — no need for client-side re-fetching logic.
+import DashboardLayout from '../../../layouts/DashboardLayout.astro';
+import { requireDashboard } from '../../../lib/auth';
+import { apiFetch } from '../../../lib/api';
+
+const guard = await requireDashboard(Astro, ['manage articles', 'manage posts']);
+if ('redirect' in guard) return guard.redirect;
+const { user } = guard;
+
+const token = Astro.cookies.get('token')?.value;
+const result = await apiFetch<any[]>('/dashboard/human-review', {
+	countryId: Astro.locals.countryId,
+	cookieHeader: `token=${token}`,
+});
+const items = Array.isArray(result.data) ? result.data : [];
+
+const dateFormatter = new Intl.DateTimeFormat('ar-EG', { dateStyle: 'medium', timeStyle: 'short' });
+const number = new Intl.NumberFormat('ar-EG');
+---
+
+<DashboardLayout title="المراجعة البشرية" description="مراجعة واعتماد أو رفض تعديلات الذكاء الاصطناعي على المقالات والمنشورات" user={user}>
+	<div class="review-page">
+		<header class="review-header">
+			<div>
+				<span>موافقة بشرية مطلوبة</span>
+				<h1>المراجعة البشرية</h1>
+				<p>كل عنصر هنا نتيجة إصلاح بالذكاء الاصطناعي بدأ من صفحة سياسة AdSense، بانتظار قرارك. لا يُطبَّق أي تعديل على الموقع إلا بعد الضغط على "اعتماد التعديل" — والرفض يترك المحتوى كما هو دون أي تغيير.</p>
+			</div>
+			<a href="/dashboard/adsense-policy" class="back-link">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 12H5m7-7-7 7 7 7"/></svg>
+				سياسة AdSense
+			</a>
+		</header>
+
+		<p class="review-error" data-review-error role="alert" hidden></p>
+
+		{items.length === 0 && (
+			<div class="review-empty">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="m5 13 4 4L19 7"/></svg>
+				<h3>لا توجد عناصر بانتظار المراجعة حاليًا</h3>
+				<p>استخدم زر "إصلاح بالذكاء الاصطناعي" من صفحة سياسة AdSense — سواء على عنصر واحد أو عدة عناصر محددة دفعة واحدة — لإرسال نتائج هنا للمراجعة.</p>
+			</div>
+		)}
+
+		<div class="review-list">
+			{items.map((item: any) => {
+				const titleChanged = Boolean(item.new_title) && item.new_title !== item.original_title;
+				const metaChanged = Boolean(item.new_meta_description) && item.new_meta_description !== item.original_meta_description;
+				return (
+					<article class="review-card" data-review-id={item.id}>
+						<header class="review-card-head">
+							<div class="review-card-title">
+								<span class="review-type">{item.content_type === 'article' ? 'مقال' : 'منشور'}</span>
+								<a href={item.public_url} target="_blank" rel="noopener">{item.title}</a>
+							</div>
+							<div class="review-card-head-end">
+								<span class="review-date">{dateFormatter.format(new Date(item.created_at))}</span>
+								<a href={item.edit_url} class="review-edit-link" target="_blank" rel="noopener">فتح صفحة التعديل</a>
+							</div>
+						</header>
+
+						<div class="review-meta-row">
+							{(item.issues_addressed || []).map((issue: string) => <span class="review-badge issue">{issue}</span>)}
+							{item.seo_score > 0 && (
+								<span class={`review-badge seo ${item.seo_score >= 85 ? 'good' : 'low'}`}>تحليل SEO: {item.seo_score}%</span>
+							)}
+							<span class="review-badge words">{number.format(item.word_count)} كلمة</span>
+						</div>
+
+						{item.warning && <p class="review-warning">{item.warning}</p>}
+
+						{titleChanged && (
+							<div class="review-compare review-compare-title">
+								<div class="compare-col old"><span>العنوان الحالي</span><p>{item.original_title}</p></div>
+								<div class="compare-col new"><span>العنوان المقترح</span><p>{item.new_title}</p></div>
+							</div>
+						)}
+
+						{metaChanged && (
+							<div class="review-compare review-compare-meta">
+								<div class="compare-col old"><span>الوصف التعريفي الحالي</span><p>{item.original_meta_description || '— بلا وصف تعريفي —'}</p></div>
+								<div class="compare-col new"><span>الوصف التعريفي المقترح</span><p>{item.new_meta_description || '— بلا وصف تعريفي —'}</p></div>
+							</div>
+						)}
+
+						<div class="review-compare review-compare-content">
+							<div class="compare-col old">
+								<span>المحتوى الحالي</span>
+								<div class="compare-html" set:html={item.original_content_html} />
+							</div>
+							<div class="compare-col new">
+								<span>المحتوى المقترح</span>
+								<div class="compare-html" set:html={item.new_content_html} />
+							</div>
+						</div>
+
+						<div class="review-actions">
+							<button type="button" class="review-approve" data-review-approve>اعتماد التعديل</button>
+							<button type="button" class="review-reject" data-review-reject>رفض التعديل</button>
+							<span class="review-action-status" data-review-status hidden></span>
+						</div>
+					</article>
+				);
+			})}
+		</div>
+	</div>
+
+	<script>
+		const errorBox = document.querySelector<HTMLElement>('[data-review-error]');
+
+		async function decide(card: HTMLElement, action: 'approve' | 'reject') {
+			const id = card.dataset.reviewId;
+			if (!id) return;
+			const approveBtn = card.querySelector<HTMLButtonElement>('[data-review-approve]');
+			const rejectBtn = card.querySelector<HTMLButtonElement>('[data-review-reject]');
+			const statusEl = card.querySelector<HTMLElement>('[data-review-status]');
+			approveBtn?.setAttribute('disabled', 'true');
+			rejectBtn?.setAttribute('disabled', 'true');
+			if (statusEl) {
+				statusEl.hidden = false;
+				statusEl.classList.remove('is-error');
+				statusEl.textContent = action === 'approve' ? 'جارِ اعتماد التعديل وحفظه...' : 'جارِ رفض التعديل...';
+			}
+
+			try {
+				const res = await fetch(`/api/dashboard/human-review/${encodeURIComponent(id)}/${action}`, { method: 'POST' });
+				const json: any = await res.json().catch(() => null);
+				if (!res.ok || !json?.success) throw new Error(json?.message || 'تعذّر تنفيذ العملية');
+				card.remove();
+				if (!document.querySelector('.review-card')) location.reload();
+			} catch (error) {
+				approveBtn?.removeAttribute('disabled');
+				rejectBtn?.removeAttribute('disabled');
+				const message = error instanceof Error ? error.message : 'تعذّر تنفيذ العملية';
+				if (statusEl) {
+					statusEl.classList.add('is-error');
+					statusEl.textContent = message;
+				}
+				if (errorBox) {
+					errorBox.hidden = false;
+					errorBox.textContent = message;
+				}
+			}
+		}
+
+		document.querySelectorAll<HTMLElement>('.review-card').forEach((card) => {
+			card.querySelector('[data-review-approve]')?.addEventListener('click', () => void decide(card, 'approve'));
+			card.querySelector('[data-review-reject]')?.addEventListener('click', () => void decide(card, 'reject'));
+		});
+	</script>
+
+	<style>
+		.review-page{max-width:1100px;margin-inline:auto;padding-bottom:3rem}
+		.review-header{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;border:1px solid #dfe6ee;border-radius:.85rem;background:#fff;padding:1rem 1.1rem;margin-bottom:1rem}
+		.review-header>div:first-child{max-width:42rem}
+		.review-header span:first-child{display:block;margin-bottom:.2rem;color:#1a4d8f;font-size:.68rem;font-weight:850}
+		.review-header h1{margin:0;color:#061a3a;font-size:clamp(1.25rem,1.05rem + .6vw,1.6rem);font-weight:950}
+		.review-header p{margin:.4rem 0 0;color:#718096;font-size:.72rem;line-height:1.8}
+		.back-link{display:inline-flex;align-items:center;gap:.35rem;border:1px solid #d9e2ec;border-radius:.5rem;padding:.5rem .8rem;color:#344b63;font-size:.65rem;font-weight:800;text-decoration:none;white-space:nowrap}
+		.back-link:hover{border-color:#81a7da;color:#1a4d8f}
+		.back-link svg{width:.85rem;height:.85rem}
+		.review-error{border:1px solid #f3c6c6;border-radius:.65rem;background:#fff5f5;padding:.7rem .85rem;color:#b3261e;font-size:.68rem;margin-bottom:.9rem}
+		.review-empty{display:grid;justify-items:center;gap:.4rem;border:1px dashed #cfe3da;border-radius:.85rem;background:#f5fbf8;padding:2.2rem 1rem;text-align:center;color:#3f6b5c}
+		.review-empty svg{width:2rem;height:2rem;color:#0f8464}
+		.review-empty h3{margin:0;font-size:.85rem}
+		.review-empty p{margin:0;color:#6d8b82;font-size:.68rem;max-width:30rem}
+		.review-list{display:grid;gap:1rem}
+		.review-card{border:1px solid #dfe6ee;border-radius:.85rem;background:#fff;padding:1rem 1.1rem;border-inline-start:4px solid #6b3fd6}
+		.review-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:.7rem;flex-wrap:wrap}
+		.review-card-title{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;min-width:0}
+		.review-type{border-radius:999px;background:#eaf1fa;padding:.15rem .5rem;color:#1a4d8f;font-size:.56rem;font-weight:850;flex:none}
+		.review-card-title>a:first-of-type{color:#102a43;font-size:.78rem;font-weight:850;text-decoration:none}
+		.review-card-title>a:first-of-type:hover{text-decoration:underline}
+		.review-card-head-end{display:flex;align-items:center;gap:.6rem;flex:none}
+		.review-date{color:#94a3b8;font-size:.58rem}
+		.review-edit-link{border:1px solid #d9e2ec;border-radius:.4rem;padding:.2rem .5rem;color:#344b63;font-size:.58rem;font-weight:800;text-decoration:none;white-space:nowrap}
+		.review-edit-link:hover{border-color:#81a7da;color:#1a4d8f}
+		.review-meta-row{display:flex;flex-wrap:wrap;gap:.35rem;margin:.6rem 0}
+		.review-badge{border-radius:999px;padding:.2rem .55rem;font-size:.56rem;font-weight:800}
+		.review-badge.issue{background:#fff2df;color:#ad6816}
+		.review-badge.seo.good{background:#e4f6ef;color:#0f8464}
+		.review-badge.seo.low{background:#fdeceb;color:#b3261e}
+		.review-badge.words{background:#f1f5f9;color:#64748b}
+		.review-warning{margin:.2rem 0 .6rem;border:1px solid #f3c6c6;border-radius:.5rem;background:#fff5f5;padding:.5rem .7rem;color:#b3261e;font-size:.62rem;line-height:1.7}
+		.review-compare{display:grid;grid-template-columns:1fr 1fr;gap:.7rem;margin:.6rem 0}
+		.compare-col{border:1px solid #edf1f5;border-radius:.6rem;padding:.6rem .7rem;min-width:0}
+		.compare-col.old{background:#fcfbfa}
+		.compare-col.new{background:#f6fbf8;border-color:#d9ecd9}
+		.compare-col>span{display:block;margin-bottom:.35rem;color:#94a3b8;font-size:.56rem;font-weight:850}
+		.compare-col.new>span{color:#0f8464}
+		.compare-col p{margin:0;color:#344b63;font-size:.68rem;line-height:1.8;word-break:break-word}
+		.review-compare-content .compare-html{max-height:22rem;overflow-y:auto;color:#344b63;font-size:.68rem;line-height:1.9}
+		.review-compare-content .compare-html :global(p){margin:0 0 .6rem}
+		.review-compare-content .compare-html :global(h2){margin:.6rem 0 .4rem;font-size:.78rem;color:#102a43}
+		.review-actions{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin-top:.7rem;border-top:1px solid #edf1f5;padding-top:.7rem}
+		.review-approve{border:1px solid #0f8464;border-radius:.5rem;background:#0f8464;padding:.5rem .9rem;color:#fff;font-family:inherit;font-size:.65rem;font-weight:850}
+		.review-approve:hover{background:#0c6e53}
+		.review-approve:disabled,.review-reject:disabled{cursor:wait;opacity:.65}
+		.review-reject{border:1px solid #e2a9a4;border-radius:.5rem;background:#fff5f5;padding:.5rem .9rem;color:#b3261e;font-family:inherit;font-size:.65rem;font-weight:850}
+		.review-reject:hover{border-color:#d98f89;background:#fdeceb}
+		.review-action-status{color:#697586;font-size:.6rem}
+		.review-action-status.is-error{color:#b3261e;font-weight:800}
+		:global(.dark) .review-header,:global(.dark) .review-card,:global(.dark) .compare-col{border-color:#334155;background:#0f2547;color:#dbe5f0}
+		:global(.dark) .compare-col.old{background:#122a49}
+		:global(.dark) .compare-col.new{background:#102f2a;border-color:#1f4a3d}
+		:global(.dark) .compare-col p,:global(.dark) .review-compare-content .compare-html{color:#dbe5f0}
+		:global(.dark) .back-link,:global(.dark) .review-edit-link{border-color:#334155;background:#122a49;color:#dbe5f0}
+		:global(.dark) .review-empty{border-color:#315b50;background:#102f2a;color:#bcd8cd}
+		:global(.dark) .review-badge.words{background:#1e293b;color:#94a3b8}
+		@media(max-width:760px){.review-compare{grid-template-columns:1fr}}
+		@media(max-width:600px){.review-header{flex-direction:column}.back-link{align-self:flex-start}}
+	</style>
+</DashboardLayout>

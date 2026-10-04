@@ -22,6 +22,7 @@ export const DASHBOARD_NAV_ITEMS: DashboardNavItem[] = [
 	{ label: 'مراجعة التعليقات', href: '/dashboard/comments', group: 'المحتوى', icon: 'comments', permission: 'manage comments' },
 	{ label: 'مكتبة الملفات', href: '/dashboard/files', group: 'المحتوى', icon: 'files', permission: 'manage files' },
 	{ label: 'سياسة AdSense', href: '/dashboard/adsense-policy', group: 'المحتوى', icon: 'audit', permission: ['manage articles', 'manage posts'] },
+	{ label: 'المراجعة البشرية', href: '/dashboard/human-review', group: 'المحتوى', icon: 'review', permission: ['manage articles', 'manage posts'] },
 	{ label: 'الهيكل الأكاديمي', href: '/dashboard/classes', group: 'الأكاديمي', icon: 'academic', permission: 'manage classes' },
 	{ label: 'التقويم', href: '/dashboard/calendar', group: 'الأكاديمي', icon: 'calendar', permission: 'manage calendar' },
 	{ label: 'المستخدمون', href: '/dashboard/users', group: 'المستخدمون', icon: 'users', permission: 'manage users' },

@@ -29,7 +29,7 @@ const lastScan = (await apiFetch<any>('/dashboard/adsense-policy/scan', {
 				<span>مراجعة الامتثال</span>
 				<h1>سياسة AdSense — المحتوى</h1>
 				<p>فحص كامل لجميع المقالات والمنشورات الحالية بحثًا عن: تطابق كامل في النص أو العنوان، تشابه عالٍ، محتوى ضعيف (قصير جدًا أو ناقص البيانات)، ومحتوى تالف (بقايا نصوص غير مكتملة). المراجعة والقرار تبقى يدوية بالكامل.</p>
-				<p class="policy-ai-note">زر "إصلاح بالذكاء الاصطناعي" على كل عنصر يعالج تحديدًا مشاكل المحتوى القصير أو المتوسط الطول، التكرار مع محتوى آخر، عبارات الحشو العامة النمطية، الوصف التعريفي القصير أو المفقود، والعنوان القصير — وفق سياسة Google AdSense لجودة المحتوى وسياسات ناشري Google. الناتج مجرد مسودة تُراجعها وتحفظها بنفسك من صفحة التعديل، دون أي حفظ تلقائي؛ مشاكل المرفقات وحالة النشر تبقى تحتاج إجراءً يدويًا. قد يستغرق الإصلاح من عدة ثوانٍ حتى نحو دقيقة لأنه يستدعي نموذج ذكاء اصطناعي خارجي.</p>
+				<p class="policy-ai-note">زر "إصلاح بالذكاء الاصطناعي" على كل عنصر — أو تحديد عدة عناصر وإصلاحها دفعة واحدة عبر الصندوق الذي يظهر أسفل هذه الفقرة — يعالج تحديدًا مشاكل المحتوى القصير أو المتوسط الطول، التكرار مع محتوى آخر، عبارات الحشو العامة النمطية، الوصف التعريفي القصير أو المفقود، والعنوان القصير — وفق سياسة Google AdSense لجودة المحتوى وسياسات ناشري Google. الناتج لا يُحفظ تلقائيًا أبدًا؛ بل يُرسل إلى صفحة "المراجعة البشرية" حيث تقارن النسخة الحالية بالمقترحة وتعتمد أو ترفض كل تعديل بنفسك. مشاكل المرفقات وحالة النشر تبقى تحتاج إجراءً يدويًا. قد يستغرق إصلاح كل عنصر من عدة ثوانٍ حتى نحو دقيقة لأنه يستدعي نموذج ذكاء اصطناعي خارجي.</p>
 			</div>
 			<div class="scan-action">
 				<button type="button" data-scan-button class="scan-button">
@@ -77,6 +77,22 @@ const lastScan = (await apiFetch<any>('/dashboard/adsense-policy/scan', {
 			<button type="button" data-filter-reset class="filter-reset">إعادة تعيين</button>
 		</div>
 
+		<div class="selection-bar" data-selection-bar hidden>
+			<div class="selection-bar-main">
+				<strong data-selection-count>٠</strong>
+				<span>عنصر محدد</span>
+				<button type="button" data-selection-clear class="selection-clear">إلغاء التحديد</button>
+			</div>
+			<div class="selection-bar-actions">
+				<span class="selection-progress" data-selection-progress hidden></span>
+				<a href="/dashboard/human-review" class="selection-review-link" data-selection-review-link hidden>فتح صفحة المراجعة البشرية</a>
+				<button type="button" data-selection-fix class="selection-fix-button">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m12 3 1.1 4.1L17 8.3l-3.9 1.1L12 13.5l-1.1-4.1L7 8.3l3.9-1.2L12 3Zm6 11 .6 2.2 2.2.6-2.2.6L18 20l-.6-2.6-2.2-.6 2.2-.6L18 14Z" /></svg>
+					<span>إصلاح المحدد بالذكاء الاصطناعي دفعة واحدة</span>
+				</button>
+			</div>
+		</div>
+
 		<div class="policy-error" data-scan-error role="alert" hidden></div>
 
 		<section class="policy-section" data-section="clusters" hidden>
@@ -118,6 +134,7 @@ const lastScan = (await apiFetch<any>('/dashboard/adsense-policy/scan', {
 
 	<template data-member-template>
 		<div class="member-row">
+			<label class="member-select-label"><input type="checkbox" class="member-select" data-member-select /></label>
 			<div class="member-info">
 				<span class="member-type" data-member-type></span>
 				<a class="member-title" data-member-title target="_blank" rel="noopener"></a>
@@ -138,6 +155,7 @@ const lastScan = (await apiFetch<any>('/dashboard/adsense-policy/scan', {
 	<template data-weak-template>
 		<article class="issue-card">
 			<div class="member-row">
+				<label class="member-select-label"><input type="checkbox" class="member-select" data-member-select /></label>
 				<div class="member-info">
 					<span class="member-type" data-member-type></span>
 					<a class="member-title" data-member-title target="_blank" rel="noopener"></a>
@@ -160,6 +178,7 @@ const lastScan = (await apiFetch<any>('/dashboard/adsense-policy/scan', {
 	<template data-policy-issue-template>
 		<article class="issue-card tone-issue">
 			<div class="member-row">
+				<label class="member-select-label"><input type="checkbox" class="member-select" data-member-select /></label>
 				<div class="member-info">
 					<span class="member-type" data-member-type></span>
 					<a class="member-title" data-member-title target="_blank" rel="noopener"></a>
@@ -209,14 +228,42 @@ const lastScan = (await apiFetch<any>('/dashboard/adsense-policy/scan', {
 
 		let currentResult: any = null;
 
-		// Draft handoff to the edit page: the AI fix is never saved from this page — it's stored
-		// under a per-item sessionStorage key and the admin is sent to the normal edit page with
-		// ?apply_fix=1, where ArticleForm/PostForm read it, fill the editor/SEO panel for review,
-		// and clear it. Same "generate, then manual Save" contract the existing AI draft button
-		// already uses, just applied to an existing item instead of a blank one.
-		const POLICY_FIX_STORAGE_PREFIX = 'policyFix:';
-		function policyFixStorageKey(member: any): string {
-			return `${POLICY_FIX_STORAGE_PREFIX}${member.type}:${member.id}`;
+		// Multi-select state: survives across applyFilters() re-renders (which wipe and rebuild
+		// every row's DOM node) because it's keyed by "type:id" rather than holding element
+		// references. rowRegistry DOES get rebuilt on every render — it's just the live lookup
+		// from key to the currently-rendered row's elements, used both to reflect selectedKeys
+		// back onto freshly-created checkboxes and to drive the batch-fix loop.
+		const selectedKeys = new Set<string>();
+		const rowRegistry = new Map<string, { member: any; fixBtn: HTMLButtonElement | null; statusEl: HTMLElement | null }>();
+		// Unlike rowRegistry (only the currently-FILTERED rows), this holds every member from the
+		// last scan regardless of the active type/status/search filters — a selection made before
+		// narrowing the filters must still be fixable even once its row is no longer rendered.
+		const allMembersByKey = new Map<string, any>();
+
+		function rebuildMemberIndex(result: any) {
+			allMembersByKey.clear();
+			for (const cluster of result?.clusters || []) {
+				for (const m of cluster.members || []) allMembersByKey.set(memberKey(m), m);
+			}
+			for (const item of result?.weak_content || []) allMembersByKey.set(memberKey(item), item);
+			for (const item of result?.policy_issues || []) allMembersByKey.set(memberKey(item), item);
+		}
+
+		const selectionBar = document.querySelector<HTMLElement>('[data-selection-bar]');
+		const selectionCountEl = document.querySelector<HTMLElement>('[data-selection-count]');
+		const selectionClearBtn = document.querySelector<HTMLButtonElement>('[data-selection-clear]');
+		const selectionFixBtn = document.querySelector<HTMLButtonElement>('[data-selection-fix]');
+		const selectionProgressEl = document.querySelector<HTMLElement>('[data-selection-progress]');
+		const selectionReviewLink = document.querySelector<HTMLAnchorElement>('[data-selection-review-link]');
+
+		function memberKey(member: any): string {
+			return `${member.type}:${member.id}`;
+		}
+
+		function updateSelectionBar() {
+			const count = selectedKeys.size;
+			if (selectionBar) selectionBar.hidden = count === 0;
+			if (selectionCountEl) selectionCountEl.textContent = number.format(count);
 		}
 
 		// AI fixing is genuinely not instant (the backend calls an external AI model, sometimes
@@ -231,7 +278,11 @@ const lastScan = (await apiFetch<any>('/dashboard/adsense-policy/scan', {
 			'لا يزال العمل جاريًا، شكرًا لانتظارك...',
 		];
 
-		async function requestPolicyFix(member: any, button: HTMLButtonElement, statusEl: HTMLElement | null) {
+		// Runs the AI fix and queues the result for human review (/dashboard/human-review) —
+		// nothing is applied to the article/post from this page anymore. Returns whether it
+		// succeeded so the batch-fix loop below can report how many of the selected items made
+		// it into the review queue versus failed outright.
+		async function requestPolicyFix(member: any, button: HTMLButtonElement, statusEl: HTMLElement | null): Promise<boolean> {
 			const labelEl = button.querySelector<HTMLElement>('[data-member-fix-label]');
 			const originalLabel = labelEl?.textContent ?? 'إصلاح بالذكاء الاصطناعي';
 			button.disabled = true;
@@ -246,7 +297,7 @@ const lastScan = (await apiFetch<any>('/dashboard/adsense-policy/scan', {
 			}, 12_000);
 
 			try {
-				const res = await fetch('/api/dashboard/content-gen/fix', {
+				const res = await fetch('/api/dashboard/human-review/fix', {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({ content_type: member.type, id: member.id }),
@@ -255,24 +306,42 @@ const lastScan = (await apiFetch<any>('/dashboard/adsense-policy/scan', {
 				if (!res.ok || !json?.success || !json.data) {
 					throw new Error(json?.message || 'تعذّر إصلاح المحتوى بالذكاء الاصطناعي');
 				}
-				sessionStorage.setItem(policyFixStorageKey(member), JSON.stringify(json.data));
-				const separator = member.edit_url.includes('?') ? '&' : '?';
-				window.location.href = `${member.edit_url}${separator}apply_fix=1`;
-				// Navigating away — no need to clear the ticker or restore the button.
+				if (statusEl) {
+					statusEl.hidden = false;
+					statusEl.classList.remove('is-error');
+					statusEl.classList.add('is-success');
+					statusEl.textContent = 'تم الإصلاح بالذكاء الاصطناعي — بانتظار المراجعة البشرية.';
+				}
+				if (selectionReviewLink) selectionReviewLink.hidden = false;
+				return true;
 			} catch (error) {
+				if (statusEl) {
+					statusEl.hidden = false;
+					statusEl.classList.remove('is-success');
+					statusEl.classList.add('is-error');
+					statusEl.textContent = error instanceof Error ? error.message : 'تعذّر إصلاح المحتوى بالذكاء الاصطناعي';
+				}
+				return false;
+			} finally {
 				window.clearInterval(ticker);
 				button.disabled = false;
 				button.classList.remove('is-busy');
 				if (labelEl) labelEl.textContent = originalLabel;
-				if (statusEl) {
-					statusEl.hidden = false;
-					statusEl.classList.add('is-error');
-					statusEl.textContent = error instanceof Error ? error.message : 'تعذّر إصلاح المحتوى بالذكاء الاصطناعي';
-				}
 			}
 		}
 
 		function fillMemberRow(root: DocumentFragment | HTMLElement, member: any) {
+			const checkbox = root.querySelector<HTMLInputElement>('[data-member-select]');
+			if (checkbox) {
+				const key = memberKey(member);
+				checkbox.checked = selectedKeys.has(key);
+				checkbox.addEventListener('change', () => {
+					if (checkbox.checked) selectedKeys.add(key);
+					else selectedKeys.delete(key);
+					updateSelectionBar();
+				});
+			}
+
 			const typeEl = root.querySelector<HTMLElement>('[data-member-type]')!;
 			typeEl.textContent = member.type === 'article' ? 'مقال' : 'منشور';
 			const titleEl = root.querySelector<HTMLAnchorElement>('[data-member-title]')!;
@@ -289,6 +358,7 @@ const lastScan = (await apiFetch<any>('/dashboard/adsense-policy/scan', {
 			const fixBtn = root.querySelector<HTMLButtonElement>('[data-member-fix]');
 			const fixStatusEl = root.querySelector<HTMLElement>('[data-member-fix-status]');
 			fixBtn?.addEventListener('click', () => { void requestPolicyFix(member, fixBtn, fixStatusEl); });
+			rowRegistry.set(memberKey(member), { member, fixBtn, statusEl: fixStatusEl });
 		}
 
 		function renderMember(member: any): Node {
@@ -372,6 +442,10 @@ const lastScan = (await apiFetch<any>('/dashboard/adsense-policy/scan', {
 
 		function applyFilters() {
 			if (!currentResult) return;
+			// Every row gets torn down and recreated below, so the lookup used by the batch-fix
+			// loop must be rebuilt alongside them — selectedKeys itself (what's actually checked)
+			// is untouched here and survives the re-render.
+			rowRegistry.clear();
 			const search = (searchInput?.value || '').trim().toLowerCase();
 			const type = typeSelect?.value || 'all';
 			const status = statusSelect?.value || 'all';
@@ -416,6 +490,7 @@ const lastScan = (await apiFetch<any>('/dashboard/adsense-policy/scan', {
 
 		function renderResult(result: any) {
 			currentResult = result;
+			rebuildMemberIndex(result);
 			if (!result) {
 				if (hint) hint.hidden = false;
 				if (summaryBox) summaryBox.hidden = true;
@@ -454,6 +529,52 @@ const lastScan = (await apiFetch<any>('/dashboard/adsense-policy/scan', {
 			if (statusSelect) statusSelect.value = 'all';
 			if (kindSelect) kindSelect.value = 'all';
 			applyFilters();
+		});
+
+		selectionClearBtn?.addEventListener('click', () => {
+			selectedKeys.clear();
+			document.querySelectorAll<HTMLInputElement>('[data-member-select]').forEach((cb) => { cb.checked = false; });
+			updateSelectionBar();
+		});
+
+		// Fixes every selected item one at a time (not a single backend "batch" call) — each AI
+		// fix is an independent, potentially slow (~30-90s) external model call, so looping here
+		// keeps every individual request's timeout bounded and lets the admin watch per-item
+		// progress instead of waiting on one all-or-nothing request that could run for minutes.
+		selectionFixBtn?.addEventListener('click', async () => {
+			const keys = Array.from(selectedKeys);
+			if (keys.length === 0) return;
+
+			selectionFixBtn.disabled = true;
+			if (selectionClearBtn) selectionClearBtn.disabled = true;
+			if (selectionProgressEl) selectionProgressEl.hidden = false;
+
+			let succeeded = 0;
+			let failed = 0;
+			for (let i = 0; i < keys.length; i++) {
+				const key = keys[i];
+				if (selectionProgressEl) selectionProgressEl.textContent = `جارِ إصلاح ${number.format(i + 1)} من ${number.format(keys.length)}...`;
+
+				const member = allMembersByKey.get(key);
+				if (!member) { failed++; continue; }
+				const row = rowRegistry.get(key);
+				// row is only present when this member's row is currently rendered under the
+				// active filters — a dummy button/status pair lets requestPolicyFix run exactly
+				// the same way for a selected-but-filtered-out item, just without visible per-row
+				// feedback (the toolbar's own progress line covers that case).
+				const fixBtn = row?.fixBtn ?? document.createElement('button');
+				const ok = await requestPolicyFix(member, fixBtn, row?.statusEl ?? null);
+				if (ok) succeeded++; else failed++;
+			}
+
+			selectionFixBtn.disabled = false;
+			if (selectionClearBtn) selectionClearBtn.disabled = false;
+			if (selectionProgressEl) {
+				selectionProgressEl.textContent = failed === 0
+					? `تم إرسال ${number.format(succeeded)} عنصرًا للمراجعة البشرية بنجاح.`
+					: `تم إرسال ${number.format(succeeded)} عنصرًا بنجاح، وفشل ${number.format(failed)}.`;
+			}
+			if (succeeded > 0 && selectionReviewLink) selectionReviewLink.hidden = false;
 		});
 
 		scanButton?.addEventListener('click', async () => {
@@ -540,6 +661,8 @@ const lastScan = (await apiFetch<any>('/dashboard/adsense-policy/scan', {
 		.cluster-rec{margin:.4rem 0 .6rem;color:#697586;font-size:.66rem;line-height:1.75}
 		.cluster-members{display:grid;gap:.4rem;border-top:1px solid #edf1f5;padding-top:.55rem}
 		.member-row{display:flex;align-items:center;justify-content:space-between;gap:.7rem;flex-wrap:wrap;border-radius:.5rem;background:#f8fafc;padding:.45rem .6rem}
+		.member-select-label{display:flex;align-items:center;flex:none}
+		.member-select{width:.95rem;height:.95rem;accent-color:#1a4d8f;cursor:pointer}
 		.member-info{display:flex;align-items:center;gap:.45rem;min-width:0}
 		.member-type{border-radius:999px;background:#eaf1fa;padding:.15rem .45rem;color:#1a4d8f;font-size:.55rem;font-weight:850;flex:none}
 		.member-title{overflow:hidden;color:#1a4d8f;font-size:.67rem;font-weight:800;text-decoration:none;text-overflow:ellipsis;white-space:nowrap}
@@ -556,8 +679,23 @@ const lastScan = (await apiFetch<any>('/dashboard/adsense-policy/scan', {
 		.member-edit{border:1px solid #d9e2ec;border-radius:.4rem;padding:.25rem .55rem;color:#344b63;font-size:.58rem;font-weight:800;text-decoration:none}
 		.member-edit:hover{border-color:#81a7da;color:#1a4d8f}
 		.member-fix-status{margin:.35rem 0 0;color:#b3261e;font-size:.6rem;line-height:1.7}
+		.member-fix-status.is-success{color:#0f8464}
 		.issue-signals{margin:.5rem 0 0;padding-inline-start:1.1rem;color:#697586;font-size:.64rem;line-height:1.9}
 		.policy-ai-note{margin:.5rem 0 0;color:#6b3fd6;font-size:.66rem;line-height:1.8}
+		.selection-bar{position:sticky;top:.5rem;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:.8rem;flex-wrap:wrap;border:1px solid #c9d9f5;border-radius:.65rem;background:#eef4ff;padding:.6rem .8rem;margin-bottom:.9rem}
+		.selection-bar-main{display:flex;align-items:center;gap:.5rem;color:#1a4d8f;font-size:.68rem;font-weight:800}
+		.selection-bar-main strong{font-size:.85rem}
+		.selection-clear{border:1px solid #c9d9f5;border-radius:.4rem;background:#fff;padding:.25rem .55rem;color:#1a4d8f;font-family:inherit;font-size:.58rem;font-weight:800}
+		.selection-clear:hover{border-color:#81a7da}
+		.selection-clear:disabled{cursor:wait;opacity:.7}
+		.selection-bar-actions{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
+		.selection-progress{color:#1a4d8f;font-size:.62rem;font-weight:800}
+		.selection-review-link{border:1px solid #0f8464;border-radius:.45rem;padding:.4rem .7rem;color:#0f8464;font-size:.62rem;font-weight:850;text-decoration:none;white-space:nowrap}
+		.selection-review-link:hover{background:#e4f6ef}
+		.selection-fix-button{display:inline-flex;align-items:center;gap:.4rem;border:1px solid #16427d;border-radius:.5rem;background:#1a4d8f;padding:.45rem .8rem;color:#fff;font-family:inherit;font-size:.63rem;font-weight:850;white-space:nowrap}
+		.selection-fix-button:hover{background:#163f77}
+		.selection-fix-button:disabled{cursor:wait;opacity:.75}
+		.selection-fix-button svg{width:.85rem;height:.85rem;flex:none}
 		:global(.dark) .policy-header,:global(.dark) .policy-summary>div,:global(.dark) .policy-filters,:global(.dark) .cluster-card,:global(.dark) .issue-card{border-color:#334155;background:#0f2547;color:#dbe5f0}
 		:global(.dark) .policy-summary strong{color:#f8fafc}
 		:global(.dark) .filter-search,:global(.dark) .policy-filters select,:global(.dark) .filter-reset{border-color:#334155;background:#122a49;color:#dbe5f0}
@@ -569,6 +707,12 @@ const lastScan = (await apiFetch<any>('/dashboard/adsense-policy/scan', {
 		:global(.dark) .policy-empty{border-color:#315b50;background:#102f2a;color:#bcd8cd}
 		:global(.dark) .policy-section h2{color:#e2e8f0}
 		:global(.dark) .filter-empty{border-color:#263b56;color:#8a97a6}
+		:global(.dark) .selection-bar{border-color:#2d4a86;background:#132a4d}
+		:global(.dark) .selection-bar-main{color:#9ec3fb}
+		:global(.dark) .selection-clear{border-color:#2d4a86;background:#0f2547;color:#9ec3fb}
+		:global(.dark) .selection-progress{color:#9ec3fb}
+		:global(.dark) .selection-review-link{border-color:#1f6e54;color:#7fd9bb}
+		:global(.dark) .selection-review-link:hover{background:#102f2a}
 		@media(max-width:800px){.policy-summary{grid-template-columns:repeat(4,minmax(0,1fr))}}
 		@media(max-width:520px){.policy-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
 		@media(max-width:600px){.policy-header{flex-direction:column}.scan-action{width:100%;justify-items:stretch}.scan-button{width:100%;justify-content:center}.policy-filters{flex-direction:column;align-items:stretch}}
