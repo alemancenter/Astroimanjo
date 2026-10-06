@@ -407,6 +407,68 @@ const lastScan = (await apiFetch<any>('/dashboard/adsense-policy/scan', {
 			return node;
 		}
 
+		// Groups "محتوى ضعيف" rows into fixed 20-word bands (1-20, 21-40, ...) so items with a
+		// similar word count — the main thing that determines whether the AI fix needs to expand
+		// thin content vs. just reinforce medium content — can be selected for a batch fix in one
+		// click instead of checking each row individually. Only bands that actually contain an
+		// item are rendered; weakItems already arrives sorted ascending by word count (see the
+		// backend's findWeakContent), and Map preserves insertion order, so bands come out in
+		// ascending order for free.
+		const WORD_GROUP_SIZE = 20;
+		function wordGroupBounds(wordCount: number): { min: number; max: number } {
+			const min = Math.floor((Math.max(wordCount, 1) - 1) / WORD_GROUP_SIZE) * WORD_GROUP_SIZE + 1;
+			return { min, max: min + WORD_GROUP_SIZE - 1 };
+		}
+
+		function renderWeakGroup(min: number, max: number, items: any[]): Node {
+			const wrapper = document.createElement('div');
+			wrapper.className = 'weak-group';
+
+			const header = document.createElement('div');
+			header.className = 'weak-group-header';
+			const label = document.createElement('label');
+			label.className = 'weak-group-select';
+			const groupCheckbox = document.createElement('input');
+			groupCheckbox.type = 'checkbox';
+			const groupLabelText = document.createElement('span');
+			groupLabelText.textContent = `من ${number.format(min)} إلى ${number.format(max)} كلمة`;
+			label.append(groupCheckbox, groupLabelText);
+			const countEl = document.createElement('span');
+			countEl.className = 'weak-group-count';
+			countEl.textContent = `${number.format(items.length)} عنصر`;
+			header.append(label, countEl);
+			wrapper.appendChild(header);
+
+			const itemsBox = document.createElement('div');
+			itemsBox.className = 'weak-group-items';
+			for (const item of items) itemsBox.appendChild(renderWeak(item));
+			wrapper.appendChild(itemsBox);
+
+			const memberCheckboxes = () => Array.from(itemsBox.querySelectorAll<HTMLInputElement>('[data-member-select]'));
+			const syncGroupCheckbox = () => {
+				const boxes = memberCheckboxes();
+				const checkedCount = boxes.filter((box) => box.checked).length;
+				groupCheckbox.checked = boxes.length > 0 && checkedCount === boxes.length;
+				groupCheckbox.indeterminate = checkedCount > 0 && checkedCount < boxes.length;
+			};
+			memberCheckboxes().forEach((box) => box.addEventListener('change', syncGroupCheckbox));
+			syncGroupCheckbox();
+
+			groupCheckbox.addEventListener('change', () => {
+				for (const box of memberCheckboxes()) {
+					if (box.checked !== groupCheckbox.checked) {
+						box.checked = groupCheckbox.checked;
+						// Reuses the per-row checkbox's own listener (wired in fillMemberRow) rather
+						// than duplicating the selectedKeys/updateSelectionBar logic here.
+						box.dispatchEvent(new Event('change', { bubbles: true }));
+					}
+				}
+				groupCheckbox.indeterminate = false;
+			});
+
+			return wrapper;
+		}
+
 		function renderPolicyIssue(item: any): Node {
 			if (!policyIssueTemplate) return document.createDocumentFragment();
 			const node = policyIssueTemplate.content.cloneNode(true) as DocumentFragment;
@@ -475,7 +537,14 @@ const lastScan = (await apiFetch<any>('/dashboard/adsense-policy/scan', {
 			}
 			if (weakBox) {
 				weakBox.innerHTML = '';
-				for (const item of weakItems) weakBox.appendChild(renderWeak(item));
+				const groups = new Map<string, { min: number; max: number; items: any[] }>();
+				for (const item of weakItems) {
+					const { min, max } = wordGroupBounds(item.word_count);
+					const key = `${min}-${max}`;
+					if (!groups.has(key)) groups.set(key, { min, max, items: [] });
+					groups.get(key)!.items.push(item);
+				}
+				for (const group of groups.values()) weakBox.appendChild(renderWeakGroup(group.min, group.max, group.items));
 			}
 			if (issuesBox) {
 				issuesBox.innerHTML = '';
@@ -697,6 +766,12 @@ const lastScan = (await apiFetch<any>('/dashboard/adsense-policy/scan', {
 		.policy-section h2 small{color:#94a3b8;font-size:.6rem;font-weight:700}
 		.filter-empty{border:1px dashed #dfe6ee;border-radius:.6rem;padding:.9rem;text-align:center;color:#94a3b8;font-size:.64rem}
 		.policy-clusters,.policy-list{display:grid;gap:.7rem}
+		.weak-group{border:1px solid #e3e9ef;border-radius:.75rem;background:#fbfcfe;padding:.6rem .7rem .7rem}
+		.weak-group-header{display:flex;align-items:center;justify-content:space-between;gap:.6rem;flex-wrap:wrap;margin-bottom:.55rem}
+		.weak-group-select{display:flex;align-items:center;gap:.4rem;color:#102a43;font-size:.65rem;font-weight:850;cursor:pointer}
+		.weak-group-select input{width:.95rem;height:.95rem;accent-color:#1a4d8f;cursor:pointer}
+		.weak-group-count{border-radius:999px;background:#eef2f7;padding:.15rem .5rem;color:#64748b;font-size:.56rem;font-weight:800}
+		.weak-group-items{display:grid;gap:.5rem}
 		.cluster-card,.issue-card{border:1px solid #dfe6ee;border-radius:.75rem;background:#fff;padding:.8rem .9rem;border-inline-start:4px solid #94a3b8}
 		.cluster-card.tone-exact{border-inline-start-color:#b3261e}
 		.cluster-card.tone-near{border-inline-start-color:#b3691e}
@@ -754,6 +829,9 @@ const lastScan = (await apiFetch<any>('/dashboard/adsense-policy/scan', {
 		:global(.dark) .member-fix-btn:hover{border-color:#6b3fd6;background:#2c2050}
 		:global(.dark) .policy-ai-note{color:#c9b3fb}
 		:global(.dark) .cluster-members{border-color:#263b56}
+		:global(.dark) .weak-group{border-color:#263b56;background:#0f2547}
+		:global(.dark) .weak-group-select{color:#dbe5f0}
+		:global(.dark) .weak-group-count{background:#1e293b;color:#94a3b8}
 		:global(.dark) .policy-empty{border-color:#315b50;background:#102f2a;color:#bcd8cd}
 		:global(.dark) .policy-section h2{color:#e2e8f0}
 		:global(.dark) .filter-empty{border-color:#263b56;color:#8a97a6}

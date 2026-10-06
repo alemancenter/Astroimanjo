@@ -33,6 +33,10 @@ export const DASHBOARD_NAV_ITEMS: DashboardNavItem[] = [
 	{ label: 'الإشعارات', href: '/dashboard/notifications', group: 'التواصل', icon: 'bell', permission: null },
 	{ label: 'الرسائل الداخلية', href: '/dashboard/messages', group: 'التواصل', icon: 'comments', permission: null },
 	{ label: 'الإعدادات', href: '/dashboard/settings', group: 'النظام والذكاء', icon: 'settings', permission: 'manage settings' },
+	// Page exists and has always worked (pages/dashboard/sitemap/index.astro); it was just
+	// missing from this list, so it never had a sidebar link and a non-admin granted this
+	// permission had no way to reach it even though their own account could open it directly.
+	{ label: 'خرائط الموقع', href: '/dashboard/sitemap', group: 'النظام والذكاء', icon: 'sitemap', permission: 'manage sitemap' },
 	// Real data from Google (index status, clicks/impressions) — no AI, kept as its own
 	// standalone feature after the content-audit/content-quality subsystem was removed.
 	{ label: 'Search Console', href: '/dashboard/gsc', group: 'النظام والذكاء', icon: 'seo', permission: ['manage content audit', 'manage seo'] },
