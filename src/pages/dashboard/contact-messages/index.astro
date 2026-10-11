@@ -104,13 +104,21 @@ const statusTabs = [
 			<section class="contact-inbox-state"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h16v14H4zM4 7l8 6 8-6"/></svg></span><h2>{search ? 'لا توجد رسائل مطابقة' : status === 'unread' ? 'لا توجد رسائل غير مقروءة' : 'صندوق الوارد فارغ'}</h2><p>{search ? 'جرّب عبارة بحث أقصر أو امسح عوامل التصفية.' : 'ستظهر الرسائل الجديدة هنا عند إرسالها من نموذج التواصل.'}</p>{(search || status !== 'all') && <a href="/dashboard/contact-messages">عرض جميع الرسائل</a>}</section>
 		) : (
 			<>
+				<form method="post" id="bulk-form-desktop" class="bulk-actions-form"><input type="hidden" name="redirect_to" value={redirectTo}/></form>
 				<section class="contact-table-card contact-desktop">
+					<div class="bulk-action-bar" data-bulk-bar="desktop" hidden>
+						<span><strong data-bulk-count="desktop">0</strong> رسالة محددة</span>
+						<div class="bulk-action-buttons">
+							<button type="submit" form="bulk-form-desktop" formaction="/api/dashboard/contact-messages/bulk/read" class="bulk-read-btn">تعليم كمقروء</button>
+							<button type="submit" form="bulk-form-desktop" formaction="/api/dashboard/contact-messages/bulk/delete" class="bulk-delete-btn" data-confirm-bulk-delete>حذف المحدد</button>
+						</div>
+					</div>
 					<div class="contact-table-heading"><div><h2>صندوق الوارد</h2><p>الرسائل غير المقروءة مميزة لتسهيل متابعتها.</p></div><span>صفحة {numberFormat.format(meta?.current_page ?? page)} من {numberFormat.format(meta?.last_page ?? 1)}</span></div>
 					<div class="contact-table-scroll"><table>
-						<thead><tr><th class="contact-state-column">الحالة</th><th>المرسل</th><th>الرسالة</th><th>بيانات التواصل</th><th>المصدر</th><th>تاريخ الوصول</th><th>الإجراءات</th></tr></thead>
+						<thead><tr><th class="contact-select-column"><input type="checkbox" data-select-all="desktop" aria-label="تحديد كل الرسائل"/></th><th class="contact-state-column">الحالة</th><th>المرسل</th><th>الرسالة</th><th>بيانات التواصل</th><th>المصدر</th><th>تاريخ الوصول</th><th>الإجراءات</th></tr></thead>
 						<tbody>{messages.map((message: any) => (
 							<tr class:list={{ 'is-unread': !message.read }}>
-								<td class="contact-state-cell">{message.read ? <span class="contact-read-icon" title="مقروءة"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h16v14H4zM4 7l8 6 8-6"/></svg></span> : <span class="contact-unread-dot" title="غير مقروءة"></span>}</td>
+								<td class="contact-select-cell"><input type="checkbox" name="ids" value={message.id} form="bulk-form-desktop" data-select-row="desktop" aria-label="تحديد هذه الرسالة"/></td><td class="contact-state-cell">{message.read ? <span class="contact-read-icon" title="مقروءة"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h16v14H4zM4 7l8 6 8-6"/></svg></span> : <span class="contact-unread-dot" title="غير مقروءة"></span>}</td>
 								<td><div class="contact-sender"><span class={`avatar-tone-${Number(message.id) % 4}`}>{initials(message.name)}</span><div><a href={`/dashboard/contact-messages/${message.id}`}>{message.name || 'زائر دون اسم'}</a><small>رسالة #{numberFormat.format(Number(message.id))}</small></div></div></td>
 								<td><div class="contact-message-preview"><a href={`/dashboard/contact-messages/${message.id}`}>{message.subject || 'دون موضوع'}</a><p>{excerpt(message.message) || 'لا يوجد نص للرسالة'}</p></div></td>
 								<td><div class="contact-details"><a href={`mailto:${message.email}`} dir="ltr">{message.email}</a><span dir="ltr">{message.phone || 'دون هاتف'}</span></div></td>
@@ -126,9 +134,19 @@ const statusTabs = [
 					</table></div>
 				</section>
 
-				<section class="contact-mobile">{messages.map((message: any) => (
+				<form method="post" id="bulk-form-mobile" class="bulk-actions-form"><input type="hidden" name="redirect_to" value={redirectTo}/></form>
+				<section class="contact-mobile">
+				<div class="bulk-action-bar bulk-action-bar-mobile" data-bulk-bar="mobile" hidden>
+					<span><strong data-bulk-count="mobile">0</strong> رسالة محددة</span>
+					<div class="bulk-action-buttons">
+						<button type="submit" form="bulk-form-mobile" formaction="/api/dashboard/contact-messages/bulk/read" class="bulk-read-btn">تعليم كمقروء</button>
+						<button type="submit" form="bulk-form-mobile" formaction="/api/dashboard/contact-messages/bulk/delete" class="bulk-delete-btn" data-confirm-bulk-delete>حذف المحدد</button>
+					</div>
+				</div>
+				<label class="contact-mobile-select-all"><input type="checkbox" data-select-all="mobile"/><span>تحديد كل الرسائل في هذه الصفحة</span></label>
+				{messages.map((message: any) => (
 					<article class:list={['contact-mobile-card', { 'is-unread': !message.read }]}>
-						<header><div class="contact-sender"><span class={`avatar-tone-${Number(message.id) % 4}`}>{initials(message.name)}</span><div><a href={`/dashboard/contact-messages/${message.id}`}>{message.name || 'زائر دون اسم'}</a><small dir="ltr">{message.email}</small></div></div><span class:list={['contact-mobile-status', { 'is-unread': !message.read }]}><i></i>{message.read ? 'مقروءة' : 'جديدة'}</span></header>
+						<header><input type="checkbox" name="ids" value={message.id} form="bulk-form-mobile" class="contact-mobile-select" data-select-row="mobile" aria-label="تحديد هذه الرسالة"/><div class="contact-sender"><span class={`avatar-tone-${Number(message.id) % 4}`}>{initials(message.name)}</span><div><a href={`/dashboard/contact-messages/${message.id}`}>{message.name || 'زائر دون اسم'}</a><small dir="ltr">{message.email}</small></div></div><span class:list={['contact-mobile-status', { 'is-unread': !message.read }]}><i></i>{message.read ? 'مقروءة' : 'جديدة'}</span></header>
 						<a href={`/dashboard/contact-messages/${message.id}`} class="contact-mobile-message"><strong>{message.subject || 'دون موضوع'}</strong><p>{excerpt(message.message, 150)}</p></a>
 						<dl><div><dt>الهاتف</dt><dd dir="ltr">{message.phone || '—'}</dd></div><div><dt>المصدر</dt><dd>{sourceLabel(message.page_url)}</dd></div><div class="is-wide"><dt>تاريخ الوصول</dt><dd>{formatDateTime(message.created_at)}</dd></div></dl>
 						<footer><a href={`/dashboard/contact-messages/${message.id}`} class="contact-view-action"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></svg><span>قراءة الرسالة</span></a><div>{!message.read && <form method="post" action={`/api/dashboard/contact-messages/${message.id}/read`}><input type="hidden" name="redirect_to" value={redirectTo}/><button type="submit" class="contact-read-action" title="تعليم كمقروءة"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h16v14H4zM4 7l8 6 8-6m-4 5 2 2 4-4"/></svg></button></form>}<form method="post" action={`/api/dashboard/contact-messages/${message.id}/delete`} data-confirm-delete><input type="hidden" name="redirect_to" value={redirectTo}/><button type="submit" class="contact-delete-action" title="حذف الرسالة"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16m-10 4v6m4-6v6M9 7l1-3h4l1 3m3 0-1 14H7L6 7"/></svg></button></form></div></footer>
@@ -142,6 +160,45 @@ const statusTabs = [
 
 	<script>
 		document.querySelectorAll<HTMLFormElement>('[data-confirm-delete]').forEach((form) => form.addEventListener('submit', (event) => { if (!window.confirm('سيتم حذف هذه الرسالة نهائيًا ولا يمكن التراجع. هل تريد المتابعة؟')) event.preventDefault(); }));
+
+		// Bulk selection: the desktop table and the mobile card list are two independent
+		// scopes ("desktop"/"mobile", only one visible at a time via CSS) — each has its own
+		// "select all on this page" checkbox, its own set of per-row checkboxes (linked to
+		// their scope's <form> via the HTML `form` attribute rather than DOM nesting, since a
+		// <form> can't contain another <form> and every row already has its own read/delete
+		// form), and its own action bar that appears once at least one row is checked.
+		for (const scope of ['desktop', 'mobile']) {
+			const selectAll = document.querySelector<HTMLInputElement>(`[data-select-all="${scope}"]`);
+			const bar = document.querySelector<HTMLElement>(`[data-bulk-bar="${scope}"]`);
+			const countEl = document.querySelector<HTMLElement>(`[data-bulk-count="${scope}"]`);
+			const rowBoxes = () => Array.from(document.querySelectorAll<HTMLInputElement>(`[data-select-row="${scope}"]`));
+
+			const syncBar = () => {
+				const boxes = rowBoxes();
+				const checkedCount = boxes.filter((box) => box.checked).length;
+				if (bar) bar.hidden = checkedCount === 0;
+				if (countEl) countEl.textContent = String(checkedCount);
+				if (selectAll) {
+					selectAll.checked = boxes.length > 0 && checkedCount === boxes.length;
+					selectAll.indeterminate = checkedCount > 0 && checkedCount < boxes.length;
+				}
+			};
+			rowBoxes().forEach((box) => box.addEventListener('change', syncBar));
+			selectAll?.addEventListener('change', () => {
+				for (const box of rowBoxes()) box.checked = selectAll.checked;
+				syncBar();
+			});
+			syncBar();
+
+			document.getElementById(`bulk-form-${scope}`)?.addEventListener('submit', (event) => {
+				const submitter = (event as SubmitEvent).submitter as HTMLElement | null;
+				if (!submitter?.hasAttribute('data-confirm-bulk-delete')) return;
+				const count = rowBoxes().filter((box) => box.checked).length;
+				if (!window.confirm(`سيتم حذف ${count} ${count === 1 ? 'رسالة' : 'رسائل'} نهائيًا ولا يمكن التراجع. هل تريد المتابعة؟`)) {
+					event.preventDefault();
+				}
+			});
+		}
 	</script>
 
 	<style>
@@ -150,6 +207,25 @@ const statusTabs = [
 		.contact-filter-card{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:.65rem;border:1px solid var(--ci-line);border-radius:.75rem;background:#fff;padding:.65rem;box-shadow:0 1px 2px rgb(15 23 42/.05)}.contact-filter-form{display:flex;min-width:0;flex:1;align-items:center;gap:.42rem}.contact-search-field{position:relative;display:block;max-width:39rem;min-width:17rem;flex:1}.contact-search-field svg{position:absolute;top:50%;right:.7rem;width:.9rem;height:.9rem;color:#8796a8;transform:translateY(-50%)}.contact-search-field input{width:100%;min-height:2.4rem;border:1px solid #d9e2ec;border-radius:.5rem;background:#fff;padding:.45rem 2rem .45rem .65rem;color:var(--ci-ink);font-family:inherit;font-size:.75rem}.contact-search-field input:focus{border-color:#81a7da;outline:0;box-shadow:0 0 0 3px rgb(26 77 143/.07)}.contact-filter-form>button{min-height:2.4rem;border:1px solid #315f9f;border-radius:.5rem;background:#fff;padding:.42rem .82rem;color:#1a4d8f;font-family:inherit;font-size:.73rem;font-weight:850}.contact-filter-form>a{padding:.4rem;color:#718096;font-size:.7rem;font-weight:750}.contact-result-count{display:flex;align-items:baseline;gap:.3rem;border-right:1px solid #e7ecf2;padding-inline:1rem .25rem;color:var(--ci-muted);font-size:.7rem;white-space:nowrap}.contact-result-count strong{color:var(--ci-ink);font-size:.96rem}
 		.contact-status-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.45rem;margin-bottom:.75rem}.contact-status-tabs a{display:flex;min-height:2.55rem;align-items:center;justify-content:space-between;border:1px solid var(--ci-line);border-radius:.58rem;background:#fff;padding:.45rem .7rem;color:#64748b;font-size:.73rem;font-weight:800}.contact-status-tabs a strong{display:grid;min-width:1.65rem;height:1.55rem;place-items:center;border-radius:.38rem;background:#f1f5f9;color:#718096;font-size:.68rem}.contact-status-tabs a:hover{border-color:#b8cde5;color:#1a4d8f}.contact-status-tabs a.is-active{border-color:#9bb7d8;background:#f8fbff;color:#1a4d8f;box-shadow:inset 0 -2px #1a4d8f}.contact-status-tabs a.is-active strong{background:#e7f0fb;color:#1a4d8f}
 		.contact-table-card{overflow:hidden;border:1px solid var(--ci-line);border-radius:.78rem;background:#fff;box-shadow:0 1px 2px rgb(15 23 42/.05)}.contact-table-heading{display:flex;align-items:center;justify-content:space-between;gap:1rem;border-bottom:1px solid #edf1f5;padding:.8rem .9rem}.contact-table-heading h2{margin:0;color:var(--ci-ink);font-size:.92rem;font-weight:900}.contact-table-heading p{margin:.12rem 0 0;color:var(--ci-muted);font-size:.68rem}.contact-table-heading>span{border:1px solid #e1e7ee;border-radius:999px;background:#f8fafc;padding:.24rem .5rem;color:#64748b;font-size:.64rem;font-weight:750}.contact-table-scroll{overflow-x:auto}.contact-table-card table{width:100%;border-collapse:collapse}.contact-table-card th{padding:.7rem .6rem;background:#f8fafc;color:#718096;font-size:.68rem;font-weight:850;text-align:right;white-space:nowrap}.contact-table-card td{padding:.72rem .6rem;border-top:1px solid #edf1f5;color:#64748b;font-size:.72rem;vertical-align:middle}.contact-table-card tbody tr{transition:background-color .15s}.contact-table-card tbody tr:hover{background:#fafcff}.contact-table-card tbody tr.is-unread{background:#fbfdff;box-shadow:inset -3px 0 #1a4d8f}.contact-table-card tbody tr.is-unread:hover{background:#f6faff}.contact-state-column,.contact-state-cell{width:3.2rem;text-align:center!important}.contact-unread-dot{display:block;width:.48rem;height:.48rem;margin:auto;border-radius:50%;background:#1a4d8f;box-shadow:0 0 0 4px #edf4fc}.contact-read-icon{display:grid;width:1.8rem;height:1.8rem;margin:auto;place-items:center;color:#94a3b8}.contact-read-icon svg{width:.9rem;height:.9rem}.contact-sender{display:flex;min-width:11rem;align-items:center;gap:.55rem}.contact-sender>span{display:grid;width:2.25rem;height:2.25rem;flex:none;place-items:center;border-radius:.55rem;font-size:.68rem;font-weight:900}.avatar-tone-0{background:#eaf2fb;color:#1a4d8f}.avatar-tone-1{background:#eaf8f3;color:#0f8464}.avatar-tone-2{background:#fff4e3;color:#b86a0b}.avatar-tone-3{background:#f2ecfb;color:#7652a8}.contact-sender>div{min-width:0}.contact-sender a{display:block;overflow:hidden;max-width:11rem;color:var(--ci-ink);font-size:.73rem;font-weight:850;text-overflow:ellipsis;white-space:nowrap}.contact-sender small{display:block;overflow:hidden;max-width:12rem;margin-top:.08rem;color:#9aa6b4;font-size:.61rem;text-overflow:ellipsis;white-space:nowrap}.contact-message-preview{min-width:13rem;max-width:22rem}.contact-message-preview a{display:block;overflow:hidden;color:#344b63;font-size:.72rem;font-weight:850;text-overflow:ellipsis;white-space:nowrap}.is-unread .contact-message-preview a{color:#102a43}.contact-message-preview p{overflow:hidden;margin:.12rem 0 0;color:#8a97a6;font-size:.62rem;text-overflow:ellipsis;white-space:nowrap}.contact-details{display:flex;min-width:10rem;align-items:flex-start;flex-direction:column;gap:.12rem}.contact-details a{max-width:12rem;overflow:hidden;color:#1a4d8f;font-size:.65rem;text-overflow:ellipsis;white-space:nowrap}.contact-details span{color:#8a97a6;font-size:.62rem}.contact-source{display:block;max-width:10rem;overflow:hidden;border:1px solid #e1e7ee;border-radius:.4rem;background:#f8fafc;padding:.24rem .42rem;color:#64748b;font-size:.61rem;text-overflow:ellipsis;white-space:nowrap}.contact-table-card time{display:block;min-width:7.7rem;color:#718096;font-size:.64rem;white-space:nowrap}.contact-row-actions{display:flex;min-width:7.5rem;align-items:center;gap:.3rem}.contact-row-actions form{display:flex}.contact-view-action,.contact-read-action,.contact-delete-action{display:inline-flex;min-height:1.95rem;align-items:center;justify-content:center;gap:.25rem;border:1px solid #dce4ed;border-radius:.44rem;background:#fff;padding:.3rem .48rem;color:#52667e;font-family:inherit;font-size:.62rem;font-weight:800;white-space:nowrap}.contact-view-action{color:#1a4d8f}.contact-read-action{border-color:#bfe6d8;color:#0f8464}.contact-delete-action{border-color:#f1c9cf;color:#c5303e}.contact-view-action svg,.contact-read-action svg,.contact-delete-action svg{width:.78rem;height:.78rem}
+		.bulk-actions-form{display:none}
+		.bulk-action-bar{display:flex;align-items:center;justify-content:space-between;gap:.8rem;flex-wrap:wrap;border:1px solid #9bb7d8;border-radius:.65rem;background:#f8fbff;padding:.55rem .75rem;margin-bottom:.65rem}
+		.bulk-action-bar span{color:#1a4d8f;font-size:.72rem;font-weight:800}
+		.bulk-action-buttons{display:flex;gap:.45rem;flex-wrap:wrap}
+		.bulk-read-btn,.bulk-delete-btn{display:inline-flex;align-items:center;gap:.3rem;min-height:2.1rem;border-radius:.5rem;padding:.4rem .75rem;font-family:inherit;font-size:.68rem;font-weight:850;white-space:nowrap}
+		.bulk-read-btn{border:1px solid #bfe6d8;background:#fff;color:#0f8464}
+		.bulk-read-btn:hover{background:#edf9f5}
+		.bulk-delete-btn{border:1px solid #f1c9cf;background:#fff;color:#c5303e}
+		.bulk-delete-btn:hover{background:#fff1f2}
+		.bulk-read-btn svg,.bulk-delete-btn svg{width:.82rem;height:.82rem}
+		.contact-select-column,.contact-select-cell{width:2.2rem;text-align:center!important}
+		.contact-select-column input,.contact-select-cell input{width:.95rem;height:.95rem;accent-color:#1a4d8f;cursor:pointer}
+		.contact-mobile-select-all{display:flex;align-items:center;gap:.45rem;border:1px solid var(--ci-line);border-radius:.6rem;background:#fff;padding:.5rem .7rem;color:var(--ci-ink);font-size:.7rem;font-weight:800}
+		.contact-mobile-select-all input{width:.95rem;height:.95rem;accent-color:#1a4d8f;cursor:pointer}
+		.contact-mobile-select{width:.95rem;height:.95rem;margin-top:.15rem;flex:none;accent-color:#1a4d8f;cursor:pointer}
+		:global(.dark) .bulk-action-bar{border-color:#315b8f;background:#132d50}
+		:global(.dark) .bulk-action-bar span{color:#bfdbfe}
+		:global(.dark) .bulk-read-btn,:global(.dark) .bulk-delete-btn{border-color:#334155;background:#0f2547;color:#cbd5e1}
+		:global(.dark) .bulk-mobile-select-all,:global(.dark) .contact-mobile-select-all{border-color:#334155;background:#0f2547;color:#cbd5e1}
 		.contact-mobile{display:none}.contact-mobile-card{border:1px solid var(--ci-line);border-radius:.72rem;background:#fff;padding:.8rem;box-shadow:0 1px 2px rgb(15 23 42/.05)}.contact-mobile-card.is-unread{border-color:#b8cde5;box-shadow:inset -3px 0 #1a4d8f,0 1px 2px rgb(15 23 42/.05)}.contact-mobile-card>header{display:flex;align-items:flex-start;justify-content:space-between;gap:.6rem}.contact-mobile-card .contact-sender{min-width:0}.contact-mobile-card .contact-sender a{font-size:.78rem}.contact-mobile-status{display:inline-flex;align-items:center;gap:.28rem;border-radius:999px;background:#f1f5f9;padding:.25rem .48rem;color:#718096;font-size:.64rem;font-weight:850;white-space:nowrap}.contact-mobile-status i{width:.3rem;height:.3rem;border-radius:50%;background:currentColor}.contact-mobile-status.is-unread{background:#edf4fc;color:#1a4d8f}.contact-mobile-message{display:block;margin-top:.7rem;border-top:1px solid #edf1f5;padding-top:.65rem}.contact-mobile-message strong{display:block;color:var(--ci-ink);font-size:.75rem}.contact-mobile-message p{display:-webkit-box;overflow:hidden;margin:.18rem 0 0;color:#718096;font-size:.68rem;line-height:1.75;-webkit-box-orient:vertical;-webkit-line-clamp:2}.contact-mobile-card dl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.4rem;margin:.65rem 0 0}.contact-mobile-card dl>div{border:1px solid #edf1f5;border-radius:.48rem;padding:.42rem}.contact-mobile-card dl>div.is-wide{grid-column:1/-1}.contact-mobile-card dt{color:#8a97a6;font-size:.64rem}.contact-mobile-card dd{overflow:hidden;margin:.1rem 0 0;color:var(--ci-ink);font-size:.7rem;font-weight:750;text-overflow:ellipsis;white-space:nowrap}.contact-mobile-card>footer{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-top:.65rem;border-top:1px solid #edf1f5;padding-top:.62rem}.contact-mobile-card>footer>div{display:flex;gap:.3rem}.contact-mobile-card>footer form{display:flex}
 		.contact-inbox-state{display:flex;min-height:14rem;align-items:center;justify-content:center;flex-direction:column;border:1px solid var(--ci-line);border-radius:.78rem;background:#fff;padding:2rem;text-align:center}.contact-inbox-state>span{display:grid;width:3.1rem;height:3.1rem;place-items:center;border-radius:.7rem;background:#f1f5f9;color:#718096}.contact-inbox-state>span svg{width:1.3rem;height:1.3rem}.contact-inbox-state h2{margin:.65rem 0 0;color:var(--ci-ink);font-size:.84rem;font-weight:900}.contact-inbox-state p{margin:.2rem 0 0;color:var(--ci-muted);font-size:.7rem}.contact-inbox-state a{margin-top:.55rem;color:#1a4d8f;font-size:.7rem;font-weight:850}.contact-inbox-state.is-error{border-color:#fecaca}.contact-inbox-state.is-error>span{background:#fff1f2;color:#c5303e}
 		:global(.dark) .contact-inbox-page{--ci-ink:#f8fafc;--ci-muted:#94a3b8;--ci-line:#334155}:global(.dark) .contact-inbox-header h1{color:#fff}:global(.dark) .contact-page-link,:global(.dark) .contact-summary-card,:global(.dark) .contact-filter-card,:global(.dark) .contact-search-field input,:global(.dark) .contact-filter-form>button,:global(.dark) .contact-status-tabs a,:global(.dark) .contact-table-card,:global(.dark) .contact-mobile-card,:global(.dark) .contact-inbox-state,:global(.dark) .contact-view-action,:global(.dark) .contact-read-action,:global(.dark) .contact-delete-action{border-color:#334155;background:#0f2547;color:#cbd5e1}:global(.dark) .contact-status-tabs a.is-active{border-color:#315b8f;background:#132d50;color:#bfdbfe}:global(.dark) .contact-table-card th{background:#0b1e38}:global(.dark) .contact-table-heading,:global(.dark) .contact-table-card td,:global(.dark) .contact-mobile-message,:global(.dark) .contact-mobile-card dl>div,:global(.dark) .contact-mobile-card>footer{border-color:#263b56}:global(.dark) .contact-table-card tbody tr.is-unread,:global(.dark) .contact-table-card tbody tr:hover{background:#122b4c}:global(.dark) .contact-message-preview a{color:#dbe5f0}:global(.dark) .contact-source{border-color:#40536a;background:#132943;color:#cbd5e1}
